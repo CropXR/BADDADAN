@@ -1,3 +1,8 @@
+"""
+Contains classes that contain gene expression levels, extracted from GEO.
+"""
+
+
 import numpy as np
 import pandas as pd
 import seaborn as sns
