@@ -6,21 +6,52 @@ Contains classes that contain gene expression levels, extracted from GEO.
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import GEOparse
 from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
+
+from ExpressionArrayAnnotation import ExpressionArrayAnnotation
 
 
 class ExpressionMatrix:
     def __init__(self, df: pd.DataFrame):
-        """
+        """Create expression matrix directly from Pandas dataframe
         :param df: Dataframe which contains gene expressions for various
-                   biological samples.
+                   biological samples
         """
         self.df = df
+        self.has_been_clustered = False
 
     def __repr__(self):
         return (f'ExpressionMatrix with {len(self.df)} genes'
                 f' and columns {self.df.columns.to_list()}')
+
+    # TODO is this needed or does it just look cool?
+    @classmethod
+    def from_geo_file(cls,
+                      file_path,
+                      array_annotation: ExpressionArrayAnnotation = None
+                      ):
+        """From a file path, correctly parse GEO expression file and
+        return ExpressionMatrix object.
+
+        :param file_path: path to GEO expression file. Works on .soft format,
+                      others have not been tested.
+        :param array_annotation: Object which maps probe names of AGI names.
+                                 Should have probe_to_agi() method.
+        """
+        gse = GEOparse.get_GEO(filepath=str(file_path), silent=True)
+        # Merge all samples into one dataframe
+        df = gse.pivot_samples("VALUE")
+        # Get gene names based on ExpressionAnnotation object
+        if array_annotation:
+            new_indices = [array_annotation.probe_to_agi(old_index)
+                           for old_index in df.index]
+            df.index = new_indices
+        # Convert sample names to titles that humans can understand
+        better_name_dict = gse.phenotype_data.title.to_dict()
+        df.columns = [better_name_dict[old_col] for old_col in df.columns]
+        return ExpressionMatrix(df)
 
     def get_column_names(self):
         return self.df.columns.to_numpy()
@@ -49,8 +80,6 @@ class ExpressionMatrix:
         expr_mat_test = ExpressionMatrixTest(self.df[test_cols])
         return expr_mat_train, expr_mat_test
 
-
-class ExpressionMatrixTraining(ExpressionMatrix):
     def get_only_de_genes(self, std_cutoff: float = 1.0):
         """Return ExpressionMatrixTraining with only differentially
          expressed (de) genes.
@@ -60,7 +89,15 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         """
         return ExpressionMatrixTraining(self.df[self.df.std(axis=1) > std_cutoff])
 
-    def extract_modules(self, n_cluster: int, inplace: bool = True):
+
+class ExpressionMatrixTraining(ExpressionMatrix):
+    """Can be created from ExpressionMatrix by command like:
+
+    my_expression_matrix = ExpressionMatrix.from_geo(some_path)
+    training_df = ExpressionMatrixTraining(my_expression_matrix.df)
+
+    """
+    def extract_module_expressions(self, n_cluster: int, inplace: bool = True):
         """Get mean expression per gene module based on
         clustering of expression correlation.
 
@@ -68,7 +105,12 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         :param inplace: If the cluster_id column should be added to self.df
                         in place. Default: True.
         """
-        clustered_df = self._assign_clusters(n_cluster, inplace=inplace)
+        # Make sure clustering has been performed
+        if not self.has_been_clustered:
+            clustered_df = self.do_hierachical_clustering(n_cluster,
+                                                          inplace=inplace)
+        else:
+            clustered_df = self.df
 
         molten_df = pd.melt(clustered_df, id_vars='cluster_id',
                             value_vars=clustered_df.columns[:-1],
@@ -78,14 +120,28 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         return summary_df.pivot(index='sample', columns='cluster_id')
 
     def get_cluster_per_gene(self):
-        """For each cluster, get Gene IDs. Can only be called after
-        self.assign_clusters() has been called
+        """For each gene, get its cluster_id Can only be called after
+        self.do_hierachical_clustering() has been called.
+
+        :returns: Dict with gene name as key and cluster_ID as value .
         """
-        assert 'cluster_id' in self.df.columns, 'Run assign_clusters() first!'
+        assert 'cluster_id' in self.df.columns,\
+                'Run do_hierachical_clustering() first!'
         return self.df.cluster_id.to_dict()
 
-    def _assign_clusters(self, n_cluster: int, inplace: bool = True,
-                         do_plotting: bool = False):
+    def get_genes_per_cluster(self):
+        """For each cluster, get Gene IDs. Can only be called after
+        self.do_hierachical_clustering() has been called.
+
+        :returns: Dict with keys cluster_id and values a list of all genes in that cluster .
+        """
+        assert 'cluster_id' in self.df.columns,\
+                'Run do_hierachical_clustering() first!'
+
+        return self.df.groupby('cluster_id').groups
+
+    def do_hierachical_clustering(self, n_cluster: int, inplace: bool = True,
+                                  do_plotting: bool = False):
         """Hierarchically cluster genes based on correlation of expression,
         and extract given number of clusters.
 
@@ -113,6 +169,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
             plt.show()
         if inplace:
             self.df = self.df.assign(cluster_id=clustering)
+            self.has_been_clustered = True
         return self.df.assign(cluster_id=clustering)
 
 
