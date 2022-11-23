@@ -1,7 +1,7 @@
 """
-Contains classes that contain gene expression levels, extracted from GEO.
+Contains classes that contain matrices of gene expression levels, extracted from GEO.
 """
-
+import logging
 
 import numpy as np
 import pandas as pd
@@ -16,6 +16,7 @@ from ExpressionArrayAnnotation import ExpressionArrayAnnotation
 class ExpressionMatrix:
     def __init__(self, df: pd.DataFrame):
         """Create expression matrix directly from Pandas dataframe
+
         :param df: Dataframe which contains gene expressions for various
                    biological samples
         """
@@ -39,22 +40,42 @@ class ExpressionMatrix:
                       others have not been tested.
         :param array_annotation: Object which maps probe names of AGI names.
                                  Should have probe_to_agi() method.
+                             TODO should this just be a path instead, and
+                             TODO that we convert it into an object within this function?
         """
         gse = GEOparse.get_GEO(filepath=str(file_path), silent=True)
         # Merge all samples into one dataframe
         df = gse.pivot_samples("VALUE")
-        # Get gene names based on ExpressionAnnotation object
+
+        logging.info('Dropping AFFX probes, because they are control')
+        df = df.loc[df.index.map(lambda x: 'AFFX' not in x), :]
+
         if array_annotation:
-            new_indices = [array_annotation.probe_to_agi(old_index)
-                           for old_index in df.index]
+            # Get gene names based on ExpressionAnnotation object
+            logging.info('Converting probe names to genes...')
+            new_indices = df.index.map(array_annotation.probe_to_agi)
+            # Count how many probe names were not mapped to a gene by the
+            # annotation file, i.e. their name did not change.
+            unmapped_probes = new_indices.intersection(df.index)
+
+            logging.info(
+                f'Could not find annotation of {len(unmapped_probes)} probes '
+                f'({(len(unmapped_probes) / len(df.index)) * 100:.2f}%). '
+                f'Proceeding with their original names')
+            if len(unmapped_probes) < 10:
+                for probe in unmapped_probes:
+                    logging.info(probe)
             df.index = new_indices
         # Convert sample names to titles that humans can understand
         better_name_dict = gse.phenotype_data.title.to_dict()
         df.columns = [better_name_dict[old_col] for old_col in df.columns]
         return ExpressionMatrix(df)
 
-    def get_column_names(self):
+    def get_sample_names(self):
         return self.df.columns.to_numpy()
+
+    def get_gene_names(self):
+        return self.df.index.to_list()
 
     def remove_non_wt(self):
         """Return ExpressionMatrix with only columns that originate from wild type"""
@@ -85,7 +106,7 @@ class ExpressionMatrix:
          expressed (de) genes.
 
         :param std_cutoff: Minimum standard deviation between samples
-                           for a gene to be included. Default: 1.
+                           for a gene to be included. Default: 1.0
         """
         return ExpressionMatrixTraining(self.df[self.df.std(axis=1) > std_cutoff])
 

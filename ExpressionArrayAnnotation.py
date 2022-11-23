@@ -1,30 +1,34 @@
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import logging
 
 
 class ExpressionArrayAnnotation:
     """Converts names of probe on expression array to gene IDs/names
 
-    Example download: https://www.arabidopsis.org/download_files/Microarrays/Affymetrix/AFFY_ATH1_array_elements.txt
+    Example download: https://www.arabidopsis.org/download_files/Microarrays/Affymetrix/affy_ATH1_array_elements-2010-12-20.txt
     """
     def __init__(self, some_path: Path):
-        # Line 4302 contained an error, so just skip it
-        # TODO make more dynamic?
-        self.df = pd.read_csv(some_path, sep='\t', skiprows=[4301], header=0)
+        self.df = pd.read_csv(some_path, sep='\t', header=0)
 
-    def probe_to_agi(self, probe_name: str):
+    def probe_to_agi(self, probe_name: str, verbose: bool = False):
         """Takes affymetrix probe name, and returns name of locus name for TAIR
 
-        :param probe_name:
-        :return:
+        :param probe_name: Name of probe name in microarray, e.g. 263102_at
+        :param verbose: If true, print all probes that can not be assigned an
+                        agi identifier.
+        :return: AGI identifier if found, else original probe name
         """
-        candidate_agi = self.df.loc[self.df.array_element_name == probe_name, 'locus']
-        if len(candidate_agi) == 0:
-            print(f'{probe_name} NOT FOUND')
-            # raise KeyError(f'{probe_name} not found'
+        # For now just keep multiple annotations per probe?
+        candidate_agi = self.df.loc[self.df.array_element_name == probe_name,
+                                    'locus']
+        if len(candidate_agi) == 0 or np.any(candidate_agi == 'no_match'):
+            # Could not find annotation in database
+            logging.warning(f'Could not find annotation of {probe_name} in database, proceeding with original name.')
             candidate = probe_name
         else:
             candidate = candidate_agi.item()
-            # print(f'{probe_name} -> {candidate}')
+        logging.debug(f'{probe_name} -> {candidate}')
         return candidate
