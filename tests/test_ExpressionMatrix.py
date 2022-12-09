@@ -16,3 +16,10 @@ def test_get_cluster_per_gene(my_expression_matrix):
     some_clustering_dict = train_expr_mat.get_genes_per_cluster()
     assert len(some_clustering_dict) == n_clusters
 
+
+def test_time_series_expressions(my_time_series_expressions):
+    my_time_series_expressions.get_only_shoot(inplace=True)
+    my_time_series_expressions.get_only_de_genes(std_cutoff=1.5, inplace=True)
+    expressions_array = my_time_series_expressions.clusters_over_time(8)
+
+    assert True

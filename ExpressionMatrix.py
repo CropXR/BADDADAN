@@ -2,6 +2,8 @@
 Contains classes that contain matrices of gene expression levels, extracted from GEO.
 """
 import logging
+from pathlib import Path
+import re
 
 import numpy as np
 import pandas as pd
@@ -27,12 +29,10 @@ class ExpressionMatrix:
         return (f'ExpressionMatrix with {len(self.df)} genes'
                 f' and columns {self.df.columns.to_list()}')
 
-    # TODO is this needed or does it just look cool?
     @classmethod
-    def from_geo_file(cls,
-                      file_path,
-                      array_annotation: ExpressionArrayAnnotation = None
-                      ):
+    def from_geo_file(cls, file_path: Path,
+                      array_annotation: ExpressionArrayAnnotation = None,
+                      log2_transform=False):
         """From a file path, correctly parse GEO expression file and
         return ExpressionMatrix object.
 
@@ -40,8 +40,6 @@ class ExpressionMatrix:
                       others have not been tested.
         :param array_annotation: Object which maps probe names of AGI names.
                                  Should have probe_to_agi() method.
-                             TODO should this just be a path instead, and
-                             TODO that we convert it into an object within this function?
         """
         gse = GEOparse.get_GEO(filepath=str(file_path), silent=True)
         # Merge all samples into one dataframe
@@ -69,7 +67,9 @@ class ExpressionMatrix:
         # Convert sample names to titles that humans can understand
         better_name_dict = gse.phenotype_data.title.to_dict()
         df.columns = [better_name_dict[old_col] for old_col in df.columns]
-        return ExpressionMatrix(df)
+        if log2_transform:
+            df = np.log2(df)
+        return cls(df)
 
     def get_sample_names(self):
         return self.df.columns.to_numpy()
@@ -87,6 +87,10 @@ class ExpressionMatrix:
         sns.histplot(self.df.std(axis=1))
         plt.show()
 
+    def plot_sample_gene_heatmap(self):
+        sns.clustermap(self.df)
+        plt.show()
+
     def extract_train_test(self, train_cols: np.array_str,
                            test_cols: np.array_str):
         """Given a list of columns to use as train and test,
@@ -101,14 +105,18 @@ class ExpressionMatrix:
         expr_mat_test = ExpressionMatrixTest(self.df[test_cols])
         return expr_mat_train, expr_mat_test
 
-    def get_only_de_genes(self, std_cutoff: float = 1.0):
+    def get_only_de_genes(self, std_cutoff: float = 1.0, inplace: bool = False):
         """Return ExpressionMatrixTraining with only differentially
          expressed (de) genes.
 
         :param std_cutoff: Minimum standard deviation between samples
                            for a gene to be included. Default: 1.0
         """
-        return ExpressionMatrixTraining(self.df[self.df.std(axis=1) > std_cutoff])
+        de_genes = self.df[self.df.std(axis=1) > std_cutoff]
+        if inplace:
+            self.df = de_genes
+        else:
+            return ExpressionMatrixTraining(de_genes)
 
 
 class ExpressionMatrixTraining(ExpressionMatrix):
@@ -118,7 +126,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
     training_df = ExpressionMatrixTraining(my_expression_matrix.df)
 
     """
-    def extract_module_expressions(self, n_cluster: int, inplace: bool = True):
+    def extract_module_expressions(self, n_cluster: int, inplace: bool = True, do_plotting: bool = False):
         """Get mean expression per gene module based on
         clustering of expression correlation.
 
@@ -129,7 +137,8 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         # Make sure clustering has been performed
         if not self.has_been_clustered:
             clustered_df = self.do_hierachical_clustering(n_cluster,
-                                                          inplace=inplace)
+                                                          inplace=inplace,
+                                                          do_plotting=do_plotting)
         else:
             clustered_df = self.df
 
@@ -138,7 +147,9 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                             ignore_index=False, var_name='sample',
                             value_name='expression')
         summary_df = molten_df.groupby(['sample', 'cluster_id']).mean().reset_index()
-        return summary_df.pivot(index='sample', columns='cluster_id')
+        # TODO change this?
+        return summary_df
+        # return summary_df.pivot(index='sample', columns='cluster_id')
 
     def get_cluster_per_gene(self):
         """For each gene, get its cluster_id Can only be called after
@@ -191,7 +202,8 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         if inplace:
             self.df = self.df.assign(cluster_id=clustering)
             self.has_been_clustered = True
-        return self.df.assign(cluster_id=clustering)
+        else:
+            return self.df.assign(cluster_id=clustering)
 
 
 class ExpressionMatrixTest(ExpressionMatrix):
@@ -209,3 +221,43 @@ class ExpressionMatrixTest(ExpressionMatrix):
         summary_df = molten_df.groupby(
             ['sample', 'cluster_id']).mean().reset_index()
         return summary_df.pivot(index='sample', columns='cluster_id')
+
+
+def get_info_from_gse5628(sample_names: list[str]):
+    out_dict = {'time': [],
+                'tissue': [],
+                'rep_nr': []}
+    for sample in sample_names:
+        time = re.search(r'\d+\.\d+h', sample).group()
+        time = pd.to_timedelta(time)
+        out_dict['time'].append(time)
+        tissue = re.search(r'Shoots|Roots', sample).group()
+        out_dict['tissue'].append(tissue)
+        rep_nr = re.search(r'Rep\d', sample).group()
+        out_dict['rep_nr'].append(rep_nr)
+    return out_dict
+
+
+class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
+    def get_only_shoot(self, inplace=False):
+        """Return ExpressionMatrixTimeSeries with only columns that
+        originate from shoot
+        """
+        col_mask = [col for col in self.df.columns if 'Shoot' in col]
+        if inplace:
+            self.df = self.df[col_mask]
+        else:
+            return ExpressionMatrixTimeSeries(self.df[col_mask])
+
+    def clusters_over_time(self, n_clusters: int):
+        """
+        Return array with [time, module, expression].
+        """
+
+        some_df = self.extract_module_expressions(n_clusters, do_plotting=False, inplace=False)
+        # Get info on samples
+        new_cols = get_info_from_gse5628(some_df['sample'].to_list())
+        some_df = pd.concat([some_df, pd.DataFrame.from_dict(new_cols)], axis=1)
+        some_df['elapsed_hrs'] = some_df['time'].astype('timedelta64[h]')
+        sns.lineplot(data=some_df, x='elapsed_hrs', y='expression', hue='cluster_id', style='tissue', palette=sns.color_palette())
+        plt.show()
