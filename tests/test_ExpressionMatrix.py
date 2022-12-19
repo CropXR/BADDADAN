@@ -1,4 +1,5 @@
 import csv
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -51,7 +52,9 @@ def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
     lpan_input_non_tf = my_time_series_expressions.get_lpan_input(
         n_clusters=nr_clusters, index_prefix='MODULE')
 
-    print(my_time_series_expressions.get_cluster_per_gene())
+    with Path('../data/my_clustering_dict.json').open('w') as f:
+        f.write(json.dumps(my_time_series_expressions.get_cluster_per_gene()))
+
     lpan_input_tf = tfs.get_lpan_input(n_clusters=None, index_prefix='TF_')
 
     lpan_input_everything = pd.concat([lpan_input_tf, lpan_input_non_tf])
