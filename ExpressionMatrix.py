@@ -206,8 +206,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         if inplace:
             self.df = self.df.assign(cluster_id=clustering)
             self.has_been_clustered = True
-        else:
-            return self.df.assign(cluster_id=clustering)
+        return self.df.assign(cluster_id=clustering)
 
 
 class ExpressionMatrixTest(ExpressionMatrix):
@@ -261,10 +260,12 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         plt.show()
 
 
-    def get_lpan_input(self, n_clusters: int | None, index_prefix: str) -> pd.DataFrame:
+    def get_lpan_input(
+            self, n_clusters: int | None, index_prefix: str) -> pd.DataFrame:
         """Get output that can be used to input into the Rscript LPAN workflow.
         (https://github.com/LiLabAtVT/LPANetwork)
 
+        :param inplace: Add
         :param n_clusters: Number of clusters, if None, don't do any clustering.
         :param index_prefix: Prefix string to add to index names.
                               E.g. 'TF' or 'MODULE'.
@@ -273,7 +274,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         if n_clusters:
             some_df = self.extract_module_expressions(n_clusters,
                                                       do_plotting=False,
-                                                      inplace=False)
+                                                      inplace=True)
             output_df = some_df.pivot(index='cluster_id', columns='sample',
                                       values='expression')
         else:
@@ -281,7 +282,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         output_df.index = index_prefix + output_df.index.astype(str)
         return output_df
 
-    def split_off_tfs(self, path_to_tf_file: Path, inplace: bool = False) -> tuple[ExpressionMatrixTimeSeries, ExpressionMatrixTimeSeries]:
+    def split_off_tfs(self, path_to_tf_file: Path, inplace: bool = False) \
+            -> tuple[ExpressionMatrixTimeSeries, ExpressionMatrixTimeSeries]:
         """Split time series into set of transcription factors, and set of non-
         transcription factors
 

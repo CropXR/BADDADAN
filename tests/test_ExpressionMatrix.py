@@ -38,18 +38,23 @@ def test_plot_non_tfs(my_time_series_expressions: ExpressionMatrixTimeSeries):
 
 def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
     nr_clusters = 40
+    some_cutoff = 1.5
     path_to_tfdb_file = Path(
         '/home/bnoordijk/phd/sandbox_gene_expression/Ath_TF_list.txt')
     my_time_series_expressions.get_only_shoot(inplace=True)
-    non_tfs, tfs = my_time_series_expressions.split_off_tfs(path_to_tfdb_file,
+    _, tfs = my_time_series_expressions.split_off_tfs(path_to_tfdb_file,
                                                             inplace=False)
-    non_tfs.get_only_de_genes(std_cutoff=1.5, inplace=True)
-    tfs.get_only_de_genes(std_cutoff=1.5, inplace=True)
-    lpan_input_non_tf = non_tfs.get_lpan_input(n_clusters=nr_clusters,
-                                               index_prefix='MODULE')
+    my_time_series_expressions.get_only_de_genes(std_cutoff=some_cutoff,
+                                                 inplace=True)
+    tfs.get_only_de_genes(std_cutoff=some_cutoff,
+                          inplace=True)
+    lpan_input_non_tf = my_time_series_expressions.get_lpan_input(
+        n_clusters=nr_clusters, index_prefix='MODULE')
+
+    print(my_time_series_expressions.get_cluster_per_gene())
     lpan_input_tf = tfs.get_lpan_input(n_clusters=None, index_prefix='TF_')
 
-    lpan_input_everything = pd.concat([lpan_input_non_tf, lpan_input_tf])
+    lpan_input_everything = pd.concat([lpan_input_tf, lpan_input_non_tf])
     lpan_input_everything.to_csv(Path('../data/sample_lpan_output.csv'),
                                  quoting=csv.QUOTE_NONNUMERIC)
     assert True
