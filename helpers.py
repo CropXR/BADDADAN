@@ -2,12 +2,11 @@ import re
 from pathlib import Path
 
 import GEOparse
+import pandas as pd
 from sklearn.model_selection import RepeatedStratifiedKFold
 
-from ExpressionMatrix import ExpressionMatrix
 
-
-def split_based_on_temp(expression_matrix: ExpressionMatrix,
+def split_based_on_temp(expression_matrix,
                         n_splits: int = 3,
                         n_repeats: int = 3):
     """Function which takes expression matrix, and splits it into stratified
@@ -29,3 +28,23 @@ def split_based_on_temp(expression_matrix: ExpressionMatrix,
                                          sample_names[test_idx])
         yield expression_matrix.extract_train_test(train_set_cols, test_set_cols)
 
+
+def get_info_from_gse5628(sample_names: list[str]) -> dict:
+    """From sample names that are used in GSE5628, extract time, tissue and replicate number.
+    Example sample name: 'AtGen_6-9411_Heatstress(3h)+3hrecovery-Shoots-6.0h_Rep1'
+
+    :param sample_names: List of sample names
+    :return: out dict with keys: time, tissue, and rep_nr.
+    """
+    out_dict = {'time': [],
+                'tissue': [],
+                'rep_nr': []}
+    for sample in sample_names:
+        time = re.search(r'\d+\.\d+h', sample).group()
+        time = pd.to_timedelta(time)
+        out_dict['time'].append(time)
+        tissue = re.search(r'Shoots|Roots', sample).group()
+        out_dict['tissue'].append(tissue)
+        rep_nr = re.search(r'Rep\d', sample).group()
+        out_dict['rep_nr'].append(rep_nr)
+    return out_dict

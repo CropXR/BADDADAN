@@ -13,7 +13,7 @@ class ExpressionArrayAnnotation:
     def __init__(self, some_path: Path):
         self.df = pd.read_csv(some_path, sep='\t', header=0)
 
-    def probe_to_agi(self, probe_name: str, verbose: bool = False):
+    def probe_to_agi(self, probe_name: str, verbose: bool = False) -> str:
         """Takes affymetrix probe name, and returns name of locus name for TAIR
 
         :param probe_name: Name of probe name in microarray, e.g. 263102_at

@@ -1,9 +1,10 @@
 """
 Contains classes that contain matrices of gene expression levels, extracted from GEO.
 """
+from __future__ import annotations
 import logging
 from pathlib import Path
-import re
+
 
 import numpy as np
 import pandas as pd
@@ -13,6 +14,7 @@ from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
 
 from ExpressionArrayAnnotation import ExpressionArrayAnnotation
+from helpers import get_info_from_gse5628
 
 
 class ExpressionMatrix:
@@ -71,28 +73,30 @@ class ExpressionMatrix:
             df = np.log2(df)
         return cls(df)
 
-    def get_sample_names(self):
+    def get_sample_names(self) -> np.array:
+        """Returns all names of samples"""
         return self.df.columns.to_numpy()
 
-    def get_gene_names(self):
+    def get_gene_names(self) -> list:
+        """Returns names of all gene names"""
         return self.df.index.to_list()
 
-    def remove_non_wt(self):
+    def remove_non_wt(self) -> ExpressionMatrix:
         """Return ExpressionMatrix with only columns that originate from wild type"""
         col_mask = [col for col in self.df.columns if 'WT' in col]
         return ExpressionMatrix(self.df[col_mask])
 
-    def plot_per_gene_std(self):
+    def plot_per_gene_std(self) -> None:
         """Plot per gene standard deviation across samples"""
         sns.histplot(self.df.std(axis=1))
         plt.show()
 
-    def plot_sample_gene_heatmap(self):
+    def plot_sample_gene_heatmap(self) -> None:
         sns.clustermap(self.df)
         plt.show()
 
     def extract_train_test(self, train_cols: np.array_str,
-                           test_cols: np.array_str):
+                           test_cols: np.array_str) -> tuple[ExpressionMatrixTraining, ExpressionMatrixTest]:
         """Given a list of columns to use as train and test,
         return a ExpressionMatrixTrain, and ExpressionMatrixTest which
         are subsets of the ExpressionMatrix
@@ -105,7 +109,7 @@ class ExpressionMatrix:
         expr_mat_test = ExpressionMatrixTest(self.df[test_cols])
         return expr_mat_train, expr_mat_test
 
-    def get_only_de_genes(self, std_cutoff: float = 1.0, inplace: bool = False):
+    def get_only_de_genes(self, std_cutoff: float = 1.0, inplace: bool = False) -> ExpressionMatrixTraining:
         """Return ExpressionMatrixTraining with only differentially
          expressed (de) genes.
 
@@ -115,8 +119,7 @@ class ExpressionMatrix:
         de_genes = self.df[self.df.std(axis=1) > std_cutoff]
         if inplace:
             self.df = de_genes
-        else:
-            return ExpressionMatrixTraining(de_genes)
+        return ExpressionMatrixTraining(de_genes)
 
 
 class ExpressionMatrixTraining(ExpressionMatrix):
@@ -126,7 +129,8 @@ class ExpressionMatrixTraining(ExpressionMatrix):
     training_df = ExpressionMatrixTraining(my_expression_matrix.df)
 
     """
-    def extract_module_expressions(self, n_cluster: int, inplace: bool = True, do_plotting: bool = False):
+    def extract_module_expressions(self, n_cluster: int, inplace: bool = True,
+                                   do_plotting: bool = False) -> pd.DataFrame:
         """Get mean expression per gene module based on
         clustering of expression correlation.
 
@@ -151,7 +155,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         return summary_df
         # return summary_df.pivot(index='sample', columns='cluster_id')
 
-    def get_cluster_per_gene(self):
+    def get_cluster_per_gene(self) -> dict:
         """For each gene, get its cluster_id Can only be called after
         self.do_hierachical_clustering() has been called.
 
@@ -161,7 +165,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                 'Run do_hierachical_clustering() first!'
         return self.df.cluster_id.to_dict()
 
-    def get_genes_per_cluster(self):
+    def get_genes_per_cluster(self) -> dict:
         """For each cluster, get Gene IDs. Can only be called after
         self.do_hierachical_clustering() has been called.
 
@@ -173,7 +177,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         return self.df.groupby('cluster_id').groups
 
     def do_hierachical_clustering(self, n_cluster: int, inplace: bool = True,
-                                  do_plotting: bool = False):
+                                  do_plotting: bool = False) -> pd.DataFrame:
         """Hierarchically cluster genes based on correlation of expression,
         and extract given number of clusters.
 
@@ -208,9 +212,12 @@ class ExpressionMatrixTraining(ExpressionMatrix):
 
 class ExpressionMatrixTest(ExpressionMatrix):
     def expressions_of_predefined_clusters(self,
-                                           gene_to_cluster: dict):
+                                           gene_to_cluster: dict) -> pd.DataFrame:
         """From dict that maps genes to cluster, get mean expression per
         cluster.
+
+        :param gene_to_cluster: Dictionary that maps gene names to cluster ids
+        :return: Mean expression per cluster
         """
         assigned_modules = self.df.index.map(lambda x: gene_to_cluster.get(x))
         inference_df = self.df.assign(cluster_id=assigned_modules)
@@ -223,41 +230,74 @@ class ExpressionMatrixTest(ExpressionMatrix):
         return summary_df.pivot(index='sample', columns='cluster_id')
 
 
-def get_info_from_gse5628(sample_names: list[str]):
-    out_dict = {'time': [],
-                'tissue': [],
-                'rep_nr': []}
-    for sample in sample_names:
-        time = re.search(r'\d+\.\d+h', sample).group()
-        time = pd.to_timedelta(time)
-        out_dict['time'].append(time)
-        tissue = re.search(r'Shoots|Roots', sample).group()
-        out_dict['tissue'].append(tissue)
-        rep_nr = re.search(r'Rep\d', sample).group()
-        out_dict['rep_nr'].append(rep_nr)
-    return out_dict
-
-
 class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
-    def get_only_shoot(self, inplace=False):
+    def get_only_shoot(self, inplace: bool = False) -> ExpressionMatrixTimeSeries:
         """Return ExpressionMatrixTimeSeries with only columns that
         originate from shoot
+
+        :param inplace: If true, modify object inplace
+        :return: Expressions with only shoot samples
         """
         col_mask = [col for col in self.df.columns if 'Shoot' in col]
         if inplace:
             self.df = self.df[col_mask]
-        else:
-            return ExpressionMatrixTimeSeries(self.df[col_mask])
+        return ExpressionMatrixTimeSeries(self.df[col_mask])
 
-    def clusters_over_time(self, n_clusters: int):
-        """
-        Return array with [time, module, expression].
+    def plot_clusters_over_time(self, n_clusters: int) -> None:
+        """Plot mean expression of clusters over time.
+
+        :param n_clusters: Number of clusters
         """
 
-        some_df = self.extract_module_expressions(n_clusters, do_plotting=False, inplace=False)
-        # Get info on samples
+        some_df = self.extract_module_expressions(n_clusters,
+                                                  do_plotting=False,
+                                                  inplace=False)
+        # Get time point info from sample names
         new_cols = get_info_from_gse5628(some_df['sample'].to_list())
         some_df = pd.concat([some_df, pd.DataFrame.from_dict(new_cols)], axis=1)
-        some_df['elapsed_hrs'] = some_df['time'].astype('timedelta64[h]')
-        sns.lineplot(data=some_df, x='elapsed_hrs', y='expression', hue='cluster_id', style='tissue', palette=sns.color_palette())
+        some_df['elapsed_mins'] = some_df['time'].astype('timedelta64[m]')
+        sns.lineplot(data=some_df, x='elapsed_mins', y='expression',
+                     hue='cluster_id', style='tissue', palette=sns.color_palette())
         plt.show()
+
+
+    def get_lpan_input(self, n_clusters: int | None, index_prefix: str) -> pd.DataFrame:
+        """Get output that can be used to input into the Rscript LPAN workflow.
+        (https://github.com/LiLabAtVT/LPANetwork)
+
+        :param n_clusters: Number of clusters, if None, don't do any clustering.
+        :param index_prefix: Prefix string to add to index names.
+                              E.g. 'TF' or 'MODULE'.
+        :return: Output that resembles that can be used for lpan.
+        """
+        if n_clusters:
+            some_df = self.extract_module_expressions(n_clusters,
+                                                      do_plotting=False,
+                                                      inplace=False)
+            output_df = some_df.pivot(index='cluster_id', columns='sample',
+                                      values='expression')
+        else:
+            output_df = self.df
+        output_df.index = index_prefix + output_df.index.astype(str)
+        return output_df
+
+    def split_off_tfs(self, path_to_tf_file: Path, inplace: bool = False) -> tuple[ExpressionMatrixTimeSeries, ExpressionMatrixTimeSeries]:
+        """Split time series into set of transcription factors, and set of non-
+        transcription factors
+
+        :param path_to_tf_file: Path to file which contains list of
+        transcription factor gene ids in column GeneID in tsv file.
+        E.g. it can be downloaded from http://planttfdb.gao-lab.org/index.php?sp=Ath
+        :param inplace: If true, only only keeps non-transcription factors inplace. Default: false.
+        :return: Tuple of ExpressionMatrixTimeSeries non-tfs, and tfs.
+        """
+        tf_annotation_df = pd.read_csv(path_to_tf_file, sep='\t')
+        is_tf = self.df.index.isin(tf_annotation_df.Gene_ID)
+        tfs_df, non_tfs_df = self.df[is_tf], self.df[~is_tf]
+        if inplace:
+            self.df = non_tfs_df
+        return (ExpressionMatrixTimeSeries(non_tfs_df),
+                ExpressionMatrixTimeSeries(tfs_df))
+
+
+
