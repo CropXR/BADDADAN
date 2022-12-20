@@ -144,6 +144,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                                                           inplace=inplace,
                                                           do_plotting=do_plotting)
         else:
+            logging.info('Already clustered, will not perform clustering again')
             clustered_df = self.df
 
         molten_df = pd.melt(clustered_df, id_vars='cluster_id',
@@ -301,5 +302,23 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         return (ExpressionMatrixTimeSeries(non_tfs_df),
                 ExpressionMatrixTimeSeries(tfs_df))
 
-
+    def merge_biological_samples(self, inplace: bool = False) -> pd.DataFrame:
+        """Calculate average of two biological samples"""
+        # First extract meaningful information from column names, so we can group by time and merge biological samples
+        column_info = get_info_from_gse5628(self.df.columns)
+        column_tuples = list(zip(self.df.columns, *column_info.values()))
+        # Ensure we do not accidentally modify the original dataframe
+        temp_df = self.df.copy()
+        temp_df.columns = pd.MultiIndex.from_tuples(
+            column_tuples, names=['sample_name', 'time', 'tissue', 'replicate'])
+        my_grouping = temp_df.groupby('time', axis=1)
+        # Keep original sample names, even after grouping by time (needed for compatibility)
+        sample_names = [v[0][0] for (_, v)
+                        in temp_df.groupby('time', axis=1).groups.items()]
+        merged_samples = my_grouping.mean()
+        merged_samples.columns = sample_names
+        if inplace:
+            self.df = merged_samples
+        # TODO look if returning these objects
+        return merged_samples
 

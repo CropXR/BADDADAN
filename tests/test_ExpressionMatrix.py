@@ -43,8 +43,9 @@ def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
     path_to_tfdb_file = Path(
         '/home/bnoordijk/phd/sandbox_gene_expression/Ath_TF_list.txt')
     my_time_series_expressions.get_only_shoot(inplace=True)
+    my_time_series_expressions.merge_biological_samples(inplace=True)
     _, tfs = my_time_series_expressions.split_off_tfs(path_to_tfdb_file,
-                                                            inplace=False)
+                                                      inplace=False)
     my_time_series_expressions.get_only_de_genes(std_cutoff=some_cutoff,
                                                  inplace=True)
     tfs.get_only_de_genes(std_cutoff=some_cutoff,
