@@ -26,6 +26,9 @@ class ExpressionMatrix:
         """
         self.df = df
         self.has_been_clustered = False
+        # Default prefixes to use when exporting to LPAN rscript files
+        self.tf_prefix = 'TF_'
+        self.module_prefix = 'MODULE'
 
     def __repr__(self):
         return (f'ExpressionMatrix with {len(self.df)} genes'
@@ -34,7 +37,7 @@ class ExpressionMatrix:
     @classmethod
     def from_geo_file(cls, file_path: Path,
                       array_annotation: ExpressionArrayAnnotation = None,
-                      log2_transform=False):
+                      log2_transform: bool = False):
         """From a file path, correctly parse GEO expression file and
         return ExpressionMatrix object.
 
@@ -42,6 +45,7 @@ class ExpressionMatrix:
                       others have not been tested.
         :param array_annotation: Object which maps probe names of AGI names.
                                  Should have probe_to_agi() method.
+        :param log2_transform: Log2 transform the expression data.
         """
         gse = GEOparse.get_GEO(filepath=str(file_path), silent=True)
         # Merge all samples into one dataframe
@@ -81,7 +85,7 @@ class ExpressionMatrix:
         """Returns names of all gene names"""
         return self.df.index.to_list()
 
-    def remove_non_wt(self) -> ExpressionMatrix:
+    def get_only_wt_samples(self) -> ExpressionMatrix:
         """Return ExpressionMatrix with only columns that originate from wild type"""
         col_mask = [col for col in self.df.columns if 'WT' in col]
         return ExpressionMatrix(self.df[col_mask])
@@ -130,7 +134,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
     def extract_module_expressions(self, n_cluster: int,
                                    do_plotting: bool = False) -> pd.DataFrame:
         """Get mean expression per gene module based on
-        clustering of expression correlation.
+        clustering of expression correlation. And return as dataframe.
 
         :param n_cluster: Number of clusters
         """
@@ -146,9 +150,21 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                             ignore_index=False, var_name='sample',
                             value_name='expression')
         summary_df = molten_df.groupby(['sample', 'cluster_id']).mean().reset_index()
-        # TODO change this?
         return summary_df
-        # return summary_df.pivot(index='sample', columns='cluster_id')
+
+    def save_cluster_gene_edge_list(self, out_file_path: Path,
+                                    tf_filter_list: None | list[str] = None):
+        """Save edge list that maps transcription factors to their gene"""
+        if tf_filter_list is None:
+            # Is this realistically ever used without tf_filter_
+            out_df = self.df
+        else:
+            prefixed_index = self.tf_prefix + self.df.index.astype(str)
+            out_df = self.df[prefixed_index.isin(tf_filter_list)]
+            out_df.index = prefixed_index[prefixed_index.isin(tf_filter_list)]
+            out_df['cluster_id'] = self.module_prefix + out_df.cluster_id.astype(str)
+        out_df.to_csv(out_file_path, sep=' ', columns=['cluster_id'],
+                      header=False)
 
     def get_cluster_per_gene(self) -> dict:
         """For each gene, get its cluster_id Can only be called after
@@ -221,12 +237,8 @@ class ExpressionMatrixTest(ExpressionMatrix):
 
 
 class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
-    def get_only_shoot(self) -> None:
-        """Return ExpressionMatrixTimeSeries with only columns that
-        originate from shoot
-
-        :return: Expressions with only shoot samples
-        """
+    def keep_only_shoot(self) -> None:
+        """Keep only columns that originate from shoot"""
         col_mask = [col for col in self.df.columns if 'Shoot' in col]
         self.df = self.df[col_mask]
 
@@ -245,25 +257,27 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                      hue='cluster_id', style='tissue', palette=sns.color_palette())
         plt.show()
 
-    def get_lpan_input(
-            self, n_clusters: int | None, index_prefix: str) -> pd.DataFrame:
-        """Get output that can be used to input into the Rscript LPAN workflow.
+    def get_lpan_input_modules(self, n_clusters: int) -> pd.DataFrame:
+        """For gene modules, get output that can be used to input into the Rscript LPAN workflow.
         (https://github.com/LiLabAtVT/LPANetwork)
 
-        :param inplace: Add
-        :param n_clusters: Number of clusters, if None, don't do any clustering.
-        :param index_prefix: Prefix string to add to index names.
-                              E.g. 'TF' or 'MODULE'.
+        :param n_clusters: Number of clusters.
         :return: Output that resembles that can be used for lpan.
         """
-        if n_clusters:
-            some_df = self.extract_module_expressions(n_clusters,
-                                                      do_plotting=False)
-            output_df = some_df.pivot(index='cluster_id', columns='sample',
-                                      values='expression')
-        else:
-            output_df = self.df
-        output_df.index = index_prefix + output_df.index.astype(str)
+        some_df = self.extract_module_expressions(n_clusters,
+                                                  do_plotting=False)
+        output_df = some_df.pivot(index='cluster_id', columns='sample',
+                                  values='expression')
+        output_df.index = self.module_prefix + output_df.index.astype(str)
+        return output_df
+
+    def get_lpan_input_tfs(self) -> pd.DataFrame:
+        """Get expressions of transcription factors to be used in Rscript LPAN.
+        Only use this if the object contains only transcription factors.
+        I.e. the object has been created from a .split_off_tfs() method call.
+        """
+        output_df = self.df
+        output_df.index = self.tf_prefix + output_df.index.astype(str)
         return output_df
 
     def split_off_tfs(self, path_to_tf_file: Path) \
@@ -285,7 +299,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
     def merge_biological_samples(self) -> None:
         """Calculate average of two biological samples"""
-        # First extract meaningful information from column names, so we can group by time and merge biological samples
+        # First extract meaningful information from column names,
+        # so we can group by time and merge biological samples
         column_info = get_info_from_gse5628(self.df.columns)
         column_tuples = list(zip(self.df.columns, *column_info.values()))
         # Ensure we do not accidentally modify the original dataframe
@@ -293,7 +308,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         temp_df.columns = pd.MultiIndex.from_tuples(
             column_tuples, names=['sample_name', 'time', 'tissue', 'replicate'])
         my_grouping = temp_df.groupby('time', axis=1)
-        # Keep original sample names, even after grouping by time (needed for compatibility)
+        # Keep original sample names, even after grouping by time
+        # (needed for compatibility)
         sample_names = [v[0][0] for (_, v)
                         in temp_df.groupby('time', axis=1).groups.items()]
         merged_samples = my_grouping.mean()

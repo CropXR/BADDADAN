@@ -26,7 +26,7 @@ def main(
     expression_annotation = ExpressionArrayAnnotation(annotation_path)
     expression_matrix = ExpressionMatrix.from_geo_file(expression_path,
                                                        expression_annotation)
-    expression_matrix = expression_matrix.remove_non_wt()
+    expression_matrix = expression_matrix.get_only_wt_samples()
     plot_pred_vs_real(expression_matrix, n_cluster)
     # do_cv_for_nclust(expression_matrix)
 
