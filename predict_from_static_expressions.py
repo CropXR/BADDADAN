@@ -16,7 +16,7 @@ def lin_regress_on_modules(expr_mat: ExpressionMatrix, n_cluster: int):
     y_pred_list = []
     reg_scores = []
     for expr_matr_train, expr_matr_test in split_based_on_temp(expr_mat):
-        de_genes = expr_matr_train.get_only_de_genes()
+        de_genes = expr_matr_train.keep_only_de_genes()
         overview_df = de_genes.extract_module_expressions(n_cluster)
         gene_to_module = de_genes.get_cluster_per_gene()
 
