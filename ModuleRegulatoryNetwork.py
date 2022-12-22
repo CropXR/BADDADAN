@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Callable
 
@@ -36,7 +35,7 @@ class ModuleRegulatoryNetwork:
         return cls(a_graph)
 
     def plot_network(self, draw_func: Callable = nx.draw_kamada_kawai, out_path: Path = None):
-        """Plot network using matplotlib. Colour mean something, but I'll document that later"""
+        """Plot network using matplotlib. Colour means something, but I'll document that later"""
         node_color_map = ['blue' if ('TF' in node) else 'orange' for node in
                      self.graph.nodes]
         edge_color_map = ['black' if ('transcribed_by' in atrs.get('origin'))
@@ -51,7 +50,9 @@ class ModuleRegulatoryNetwork:
 
     def add_tf_module_mappings(self, path_to_orignal_cluster: Path) -> None:
         """Include what TFs are transcribed by which cluster.
-        Add these edges with this method, input file is created from ExpressionMatrix (I think)."""
+        Add these edges with this method, input file is created from
+        ExpressionMatrix object.
+        """
         original_connections = nx.read_edgelist(path_to_orignal_cluster, create_using=nx.DiGraph)
         # Invert connections, because <TF:is transcribed by:Module>
         original_connections = original_connections.reverse()
@@ -76,7 +77,9 @@ class ModuleRegulatoryNetwork:
 
     def remove_unused_modules(self) -> None:
         """Delete modules which are unused. I.e. modules that are not regulated
-         by any transcription factor, and also don't encode for any transcription factors"""
+        by any transcription factor, and also don't encode for any
+        transcription factors.
+        """
         unused_modules = []
         for node_name in self.graph.nodes:
             if (self.module_prefix in node_name
