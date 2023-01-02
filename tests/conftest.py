@@ -47,6 +47,6 @@ def my_grn():
     path_to_network_edges = Path('../data/aracne_network_edges.csv')
     path_to_orignal_cluster = Path('../data/my_clustering_edgelist.csv')
     my_graph = ModuleRegulatoryNetwork.from_lpan_edge_csv(path_to_network_edges,
-                                                          top_rank=30)
+                                                          top_rank=25)
     my_graph.add_tf_module_mappings(path_to_orignal_cluster)
     return my_graph

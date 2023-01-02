@@ -44,7 +44,7 @@ def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
     used by LPAN and other pipelines downstream. Creates a file with expressions
     that LPAN uses directly, also creates file which contains edges between
     TFs and the module they belong to."""
-    nr_clusters = 40
+    nr_clusters = 4
     some_cutoff = 1.5
     path_to_tfdb_file = Path(
         '/home/bnoordijk/phd/sandbox_gene_expression/Ath_TF_list.txt')
