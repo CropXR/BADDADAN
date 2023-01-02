@@ -6,6 +6,7 @@ from typing import Callable
 import networkx as nx
 import pandas as pd
 from matplotlib import pyplot as plt
+from OdeInference import OdeInference
 
 
 class ModuleRegulatoryNetwork:
@@ -121,7 +122,7 @@ class ModuleRegulatoryNetwork:
 
         self.graph.remove_edges_from(edges_to_be_removed)
 
-    def get_module_module_network(self):
+    def get_module_module_network(self) -> ModuleRegulatoryNetwork:
         """Cut out all TFs and show direct relations between modules"""
         # Add edges
         edges_to_add = []
@@ -145,3 +146,14 @@ class ModuleRegulatoryNetwork:
     def get_tfs(self) -> list:
         """Return list of all transcription factor nodes"""
         return [node for node in self.graph.nodes if self.tf_prefix in node]
+
+    def convert_to_ode(self) -> OdeInference:
+        """Convert the graph to an object that contains all equations
+        to perform fitting of the ODEs. This can only be called after .get_module_module_network() has been executed.
+        """
+        # Ensure that network is ModuleModule network
+        assert all(self.id_of_regulation in edge for edge in self.graph.edges(data='origin')), 'Make sure you have removed all TFs from regulatory network and converted it to Module-Module network'
+        # Todo keep names of edges involved here in some way?
+        ode_out = OdeInference()
+        ode_out.construct_formula_per_module(self.graph)
+        return ode_out
