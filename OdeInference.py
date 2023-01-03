@@ -30,10 +30,11 @@ class OdeInference:
         for all y. Params should be a list which matches the parameter names"""
         output = []
         assert len(*params) == self.nr_params, 'Supplied nr of parameters does not match actual number of parameters'
-        my_dict = dict(zip(self.get_param_names(), *params))
-        logging.info(f'Mapped params in the following way: {my_dict}')
+        param_dict = dict(zip(self.get_param_names(), *params))
+        logging.info(f'Mapped params in the following way: {param_dict}')
         for formula in self.formula_per_module:
-            output.append(formula(y, my_dict))
+            output.append(formula(y, param_dict))
+        return output
 
 
 class MyFormula:
@@ -52,6 +53,9 @@ class MyFormula:
             init_i += 1
         # Only add terms if >1 regulator
         self.formula_string = ' + '.join(formula_segments)
+        # Compile string to speed up evaluation
+        self.compiled_formula_string = compile(self.formula_string,
+                                               "<string>", "eval")
 
     @property
     def nr_params(self):
@@ -66,4 +70,4 @@ class MyFormula:
         # Create dict for all these things
         init_val = {"y": y}
         local_dict = init_val | params
-        return eval(self.formula_string, {}, local_dict)
+        return eval(self.compiled_formula_string, {}, local_dict)
