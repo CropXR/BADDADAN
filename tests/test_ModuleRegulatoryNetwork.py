@@ -1,17 +1,28 @@
+import logging
+
 import numpy as np
 import pytest
 
+from ExpressionMatrix import ExpressionMatrixTimeSeries
+from ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
+from OdeFitter import OdeFitter
+from OdeInference import OdeInference
 
-@pytest.fixture
-def test_import_network_edges_from_lpan(my_grn):
-    my_grn.clean_up_network()
-    # my_grn.plot_network()
-    my_module_network = my_grn.get_module_module_network()
-    # my_module_network.plot_network()
-    return my_module_network
 
-def test_convert_to_ode(test_import_network_edges_from_lpan):
-    my_ode = test_import_network_edges_from_lpan.convert_to_ode()
+def test_convert_to_ode(my_ode: OdeInference):
+    logging.info(f'{my_ode=}')
     params = np.random.rand(my_ode.nr_params).tolist()
-    print(my_ode(None, [0,1,0,0], params))
+    dydt = my_ode(None, [0, 1, 0, 0], params)
+    logging.info(f'{dydt=}')
+    assert dydt != [0, 1, 0, 0]
 
+def test_fit_ode_to_data(my_ode: OdeInference,
+                         my_time_series_expressions: ExpressionMatrixTimeSeries):
+    n_clusters = 4
+    my_time_series_expressions.keep_only_shoot()
+    my_time_series_expressions.merge_biological_samples()
+    my_time_series_expressions.keep_only_de_genes(std_cutoff=1.5)
+    # TODO Check order of modules in data with order of modules in ODEs -> I'm pretty sure it's wrong atm
+    my_time, my_data = my_time_series_expressions.get_clusters_expressions_with_time(n_clusters)
+    fitter = OdeFitter(my_ode, my_data, my_time)
+    fitter.fit(t_end=180)

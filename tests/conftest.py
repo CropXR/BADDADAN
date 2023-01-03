@@ -13,6 +13,7 @@ import pytest
 from ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from ExpressionMatrix import ExpressionMatrix, ExpressionMatrixTimeSeries
 from ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
+from OdeInference import OdeInference
 
 pd.options.display.width = 0
 GEOparse.logger.set_verbosity('INFO')
@@ -41,7 +42,6 @@ def my_time_series_expressions(my_expression_annotation):
         time_series_expressions, my_expression_annotation, log2_transform=True)
     return expr_mat_time
 
-
 @pytest.fixture
 def my_grn():
     path_to_network_edges = Path('../data/aracne_network_edges.csv')
@@ -50,3 +50,16 @@ def my_grn():
                                                           top_rank=25)
     my_graph.add_tf_module_mappings(path_to_orignal_cluster)
     return my_graph
+
+@pytest.fixture
+def my_module_module_network(my_grn):
+    my_grn.clean_up_network()
+    # my_grn.plot_network()
+    my_module_network = my_grn.get_module_module_network()
+    # my_module_network.plot_network()
+    return my_module_network
+
+@pytest.fixture
+def my_ode(my_module_module_network: ModuleRegulatoryNetwork) -> OdeInference:
+    return my_module_module_network.convert_to_ode()
+

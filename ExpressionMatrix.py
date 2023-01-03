@@ -248,14 +248,21 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         :param n_clusters: Number of clusters
         """
 
-        some_df = self.extract_module_expressions(n_clusters, do_plotting=False)
-        # Get time point info from sample names
-        new_cols = get_info_from_gse5628(some_df['sample'].to_list())
-        some_df = pd.concat([some_df, pd.DataFrame.from_dict(new_cols)], axis=1)
-        some_df['elapsed_mins'] = some_df['time'].astype('timedelta64[m]')
+        some_df = self._get_cluster_expression_long_form(n_clusters)
         sns.lineplot(data=some_df, x='elapsed_mins', y='expression',
                      hue='cluster_id', style='tissue', palette=sns.color_palette())
         plt.show()
+
+    def _get_cluster_expression_long_form(self, n_clusters):
+        """Get dataframe which shows expression of clusters over time
+        in long-form dataframe
+        """
+        out_df = self.extract_module_expressions(n_clusters, do_plotting=False)
+        # Get time point info from sample names
+        new_cols = get_info_from_gse5628(out_df['sample'].to_list())
+        out_df = pd.concat([out_df, pd.DataFrame.from_dict(new_cols)], axis=1)
+        out_df['elapsed_mins'] = out_df['time'].astype('timedelta64[m]')
+        return out_df
 
     def get_lpan_input_modules(self, n_clusters: int) -> pd.DataFrame:
         """For gene modules, get output that can be used to input into the Rscript LPAN workflow.
@@ -316,3 +323,15 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         merged_samples.columns = sample_names
         self.df = merged_samples
 
+    def get_clusters_expressions_with_time(self, n_clusters: int) \
+            -> tuple[np.ndarray, np.ndarray]:
+        """For fitting ODEs, get expression of clusters over time.
+        First array in tuple indicates time_points in minutes, second array
+        indicates module expressions.
+        """
+        some_df = self._get_cluster_expression_long_form(n_clusters)
+        new_df = some_df.pivot(index='cluster_id', columns='elapsed_mins',
+                               values='expression')
+        time_points = new_df.columns.to_numpy()
+        module_expressions = new_df.to_numpy()
+        return time_points, module_expressions

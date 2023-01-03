@@ -10,6 +10,22 @@ class OdeInference:
         self.nr_params = 0
         self.formula_per_module: list[MyFormula] = []
 
+    def __repr__(self):
+        # TODO needs some work perhaps
+        return '\n'.join([f'{formula}' for formula in self.formula_per_module])
+
+    def __call__(self, t, y: list[float], *params: list[float]):
+        """Allows system of ODEs to be called. In this case returns dy/dt
+        for all y. Params should be a list which matches the parameter names"""
+        output = []
+        assert len(params) == self.nr_params, 'Supplied nr of parameters does not match actual number of parameters'
+        param_dict = dict(zip(self.get_param_names(), params))
+        # logging.info(f'Mapped params in the following way: {param_dict}')
+        for formula in self.formula_per_module:
+            # TODO map this in a cooler, more efficient way. Maybe speeds up calculations, too.
+            output.append(formula(y, param_dict))
+        return output
+
     def construct_formula_per_module(self, graph: nx.DiGraph):
         """For each module, generate a formula based on the connectivity of the module in the graph"""
         for module in graph.nodes:
@@ -25,20 +41,9 @@ class OdeInference:
             all_params.extend(formula.params)
         return all_params
 
-    def __call__(self, t, y: list[float], *params: list[float]):
-        """Allows system of ODEs to be called. In this case returns dy/dt
-        for all y. Params should be a list which matches the parameter names"""
-        output = []
-        assert len(*params) == self.nr_params, 'Supplied nr of parameters does not match actual number of parameters'
-        param_dict = dict(zip(self.get_param_names(), *params))
-        logging.info(f'Mapped params in the following way: {param_dict}')
-        for formula in self.formula_per_module:
-            output.append(formula(y, param_dict))
-        return output
-
 
 class MyFormula:
-    """Formula for a single module, can be provided with custom parameter values."""
+    """Formula for a single module, can be provided with custom parameter values when called."""
     def __init__(self, module_name: str, regulator_names: list[str], init_i: int):
         self.module = module_name
         self.params = []
@@ -48,6 +53,7 @@ class MyFormula:
             b_param_name = f'beta{init_i}'
             k_param_name = f'k{init_i}'
             self.params.extend([b_param_name, k_param_name])
+            # TODO does this currently also work correctly for inhibition? Not sure...
             formula_segments.append(f'({b_param_name} * y[{regulator_index}]) '
                                     f'/ ({k_param_name} + y[{regulator_index}])')
             init_i += 1
@@ -63,7 +69,8 @@ class MyFormula:
         return len(self.params)
 
     def __repr__(self):
-        return f'Formula of {self.module}={self.formula_string} \n nr_params = {self.nr_params}'
+        return f'Formula of {self.module}={self.formula_string} ' \
+               f'\n nr_params = {self.nr_params}'
 
     def __call__(self, y: list[float], params: dict[str, float]) -> float:
         """When called, calculate the outcome of the formula"""
