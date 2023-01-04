@@ -14,17 +14,13 @@ class OdeInference:
         # TODO needs some work perhaps
         return '\n'.join([f'{formula}' for formula in self.formula_per_module])
 
-    def __call__(self, t: float, y: list[float], *params: list[float]):
+    def __call__(self, t: float, y: list[float], *params: float):
         """Allows system of ODEs to be called. In this case returns dy/dt
         for all y. Params should be a list which matches the parameter names"""
-        output = []
         assert len(params) == self.nr_params, 'Supplied nr of parameters does not match actual number of parameters'
         param_dict = dict(zip(self.get_param_names(), params))
-        # logging.info(f'Mapped params in the following way: {param_dict}')
-        for formula in self.formula_per_module:
-            # TODO map this in a cooler, more efficient way. Maybe speeds up calculations, too.
-            output.append(formula(y, param_dict))
-        return output
+        logging.debug(f'Mapped params in the following way: {param_dict}')
+        return [formula(y, param_dict) for formula in self.formula_per_module]
 
     def construct_formula_per_module(self, graph: nx.DiGraph):
         """For each module, generate a formula based on the connectivity of the module in the graph"""

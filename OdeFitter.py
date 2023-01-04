@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 from lmfit import Parameters, minimize
+from lmfit.minimizer import MinimizerResult
 from scipy.integrate import solve_ivp
 
 from OdeInference import OdeInference
@@ -30,7 +31,7 @@ class OdeFitter:
 
     def loss_function(
             self, params: Parameters, t: np.ndarray, y_real: np.ndarray,
-            my_func: callable, t_start=None, t_end=None):
+            my_func: callable, t_start=None, t_end=None) -> np.ndarray:
         """Return squared residuals between y_real and a prediction of my_func
         at time points t for a given set params.
         """
@@ -46,21 +47,19 @@ class OdeFitter:
               if name in self.init_condition_names]
         tuple_params = [value for name, value in params.valuesdict().items()
                         if name not in self.init_condition_names]
-        logging.info('Solving IVP')
         # Seems to take extremely long sometimes
         y_pred = solve_ivp(my_func, (t_start, t_end), y0, t_eval=t,
-                           args=tuple_params, method='RK23')
+                           args=tuple_params, method='RK23', first_step=1)
         assert y_pred.status >= 0, f"Integration failed {y_pred.message}"
         return np.square(y_pred.y - y_real)
 
-    def fit(self, t_start=None, t_end=None):
+    def fit(self, t_start=None, t_end=None) -> MinimizerResult:
         output = minimize(self.loss_function,
                           self.params,
-                          method='least_squares',
                           kws={'t': self.time_points,
                                'y_real': self.measured_data,
                                'my_func': self.odes,
                                't_start': t_start,
-                               't_end': t_end},
-                          verbose=2)
-        output.params.pretty_print()
+                               't_end': t_end})
+        return output
+        # output.params.pretty_print()

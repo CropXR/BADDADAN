@@ -26,7 +26,7 @@ class ExpressionArrayAnnotation:
                                     'locus']
         if len(candidate_agi) == 0 or np.any(candidate_agi == 'no_match'):
             # Could not find annotation in database
-            logging.warning(f'Could not find annotation of {probe_name} in database, proceeding with original name.')
+            logging.debug(f'Could not find annotation of {probe_name} in database, proceeding with original name.')
             candidate = probe_name
         else:
             candidate = candidate_agi.item()
