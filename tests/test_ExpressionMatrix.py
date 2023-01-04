@@ -32,7 +32,7 @@ def test_time_series_expressions(my_time_series_expressions: ExpressionMatrixTim
 def test_plot_non_tfs(my_time_series_expressions: ExpressionMatrixTimeSeries):
     """See if we can split off transcription factors, and plot their expression"""
     path_to_tfdb_file = Path(
-        '/home/bnoordijk/phd/sandbox_gene_expression/Ath_TF_list.txt')
+        '../data/Ath_TF_list.txt')
     non_tfs, tfs = my_time_series_expressions.split_off_tfs(path_to_tfdb_file)
     non_tfs.keep_only_de_genes(std_cutoff=1.8)
     non_tfs.plot_clusters_over_time(4)
@@ -47,7 +47,7 @@ def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
     nr_clusters = 4
     some_cutoff = 1.5
     path_to_tfdb_file = Path(
-        '/home/bnoordijk/phd/sandbox_gene_expression/Ath_TF_list.txt')
+        '../data/Ath_TF_list.txt')
     my_time_series_expressions.keep_only_shoot()
     my_time_series_expressions.merge_biological_samples()
     _, tfs = my_time_series_expressions.split_off_tfs(path_to_tfdb_file)
