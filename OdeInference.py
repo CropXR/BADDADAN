@@ -14,7 +14,7 @@ class OdeInference:
         # TODO needs some work perhaps
         return '\n'.join([f'{formula}' for formula in self.formula_per_module])
 
-    def __call__(self, t, y: list[float], *params: list[float]):
+    def __call__(self, t: float, y: list[float], *params: list[float]):
         """Allows system of ODEs to be called. In this case returns dy/dt
         for all y. Params should be a list which matches the parameter names"""
         output = []
@@ -28,9 +28,14 @@ class OdeInference:
 
     def construct_formula_per_module(self, graph: nx.DiGraph):
         """For each module, generate a formula based on the connectivity of the module in the graph"""
-        for module in graph.nodes:
+        # Iterate over modules in lexicographic order
+        for module in sorted(list(graph)):
             regulators = list(graph.predecessors(module))
-            formula = MyFormula(module, regulators, init_i=self.nr_params // 2)
+            if len(self.formula_per_module) == 0:
+                init_i = 0
+            else:
+                init_i = self.formula_per_module[-1].next_param_suffix
+            formula = MyFormula(module, regulators, init_i=init_i)
             self.formula_per_module.append(formula)
             self.nr_params += formula.nr_params
 
@@ -46,19 +51,25 @@ class MyFormula:
     """Formula for a single module, can be provided with custom parameter values when called."""
     def __init__(self, module_name: str, regulator_names: list[str], init_i: int):
         self.module = module_name
+        self.module_index = int(module_name[-1]) - 1
         self.params = []
         formula_segments = []
+        self.next_param_suffix = init_i
         for regulator in regulator_names:
             regulator_index = int(regulator[-1]) - 1
-            b_param_name = f'beta{init_i}'
-            k_param_name = f'k{init_i}'
+            b_param_name = f'beta{self.next_param_suffix}'
+            k_param_name = f'k{self.next_param_suffix}'
             self.params.extend([b_param_name, k_param_name])
             # TODO does this currently also work correctly for inhibition? Not sure...
             formula_segments.append(f'({b_param_name} * y[{regulator_index}]) '
                                     f'/ ({k_param_name} + y[{regulator_index}])')
-            init_i += 1
+            self.next_param_suffix += 1
         # Only add terms if >1 regulator
         self.formula_string = ' + '.join(formula_segments)
+        # Add decay factor
+        d_param_name = f'd{init_i}'
+        self.params.append(d_param_name)
+        self.formula_string += f' - {d_param_name} * y[{self.module_index}]'
         # Compile string to speed up evaluation
         self.compiled_formula_string = compile(self.formula_string,
                                                "<string>", "eval")
