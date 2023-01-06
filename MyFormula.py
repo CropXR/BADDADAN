@@ -1,7 +1,7 @@
 class MyFormula:
     """Formula for a single module, can be provided with custom parameter values when called."""
     def __init__(self, module_name: str, regulator_names: list[str], init_i: int):
-        self.module = module_name
+        self.module_name = module_name
         self.module_index = int(module_name[-1]) - 1
         self.params = []
         formula_segments = []
@@ -13,7 +13,7 @@ class MyFormula:
             # k_param_name = f'k{self.next_param_suffix}'
             # self.params.extend([b_param_name, k_param_name])
             self.params.append(b_param_name)
-            # Currently assume linear
+            # Currently assume linear relationship
             formula_segments.append(f'{b_param_name} * y[{regulator_index}]')
             self.next_param_suffix += 1
         # Only add terms if >1 regulator
@@ -33,7 +33,7 @@ class MyFormula:
         return len(self.params)
 
     def __repr__(self):
-        return f'Formula of {self.module}={self.formula_string} ' \
+        return f'Formula of {self.module_name}={self.formula_string} ' \
                f'\n nr_params = {self.nr_params}'
 
     def __call__(self, y: list[float], params: dict[str, float]) -> float:

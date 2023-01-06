@@ -12,8 +12,8 @@ class OdeInference:
         self.formula_per_module: list[MyFormula] = []
 
     def __repr__(self):
-        # TODO needs some work perhaps
-        return '\n'.join([f'{formula}' for formula in self.formula_per_module])
+        return ('OdeInferenceClass:\n'
+                + '\n'.join([f'{formula}' for formula in self.formula_per_module]))
 
     def __call__(self, t: float, y: list[float], *params: float):
         """Allows system of ODEs to be called. In this case returns dy/dt

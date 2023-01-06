@@ -10,6 +10,8 @@ from ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from OdeFitter import OdeFitter
 from OdeInference import OdeInference
 
+logging.basicConfig(level=logging.INFO)
+
 
 def test_convert_to_ode(my_ode: OdeInference):
     logging.info(f'{my_ode=}')
@@ -26,7 +28,6 @@ def test_fit_ode_to_data(
     my_time_series_expressions.keep_only_shoot()
     my_time_series_expressions.merge_biological_samples()
     my_time_series_expressions.keep_only_de_genes(std_cutoff=1.5)
-    # TODO check if my_data is correct format and not inverted or something
     my_time, my_data = \
         my_time_series_expressions.get_clusters_expressions_with_time(n_clusters)
     fitter = OdeFitter(my_ode, my_data, my_time)
@@ -52,7 +53,7 @@ def test_identifiability(
     my_params['beta3'].value = 0.1
     my_params['beta0'].value = my_params['beta1'].value = 0.05
     my_params['beta2'].value = my_params['beta4'].value = -0.05
-    for i in [0, 1, 2, 4]:
+    for i in range(4):
         my_params[f'd{i}'].value = 0.01
     sim_data = generator.predict_values(my_params,
                                         generator.time_points,
@@ -63,10 +64,8 @@ def test_identifiability(
     fitter = OdeFitter(my_ode, sim_data.y, sim_data.t)
     # Note: look into the initial parameter values
     fit_result = fitter.fit()
-    # TODO compare this to actual data and incorporate inhibition mechanisms?
     logging.info(fit_report(fit_result))
     logging.info(f'{my_params=}')
-
 
     optimal_fit = fitter.predict_values(fit_result.params, sim_data.t, my_ode)
     colours = ['b', 'r', 'g', 'y']
