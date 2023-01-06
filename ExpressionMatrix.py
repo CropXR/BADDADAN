@@ -18,6 +18,10 @@ from helpers import get_info_from_gse5628
 
 
 class ExpressionMatrix:
+    # Default prefixes to use when exporting to LPAN rscript files
+    tf_prefix = 'TF_'
+    module_prefix = 'MODULE'
+
     def __init__(self, df: pd.DataFrame):
         """Create expression matrix directly from Pandas dataframe
 
@@ -26,9 +30,6 @@ class ExpressionMatrix:
         """
         self.df = df
         self.has_been_clustered = False
-        # Default prefixes to use when exporting to LPAN rscript files
-        self.tf_prefix = 'TF_'
-        self.module_prefix = 'MODULE'
 
     def __repr__(self):
         return (f'ExpressionMatrix with {len(self.df)} genes'
@@ -242,16 +243,27 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         col_mask = [col for col in self.df.columns if 'Shoot' in col]
         self.df = self.df[col_mask]
 
-    def plot_clusters_over_time(self, n_clusters: int) -> None:
+    def plot_clusters_over_time(self) -> None:
         """Plot mean expression of clusters over time.
 
-        :param n_clusters: Number of clusters
         """
+        sns.set_theme()
+        some_df = self._get_gene_expression_long_form()
+        # sns.lineplot(data=some_df, x='time', y='expression',
+        #              hue='cluster', palette=sns.color_palette())
 
-        some_df = self._get_cluster_expression_long_form(n_clusters)
-        sns.lineplot(data=some_df, x='elapsed_mins', y='expression',
-                     hue='cluster_id', style='tissue', palette=sns.color_palette())
+        sns.lineplot(data=some_df, x='time', y='expression',
+                     hue='cluster', style='replicate', palette=sns.color_palette())
         plt.show()
+        plt.close()
+        # sns.stripplot(data=some_df, x='time', y='expression',
+        #                hue='cluster', palette=sns.color_palette())
+        # ax = sns.violinplot(data=some_df, x='time', y='expression',
+        #                hue='cluster', palette=sns.color_palette()) #, dodge=False, inner=None)
+        # plt.setp(ax.collections, alpha=.5)
+        # sns.lineplot(data=some_df, x='elapsed_mins', y='expression',
+        #              hue='cluster_id', style='tissue', palette=sns.color_palette())
+        # plt.show()
 
     def _get_cluster_expression_long_form(self, n_clusters):
         """Get dataframe which shows expression of clusters over time
@@ -263,6 +275,35 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         out_df = pd.concat([out_df, pd.DataFrame.from_dict(new_cols)], axis=1)
         out_df['elapsed_mins'] = out_df['time'].astype('timedelta64[m]')
         return out_df
+
+    def _get_gene_expression_long_form(self):
+        assert self.has_been_clustered, ('Cluster genes first, '
+                                         'you hovercraft full of eels. '
+                                         'I.e. call the .do_hierarchical_clustering() method before calling this method.')
+        # TODO create private method of this snippet of code is used twice atm
+        # Drop final column and add it later
+        df_no_cluster_column = self.df.copy()
+        df_no_cluster_column = df_no_cluster_column[df_no_cluster_column.columns[:-1]]
+
+        # First extract meaningful information from column names,
+        # so we can group by time and merge biological samples
+        column_info = get_info_from_gse5628(df_no_cluster_column)
+        column_tuples = list(zip(df_no_cluster_column, *column_info.values()))
+        # Ensure we do not accidentally modify the original dataframe
+        df_no_cluster_column.columns = pd.MultiIndex.from_tuples(
+            column_tuples, names=['sample_name', 'time', 'tissue', 'replicate'])
+        stacked_df = df_no_cluster_column.stack(level=['time', 'replicate'])
+        # TODO check if only 1 non-NaN item per row
+        # Sorry about how ugly this is, it's Friday afternoon 😶
+        expressions_per_gene = stacked_df.sum(axis=1)
+        expression_df = pd.DataFrame(expressions_per_gene, columns=['expression'])
+        expression_df.reset_index(inplace=True)
+        # TODO convert time to minutes
+        # TODO currently this step is really slow, can definitely be sped up
+        expression_df['cluster'] = expression_df.ID_REF.apply(lambda x: self.get_cluster_per_gene()[x])
+        expression_df['time'] = expression_df['time'] / np.timedelta64(1, 'h')
+        return expression_df
+
 
     def get_lpan_input_modules(self, n_clusters: int) -> pd.DataFrame:
         """For gene modules, get output that can be used to input into the Rscript LPAN workflow.
@@ -316,7 +357,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             column_tuples, names=['sample_name', 'time', 'tissue', 'replicate'])
         my_grouping = temp_df.groupby('time', axis=1)
         # Keep original sample names, even after grouping by time
-        # (needed for compatibility)
+        # (needed for compatibility) TODO with what?
         sample_names = [v[0][0] for (_, v)
                         in temp_df.groupby('time', axis=1).groups.items()]
         merged_samples = my_grouping.mean()
