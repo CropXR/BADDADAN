@@ -18,8 +18,9 @@ class MyFormula:
             self.next_param_suffix += 1
         # Only add terms if >1 regulator
         self.formula_string = ' + '.join(formula_segments)
-        # Add decay factor
-        d_param_name = f'd{init_i}'
+        # Add decay factor, its suffix is always equal to the
+        # module it belongs to
+        d_param_name = f'd{self.module_index}'
         self.params.append(d_param_name)
         self.formula_string += f' - {d_param_name} * y[{self.module_index}]'
         # Compile string to speed up evaluation

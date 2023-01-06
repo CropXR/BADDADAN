@@ -16,7 +16,6 @@ class OdeFitter:
         self.measured_data = measured_data
         self.time_points = time_points
         self.params = Parameters()
-        # TODO get a bug with naming the d0,1,2,3 parameters
         # TODO how to handle guesses for initial params/constraints?
         # TODO Note that model seems really sensitive to this guess of param_limit
         param_limit = .1
