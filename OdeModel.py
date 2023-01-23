@@ -5,7 +5,7 @@ import networkx as nx
 from MyFormula import MyFormula
 
 
-class OdeInference:
+class OdeModel:
     """Stores the ODEs for all modules. Can also be used to calculate next time steps."""
     def __init__(self):
         self.nr_params = 0

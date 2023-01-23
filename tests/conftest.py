@@ -13,7 +13,7 @@ import pytest
 from ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from ExpressionMatrix import ExpressionMatrix, ExpressionMatrixTimeSeries
 from ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
-from OdeInference import OdeInference
+from OdeModel import OdeModel
 
 pd.options.display.width = 0
 GEOparse.logger.set_verbosity('INFO')
@@ -60,6 +60,6 @@ def my_module_module_network(my_grn: ModuleRegulatoryNetwork) -> ModuleRegulator
     return my_module_network
 
 @pytest.fixture
-def my_ode(my_module_module_network: ModuleRegulatoryNetwork) -> OdeInference:
+def my_ode(my_module_module_network: ModuleRegulatoryNetwork) -> OdeModel:
     return my_module_module_network.convert_to_ode()
 

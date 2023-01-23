@@ -8,12 +8,12 @@ from matplotlib import pyplot as plt
 from ExpressionMatrix import ExpressionMatrixTimeSeries
 from ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from OdeFitter import OdeFitter
-from OdeInference import OdeInference
+from OdeModel import OdeModel
 
 logging.basicConfig(level=logging.INFO)
 
 
-def test_convert_to_ode(my_ode: OdeInference):
+def test_convert_to_ode(my_ode: OdeModel):
     logging.info(f'{my_ode=}')
     params = np.random.rand(my_ode.nr_params).tolist()
     dydt = my_ode(None, [0, 1, 0, 0], *params)
@@ -22,7 +22,7 @@ def test_convert_to_ode(my_ode: OdeInference):
 
 
 def test_fit_ode_to_data(
-        my_ode: OdeInference,
+        my_ode: OdeModel,
         my_time_series_expressions: ExpressionMatrixTimeSeries):
     n_clusters = 4
     my_time_series_expressions.keep_only_shoot()
