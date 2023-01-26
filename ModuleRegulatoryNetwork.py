@@ -40,7 +40,7 @@ class ModuleRegulatoryNetwork:
                           in self.graph.edges.data('origin')]
 
         draw_func(self.graph, node_color=node_color_map,
-                  edge_color=edge_color_map)
+                  edge_color=edge_color_map, with_labels=True)
         if out_path:
             plt.savefig(out_path)
         else:
@@ -48,7 +48,7 @@ class ModuleRegulatoryNetwork:
 
     @classmethod
     def from_lpan_edge_csv(cls, lpan_file_path: Path, top_rank: int = None):
-        """Create object from lpan edge csv.
+        """Constructor to create object from lpan edge csv.
 
         :param lpan_file_path: Path to csv output by LPAN.
         E.g. aracne_network_edges.csv
