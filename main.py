@@ -5,8 +5,8 @@ import GEOparse
 import pandas as pd
 import typer
 
-from ExpressionArrayAnnotation import ExpressionArrayAnnotation
-from ExpressionMatrix import ExpressionMatrix
+from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
+from Expressions.ExpressionMatrix import ExpressionMatrix
 from predict_from_static_expressions import plot_pred_vs_real
 
 pd.options.display.width = 0
