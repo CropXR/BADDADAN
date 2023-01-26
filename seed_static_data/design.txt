@@ -1,0 +1,62 @@
+sample	temperature	material	DPA	replicate
+S1	22C	Siliques without seeds	6DPA	1
+S2	22C	Siliques without seeds	6DPA	2
+S3	22C	Siliques without seeds	6DPA	3
+S4	22C	Siliques without seeds	8DPA	1
+S5	22C	Siliques without seeds	8DPA	2
+S6	22C	Siliques without seeds	8DPA	3
+S7	22C	Siliques without seeds	10DPA	1
+S8	22C	Siliques without seeds	10DPA	2
+S9	22C	Siliques without seeds	10DPA	3
+S10	22C	Siliques without seeds	12DPA	1
+S11	22C	Siliques without seeds	12DPA	2
+S12	22C	Siliques without seeds	12DPA	3
+S13	22C	Seeds	6DPA	1
+S14	22C	Seeds	6DPA	2
+S15	22C	Seeds	6DPA	3
+S16	22C	Seeds	8DPA	1
+S17	22C	Seeds	8DPA	2
+S18	22C	Seeds	8DPA	3
+S19	22C	Seeds	10DPA	1
+S20	22C	Seeds	10DPA	2
+S21	22C	Seeds	10DPA	3
+S22	22C	Seeds	12DPA	1
+S23	22C	Seeds	12DPA	2
+S24	22C	Seeds	12DPA	3
+S25	22C/16C	Siliques without seeds	14DPA	1
+S26	22C/16C	Siliques without seeds	14DPA	2
+S27	22C/16C	Siliques without seeds	14DPA	3
+S28	22C/16C	Siliques without seeds	16DPA	1
+S29	22C/16C	Siliques without seeds	16DPA	2
+S30	22C/16C	Siliques without seeds	16DPA	3
+S31	22C/16C	Siliques without seeds	18DPA	1
+S32	22C/16C	Siliques without seeds	18DPA	2
+S33	22C/16C	Siliques without seeds	18DPA	3
+S34	22C/16C	Siliques without seeds	20DPA	1
+S35	22C/16C	Siliques without seeds	20DPA	2
+S36	22C/16C	Siliques without seeds	20DPA	3
+S37	22C/16C	Siliques without seeds	22DPA	1
+S38	22C/16C	Siliques without seeds	22DPA	2
+S39	22C/16C	Siliques without seeds	22DPA	3
+S40	22C/16C	Siliques without seeds	24DPA	1
+S41	22C/16C	Siliques without seeds	24DPA	2
+S42	22C/16C	Siliques without seeds	24DPA	3
+S43	22C/16C	Seeds	14DPA	1
+S44	22C/16C	Seeds	14DPA	2
+S45	22C/16C	Seeds	14DPA	3
+S46	22C/16C	Seeds	16DPA	1
+S47	22C/16C	Seeds	16DPA	2
+S48	22C/16C	Seeds	16DPA	3
+S49	22C/16C	Seeds	18DPA	1
+S50	22C/16C	Seeds	18DPA	2
+S51	22C/16C	Seeds	18DPA	3
+S52	22C/16C	Seeds	20DPA	1
+S53	22C/16C	Seeds	20DPA	2
+S54	22C/16C	Seeds	20DPA	3
+S55	22C/16C	Seeds	22DPA	1
+S56	22C/16C	Seeds	22DPA	2
+S57	22C/16C	Seeds	22DPA	3
+S58	22C/16C	Seeds	24DPA	1
+S59	22C/16C	Seeds	24DPA	2
+S60	22C/16C	Seeds	24DPA	3
+
