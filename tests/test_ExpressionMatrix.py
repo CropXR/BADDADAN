@@ -33,7 +33,7 @@ def test_time_series_expressions(my_time_series_expressions: ExpressionMatrixTim
 def test_plot_non_tfs(my_time_series_expressions: ExpressionMatrixTimeSeries):
     """See if we can split off transcription factors, and plot their expression"""
     path_to_tfdb_file = Path(
-        '../data/Ath_TF_list.txt')
+        '../data/resources/Ath_TF_list.txt')
     non_tfs, tfs = my_time_series_expressions.split_off_tfs(path_to_tfdb_file)
     non_tfs.keep_only_de_genes(std_cutoff=1.8)
     non_tfs.do_hierachical_clustering(4)
@@ -49,7 +49,7 @@ def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
     nr_clusters = 4
     some_cutoff = 1.5
     path_to_tfdb_file = Path(
-        '../data/Ath_TF_list.txt')
+        '../data/resources/Ath_TF_list.txt')
     my_time_series_expressions.keep_only_shoot()
     my_time_series_expressions.merge_biological_samples()
     _, tfs = my_time_series_expressions.split_off_tfs(path_to_tfdb_file)
@@ -67,7 +67,8 @@ def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
     lpan_input_everything.to_csv(Path('../data/sample_file_for_lpan.csv'),
                                  quoting=csv.QUOTE_NONNUMERIC)
 
-    out_file_path = Path('../data/my_clustering_edgelist.csv')
+    out_file_path = Path(
+        '../data/time_series_datasets/my_clustering_edgelist.csv')
     my_time_series_expressions.save_cluster_gene_edge_list(
         out_file_path=out_file_path, tf_filter_list=tfs.df.index.tolist())
 
