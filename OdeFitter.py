@@ -11,19 +11,27 @@ from OdeModel import OdeModel
 
 class OdeFitter:
     """Class to estimate parameters for ODEs, given real data"""
-    def __init__(self, ode_inference: OdeModel, measured_data: np.ndarray, time_points: np.ndarray):
+    def __init__(self, ode_inference: OdeModel, measured_data: np.ndarray,
+                 time_points: np.ndarray):
         self.odes = ode_inference
         self.measured_data = measured_data
         self.time_points = time_points
         self.params = Parameters()
         # TODO how to handle guesses for initial params/constraints?
-        # TODO Note that model seems really sensitive to this guess of param_limit
+        # TODO Note that model seems really sensitive to this guess of param_limit.
+        #  If you get any error, it could be because this param_limit is too high
         param_limit = .1
         for param_name in ode_inference.get_param_names():
+            min_value = -param_limit
+            max_value = param_limit
             # Decay rates cannot be negative
-            min_value = 0. if 'd' in param_name else -param_limit
-            # Min value always at 0 helps speed up solving IVP for some reason?
-            self.params.add(param_name, min=min_value, max=param_limit)
+            if 'd' in param_name:
+                # Min value always at 0 helps speed up solving IVP for some reason?
+                min_value = 0.
+            # elif 't' in param_name:
+            #     min_value = -.2
+            #     max_value = 0
+            self.params.add(param_name, min=min_value, max=max_value)
         self.init_condition_names = []
         for i, init_value in enumerate(measured_data[:, 0]):
             init_y_name = f'y{i}'
@@ -61,8 +69,8 @@ class OdeFitter:
         # Seems to take extremely long sometimes
         y_pred = solve_ivp(self.odes, (t_start, t_end), y0, t_eval=t,
                            args=tuple_params)
-        assert y_pred.status >= 0, (f"Integration failed: {y_pred.message}"
-                                    f"\nParams: {params}")
+        assert y_pred.success, (f"Integration failed: {y_pred.message}"
+                                f"\nParams: {params}")
         return y_pred
 
     def fit(self, t_start=None, t_end=None) -> MinimizerResult:
