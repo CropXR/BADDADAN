@@ -30,18 +30,7 @@ def main(
     plot_pred_vs_real(expression_matrix, n_cluster)
     # do_cv_for_nclust(expression_matrix)
 
-def main_continous_time(
-        expression_path: Path = typer.Option(...,
-                                             help='Path to geo expression file'),
-        annotation_path: Path = typer.Option(...,
-                                             help='Path to annotation of micro array'),
-        n_cluster: int = typer.Option(5,
-                                      help='Number of gene clusters to '
-                                           'extract'),
-):
-    ...
-
 
 if __name__ == "__main__":
     typer.run(main)
-    typer.run(main_continous_time)
+
