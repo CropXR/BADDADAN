@@ -21,7 +21,7 @@ class OdeModel:
         assert len(params) == self.nr_params, 'Supplied nr of parameters does not match actual number of parameters'
         param_dict = dict(zip(self.get_param_names(), params))
         logging.debug(f'Mapped params in the following way: {param_dict}')
-        return [formula(y, param_dict) for formula in self.formula_per_module]
+        return [formula(t, y, param_dict) for formula in self.formula_per_module]
 
     def construct_formula_per_module(self, graph: nx.DiGraph):
         """For each module, generate a formula based on the connectivity of the module in the graph"""
