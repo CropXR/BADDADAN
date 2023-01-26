@@ -12,8 +12,8 @@ import pytest
 
 from ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from ExpressionMatrix import ExpressionMatrix, ExpressionMatrixTimeSeries
-from ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
-from OdeModel import OdeModel
+from dynamic_models.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
+from dynamic_models.OdeModel import OdeModel
 
 pd.options.display.width = 0
 GEOparse.logger.set_verbosity('INFO')

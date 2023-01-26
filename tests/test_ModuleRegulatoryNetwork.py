@@ -1,14 +1,12 @@
 import logging
 
 import numpy as np
-import pytest
 from lmfit import fit_report
 from matplotlib import pyplot as plt
 
 from ExpressionMatrix import ExpressionMatrixTimeSeries
-from ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
-from OdeFitter import OdeFitter
-from OdeModel import OdeModel
+from dynamic_models.OdeFitter import OdeFitter
+from dynamic_models.OdeModel import OdeModel
 import seaborn as sns
 
 logging.basicConfig(level=logging.INFO)
