@@ -27,7 +27,7 @@ def test_time_series_expressions(my_time_series_expressions: ExpressionMatrixTim
     """Check if we can plot module expressions over time"""
     my_time_series_expressions.keep_only_shoot()
     my_time_series_expressions.keep_only_de_genes(std_cutoff=1.5)
-    my_time_series_expressions.do_hierachical_clustering(5)
+    my_time_series_expressions.do_hierachical_clustering(4)
     my_time_series_expressions.plot_clusters_over_time()
     assert True
 
