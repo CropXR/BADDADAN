@@ -4,9 +4,9 @@ import numpy as np
 from lmfit import fit_report
 from matplotlib import pyplot as plt
 
-from ExpressionMatrix import ExpressionMatrixTimeSeries
-from dynamic_models.OdeFitter import OdeFitter
-from dynamic_models.OdeModel import OdeModel
+from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
+from DynamicModels.OdeFitter import OdeFitter
+from DynamicModels.OdeModel import OdeModel
 import seaborn as sns
 
 logging.basicConfig(level=logging.INFO)

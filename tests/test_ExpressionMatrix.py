@@ -1,12 +1,10 @@
 import csv
-import json
 import logging
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
-from ExpressionMatrix import ExpressionMatrixTraining, \
+from Expressions.ExpressionMatrix import ExpressionMatrixTraining, \
     ExpressionMatrixTimeSeries, ExpressionMatrix
 
 logging.basicConfig(level=logging.INFO)
