@@ -4,7 +4,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from sklearn.linear_model import LinearRegression
 
-from ExpressionMatrix import ExpressionMatrix
+from Expressions.ExpressionMatrix import ExpressionMatrix
 from helpers import split_based_on_temp
 
 
