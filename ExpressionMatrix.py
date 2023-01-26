@@ -253,9 +253,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         #              hue='cluster', palette=sns.color_palette())
 
         sns.lineplot(data=some_df, x='time', y='expression',
-                     hue='cluster', style='replicate', palette=sns.color_palette())
+                     hue='cluster', style='replicate', palette=sns.color_palette(), errorbar='sd')
         plt.show()
-        plt.close()
         # sns.stripplot(data=some_df, x='time', y='expression',
         #                hue='cluster', palette=sns.color_palette())
         # ax = sns.violinplot(data=some_df, x='time', y='expression',
