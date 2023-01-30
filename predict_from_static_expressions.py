@@ -84,9 +84,10 @@ def fit_log_regress_model(expr_mat: ExpressionMatrix) -> tuple[LogisticRegressio
     :param expr_mat: Expressionmatrix to which the logistic regression model should fit
     :return: trained model, and gene_to_module mapping which describes for each gene to which module it belongs
     """
-    n_cluster = 5
+    n_cluster = 2
     expr_mat = expr_mat.get_only_wt_samples()
-    expr_mat.keep_only_de_genes(std_cutoff=1)
+    expr_mat.keep_only_de_genes(std_cutoff=.3)
+    # expr_mat.keep_only_de_genes(std_cutoff=.5)
     expr_mat.quantile_normalize()
     expr_mat = expr_mat.to_expressionmatrix_training()
 
@@ -103,6 +104,8 @@ def fit_log_regress_model(expr_mat: ExpressionMatrix) -> tuple[LogisticRegressio
     reg = LogisticRegression()
     reg.fit(x_train, y_train)
 
+    logging.info(f'{reg.score(x_train, y_train)=}')
+
     return reg, gene_to_module
 
 def infer_with_log_reg_model(expr_mat: ExpressionMatrixTest,
@@ -116,12 +119,12 @@ def infer_with_log_reg_model(expr_mat: ExpressionMatrixTest,
     test_overview = expr_mat.expressions_of_predefined_clusters_seed_data(gene_to_module)
     x_test = test_overview.to_numpy()
     y_test = design_df[design_df['sample'].isin(test_overview.index)]['temperature'].to_list()
-    y_test_labeled = [1 if '16' in x else 0 for x in y_test]
+    y_test_labeled = [0 if '16' in x else 1 for x in y_test]
 
     y_pred = regression_model.predict(x_test)
-    print(confusion_matrix(y_test_labeled, y_pred))
+    logging.info(confusion_matrix(y_test_labeled, y_pred))
     y_pred_raw = regression_model.predict_proba(x_test)
-    print(roc_auc_score(y_test_labeled, y_pred_raw[:, 1]))
+    logging.info(roc_auc_score(y_test_labeled, y_pred_raw[:, 1]))
     RocCurveDisplay.from_predictions(y_test_labeled, y_pred_raw[:, 1])
 
     plt.show()
