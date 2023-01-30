@@ -1,7 +1,8 @@
+import logging
+
 from Expressions.ExpressionMatrix import ExpressionMatrix
 from predict_from_static_expressions import plot_pred_vs_real, \
     fit_log_regress_model, infer_with_log_reg_model
-
 
 def test_transfer_from_plant_to_seed(
         static_expression_two_temps_arabidopsis: ExpressionMatrix,
