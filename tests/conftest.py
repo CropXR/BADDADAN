@@ -27,7 +27,8 @@ def my_expression_annotation():
 
 
 @pytest.fixture
-def my_expression_matrix(my_expression_annotation: ExpressionArrayAnnotation):
+def static_expression_two_temps_arabidopsis(
+        my_expression_annotation: ExpressionArrayAnnotation):
     my_expression = Path('../data/static_datasets/GSE15689_family.soft')
     expr_mat = ExpressionMatrix.from_geo_file(my_expression,
                                               my_expression_annotation)
@@ -65,3 +66,7 @@ def my_module_module_network(my_grn: ModuleRegulatoryNetwork) -> ModuleRegulator
 def my_ode(my_module_module_network: ModuleRegulatoryNetwork) -> OdeModel:
     return my_module_module_network.convert_to_ode()
 
+@pytest.fixture
+def my_seed_expressions() -> ExpressionMatrix:
+    seed_expression_path = Path('../data/static_datasets/seed_normalized_counts.csv')
+    return ExpressionMatrix.from_csv(seed_expression_path)

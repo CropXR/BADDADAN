@@ -2,7 +2,7 @@ import logging
 
 import networkx as nx
 
-from MyFormula import MyFormula
+from DynamicModels.MyFormula import MyFormula
 
 
 class OdeModel:
