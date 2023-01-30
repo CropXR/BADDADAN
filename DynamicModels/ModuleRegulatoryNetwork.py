@@ -6,7 +6,7 @@ from typing import Callable
 import networkx as nx
 import pandas as pd
 from matplotlib import pyplot as plt
-from OdeModel import OdeModel
+from DynamicModels.OdeModel import OdeModel
 
 
 class ModuleRegulatoryNetwork:

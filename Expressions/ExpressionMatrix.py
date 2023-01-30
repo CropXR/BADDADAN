@@ -1,5 +1,5 @@
 """
-Contains classes that contain matrices of gene expression levels, extracted from GEO.
+Contains classes that contain matrices of gene expression levels.
 """
 from __future__ import annotations
 import logging
@@ -12,8 +12,9 @@ import seaborn as sns
 import GEOparse
 from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
+import qnorm
 
-from ExpressionArrayAnnotation import ExpressionArrayAnnotation
+from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628
 
 
@@ -36,6 +37,15 @@ class ExpressionMatrix:
                 f' and columns {self.df.columns.to_list()}')
 
     @classmethod
+    def from_csv(cls, file_path: Path,
+                 array_annotation: ExpressionArrayAnnotation = None,
+                 log2_transform: bool = False,
+                 sep: str = '\t'):
+        df = pd.read_csv(file_path, sep=sep, index_col=0)
+        df = cls._df_preprocessing(array_annotation, df, log2_transform)
+        return cls(df)
+
+    @classmethod
     def from_geo_file(cls, file_path: Path,
                       array_annotation: ExpressionArrayAnnotation = None,
                       log2_transform: bool = False):
@@ -51,10 +61,17 @@ class ExpressionMatrix:
         gse = GEOparse.get_GEO(filepath=str(file_path), silent=True)
         # Merge all samples into one dataframe
         df = gse.pivot_samples("VALUE")
-
         logging.info('Dropping AFFX probes, because they are control')
         df = df.loc[df.index.map(lambda x: 'AFFX' not in x), :]
+        df = cls._df_preprocessing(array_annotation, df, log2_transform)
+        # Convert sample names to titles that humans can understand
+        better_name_dict = gse.phenotype_data.title.to_dict()
+        df.columns = [better_name_dict[old_col] for old_col in df.columns]
+        return cls(df)
 
+    @classmethod
+    def _df_preprocessing(cls, array_annotation: ExpressionArrayAnnotation,
+                          df: pd.DataFrame, log2_transform: bool):
         if array_annotation:
             # Get gene names based on ExpressionAnnotation object
             logging.info('Converting probe names to genes...')
@@ -71,12 +88,9 @@ class ExpressionMatrix:
                 for probe in unmapped_probes:
                     logging.info(probe)
             df.index = new_indices
-        # Convert sample names to titles that humans can understand
-        better_name_dict = gse.phenotype_data.title.to_dict()
-        df.columns = [better_name_dict[old_col] for old_col in df.columns]
         if log2_transform:
             df = np.log2(df)
-        return cls(df)
+        return df
 
     def get_sample_names(self) -> np.array:
         """Returns all names of samples"""
@@ -124,6 +138,33 @@ class ExpressionMatrix:
         de_genes = self.df[self.df.std(axis=1) > std_cutoff]
         self.df = de_genes
 
+    def quantile_normalize(self, ref_mappings: ExpressionMatrix | None = None):
+        if ref_mappings is None:
+            # For train dataset just do complete normalisation
+            self.df = qnorm.quantile_normalize(self.df)
+        else:
+            reference_df = ref_mappings.df.copy()
+            # remove duplicates
+            reference_df = reference_df[~reference_df.index.duplicated(keep='first')]
+
+            mutual_genes = set(self.df.index) & set(reference_df.index)
+            self.df = self.df[self.df.index.isin(mutual_genes)]
+            # Get mean values for overlapping genes, and use these to infer values
+            reference_df = reference_df[reference_df.index.isin(mutual_genes)]
+
+            my_mappings = reference_df.loc[self.df.index].mean(axis=1)
+            # For test dataset map onto mean values that were calculated from train dataset
+            self.df = qnorm.quantile_normalize(self.df, target=my_mappings)
+
+    def to_expressionmatrix_training(self):
+        assert type(self) != ExpressionMatrixTraining, 'Is already an ExpressionMatrixTraining object. Conversion is pointless.'
+        return ExpressionMatrixTraining(self.df)
+
+    def to_expressionmatrix_test(self):
+        assert type(self) != ExpressionMatrixTest, 'Is already an ExpressionMatrixTest object. Conversion is pointless.'
+        return ExpressionMatrixTest(self.df)
+
+
 
 class ExpressionMatrixTraining(ExpressionMatrix):
     """Can be created from ExpressionMatrix by command like:
@@ -133,6 +174,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
 
     """
     def extract_module_expressions(self, n_cluster: int,
+                                   for_static_predictions = False,
                                    do_plotting: bool = False) -> pd.DataFrame:
         """Get mean expression per gene module based on
         clustering of expression correlation. And return as dataframe.
@@ -151,6 +193,8 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                             ignore_index=False, var_name='sample',
                             value_name='expression')
         summary_df = molten_df.groupby(['sample', 'cluster_id']).mean().reset_index()
+        if for_static_predictions:
+            return summary_df.pivot(index='sample', columns='cluster_id', values='expression')
         return summary_df
 
     def save_cluster_gene_edge_list(self, out_file_path: Path,
@@ -235,6 +279,18 @@ class ExpressionMatrixTest(ExpressionMatrix):
         summary_df = molten_df.groupby(
             ['sample', 'cluster_id']).mean().reset_index()
         return summary_df.pivot(index='sample', columns='cluster_id')
+
+    def expressions_of_predefined_clusters_seed_data(self,
+                                           gene_to_cluster: dict) -> pd.DataFrame:
+        """From dict that maps genes to cluster, get mean expression per
+        cluster. Use this implementation when dealing with the seed dataset
+
+        :param gene_to_cluster: Dictionary that maps gene names to cluster ids
+        :return: Mean expression per cluster
+        """
+        assigned_modules = self.df.index.map(lambda x: gene_to_cluster.get(x))
+        inference_df = self.df.assign(cluster_id=assigned_modules)
+        return inference_df.groupby('cluster_id').mean().T
 
 
 class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):

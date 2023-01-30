@@ -9,10 +9,10 @@ from Expressions.ExpressionMatrix import ExpressionMatrixTraining, \
 
 logging.basicConfig(level=logging.INFO)
 
-def test_get_cluster_per_gene(my_expression_matrix: ExpressionMatrix):
+def test_get_cluster_per_gene(static_expression_two_temps_arabidopsis):
     """For each gene, check to which cluster it belongs"""
     n_clusters = 5
-    my_expression_matrix = my_expression_matrix.get_only_wt_samples()
+    my_expression_matrix = static_expression_two_temps_arabidopsis.get_only_wt_samples()
     my_expression_matrix.keep_only_de_genes()
     # Needs to be training because we do clustering:
     train_expr_mat = ExpressionMatrixTraining(my_expression_matrix.df)

@@ -6,7 +6,7 @@ from lmfit.minimizer import MinimizerResult
 from scipy.integrate import solve_ivp
 from scipy.integrate._ivp.ivp import OdeResult
 
-from OdeModel import OdeModel
+from DynamicModels.OdeModel import OdeModel
 
 
 class OdeFitter:
