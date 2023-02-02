@@ -53,7 +53,7 @@ def test_fit_ode_to_data(
     assert True
 
 
-def test_identifiability_with_external_temp(
+def test_identifiability_with_more_timepoints(
         my_ode: OdeModel,
         my_time_series_expressions: ExpressionMatrixTimeSeries):
     # Fit model to data, then simulate data from that model (with more time points)
@@ -81,6 +81,8 @@ def test_identifiability_with_external_temp(
     for i, row in enumerate(simulated_data.y):
         plt.plot(simulated_data.t, row, label=f'Fitted{i}',
                  color=sns.color_palette()[i], linestyle='dashed')
+
+    plt.ylim((0,10))
     plt.legend()
     plt.show()
 
