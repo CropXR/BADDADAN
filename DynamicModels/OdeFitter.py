@@ -76,6 +76,7 @@ class OdeFitter:
     def fit(self, t_start=None, t_end=None) -> MinimizerResult:
         output = minimize(self.loss_function,
                           self.params,
+                          method='bfgs',
                           kws={'t': self.time_points,
                                'y_real': self.measured_data,
                                't_start': t_start,

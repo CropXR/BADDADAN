@@ -245,7 +245,8 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                   clustering.
         """
         # Calculate pearson correlation between genes as distance measure
-        subset_corr = self.df.T.corr()
+        # subset_corr = self.df.T.corr()
+        subset_corr = np.corrcoef(self.df)
         # Create linkage matrix and infer clusters
         linkage_matrix = linkage(subset_corr, method='complete')
         clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
@@ -290,6 +291,7 @@ class ExpressionMatrixTest(ExpressionMatrix):
         """
         assigned_modules = self.df.index.map(lambda x: gene_to_cluster.get(x))
         inference_df = self.df.assign(cluster_id=assigned_modules)
+        logging.info(f'Cluster info size: {inference_df["cluster_id"].value_counts()}')
         return inference_df.groupby('cluster_id').mean().T
 
 
