@@ -2,7 +2,7 @@
 Creates expression annotation and expression matrix that can be used by
 other tests
 """
-
+import pickle
 from pathlib import Path
 
 import pandas as pd
@@ -27,11 +27,20 @@ def my_expression_annotation():
 
 
 @pytest.fixture
-def static_expression_two_temps_arabidopsis(
+def static_expression_two_temps_arabidopsis_from_file(
         my_expression_annotation: ExpressionArrayAnnotation):
+    # TODO make this an explicit test?
     my_expression = Path('../data/static_datasets/GSE15689_family.soft')
     expr_mat = ExpressionMatrix.from_geo_file(my_expression,
                                               my_expression_annotation)
+    return expr_mat
+
+@pytest.fixture
+def static_expression_two_temps_arabidopsis() -> ExpressionMatrix:
+    """Use prepickled expression matrix because that is just way faster"""
+    with open('../data/static_datasets/GSE15689_family_ExpressionMatrix.pickle',
+              'rb') as f:
+        expr_mat = pickle.load(f)
     return expr_mat
 
 
