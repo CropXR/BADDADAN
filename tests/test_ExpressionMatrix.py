@@ -12,10 +12,10 @@ logging.basicConfig(level=logging.INFO)
 def test_get_cluster_per_gene(static_expression_two_temps_arabidopsis):
     """For each gene, check to which cluster it belongs"""
     n_clusters = 5
-    my_expression_matrix = static_expression_two_temps_arabidopsis.get_only_wt_samples()
-    my_expression_matrix.keep_only_de_genes()
+    static_expression_two_temps_arabidopsis.keep_only_wt_samples()
+    static_expression_two_temps_arabidopsis.keep_only_de_genes()
     # Needs to be training because we do clustering:
-    train_expr_mat = ExpressionMatrixTraining(my_expression_matrix.df)
+    train_expr_mat = static_expression_two_temps_arabidopsis.to_expressionmatrix_training()
     train_expr_mat.do_hierachical_clustering(n_clusters)
     some_clustering_dict = train_expr_mat.get_genes_per_cluster()
     assert len(some_clustering_dict) == n_clusters
