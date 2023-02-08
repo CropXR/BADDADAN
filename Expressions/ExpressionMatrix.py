@@ -100,10 +100,12 @@ class ExpressionMatrix:
         """Returns names of all gene names"""
         return self.df.index.to_list()
 
-    def get_only_wt_samples(self) -> ExpressionMatrix:
-        """Return ExpressionMatrix with only columns that originate from wild type"""
+    def keep_only_wt_samples(self) -> None:
+        """Keep only columns that originate from wild type, i.e. that
+        contain the substring 'WT' in the column name
+        """
         col_mask = [col for col in self.df.columns if 'WT' in col]
-        return ExpressionMatrix(self.df[col_mask])
+        self.df = self.df[col_mask]
 
     def plot_per_gene_std(self) -> None:
         """Plot per gene standard deviation across samples"""
@@ -140,6 +142,8 @@ class ExpressionMatrix:
 
     def quantile_normalize(self, ref_mappings: ExpressionMatrix | None = None):
         if ref_mappings is None:
+            # Get rid of duplicates
+            self.df = self.df[~self.df.index.duplicated(keep='first')]
             # For train dataset just do complete normalisation
             self.df = qnorm.quantile_normalize(self.df)
         else:
@@ -175,7 +179,8 @@ class ExpressionMatrixTraining(ExpressionMatrix):
     """
     def extract_module_expressions(self, n_cluster: int,
                                    for_static_predictions = False,
-                                   do_plotting: bool = False) -> pd.DataFrame:
+                                   do_plotting: bool = False,
+                                   random_clustering: bool = False) -> pd.DataFrame:
         """Get mean expression per gene module based on
         clustering of expression correlation. And return as dataframe.
 
@@ -184,7 +189,10 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         # Make sure clustering has been performed
         if not self.has_been_clustered:
             logging.info('Not clustered yet, performing clustering now')
-            self.do_hierachical_clustering(n_cluster, do_plotting=do_plotting)
+            if random_clustering:
+                self._do_random_clustering(n_cluster)
+            else:
+                self.do_hierachical_clustering(n_cluster, do_plotting=do_plotting)
         else:
             logging.info('Already clustered, will not perform clustering again')
 
@@ -212,7 +220,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                       header=False)
 
     def get_cluster_per_gene(self) -> dict:
-        """For each gene, get its cluster_id Can only be called after
+        """For each gene, get its cluster_id. Can only be called after
         self.do_hierachical_clustering() has been called.
 
         :returns: Dict with gene name as key and cluster_ID as value .
@@ -245,7 +253,6 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                   clustering.
         """
         # Calculate pearson correlation between genes as distance measure
-        # subset_corr = self.df.T.corr()
         subset_corr = np.corrcoef(self.df)
         # Create linkage matrix and infer clusters
         linkage_matrix = linkage(subset_corr, method='complete')
@@ -259,6 +266,13 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                            col_linkage=linkage_matrix, row_colors=row_colors)
             plt.show()
         self.df = self.df.assign(cluster_id=clustering)
+        self.has_been_clustered = True
+
+    def _do_random_clustering(self, n_cluster: int = 2) -> None:
+        """Assign genes to random clusters. Used for testing the null hypothesis"""
+        # n_cluster+1 because numpy upper limit excludes that integer
+        self.df['cluster_id'] = np.random.randint(1, n_cluster+1,
+                                                  len(self.df))
         self.has_been_clustered = True
 
 
