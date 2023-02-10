@@ -445,5 +445,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         new_df = some_df.pivot(index='cluster_id', columns='elapsed_mins',
                                values='expression')
         time_points = new_df.columns.to_numpy()
+        # Convert time to hours
+        time_points = time_points / 60
         module_expressions = new_df.to_numpy()
         return time_points, module_expressions
