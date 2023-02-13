@@ -36,7 +36,7 @@ def plot_net(graph):
     plt.show()
 
 
-def ODE_generator(a_graph, linear = True, n = 10):
+def ODE_generator(a_graph):
     '''
     Transcribes to linear diff. equation.
 
@@ -103,7 +103,7 @@ def ODE_generator(a_graph, linear = True, n = 10):
             (formula_segments)
 
     for formula in module_formulas:
-        print(formula, module_formulas[formula])
+        logging.info(f'{formula} {module_formulas[formula]}')
 
     parameters.sort()
     variables.sort()
@@ -187,28 +187,17 @@ def graph_preprocessing(in_path: Path) -> nx.DiGraph:
     return my_graph_class.graph
 
 
-def retrying_from_scratch(in_path: Path,
-                          measured_expressions: ExpressionMatrixTimeSeries):
-    my_graph = graph_preprocessing(in_path)
-    n_clusters = 4
-    measured_expressions.keep_only_shoot()
-    measured_expressions.merge_biological_samples()
-    measured_expressions.keep_only_de_genes(std_cutoff=1.5)
-    col_names, average_module_expression = \
-        measured_expressions.get_clusters_expressions_with_time(n_clusters)
-
-    # Ensure average_module_expression is a pandas dataframe, with column names as float which represent time passed in hours
-
-
-    def calculate_MSE(params, param_names, variable_names, formulas, constants):
-
+def solve_ODE(y, time_points, in_graph, nlls=True, loadsatime=False):
+    def calculate_MSE(params, param_names, variable_names, formulas,
+                      constants):
+        # TODO this takes some variables from outer scope atm, make neat later
         param_dict = dict(
             zip(param_names, params))  # Notice this is not random anymore!
 
         solution = num_solve_ODE(outcomes_function=calculate_ODEs_outcome,
-                                 y0=average_module_expression[:, 0],
-                                 time_span=[col_names[0], col_names[-1]],
-                                 t_eval=col_names,
+                                 y0=y[:, 0],
+                                 time_span=[time_points[0], time_points[-1]],
+                                 t_eval=time_points,
                                  variable_names=variable_names,
                                  params_dict=param_dict,
                                  formulas=formulas,
@@ -218,80 +207,103 @@ def retrying_from_scratch(in_path: Path,
         y_hat = solution.y
 
         # y = average_module_expression.to_numpy()
-        mse = np.mean((average_module_expression - y_hat) ** 2)
-        logging.info(f'{mse=}')
+        mse = np.mean((y - y_hat) ** 2)
+        logging.debug(f'{mse=}')
 
         return mse
 
-    def solve_ODE(nlls=True):
-        formulas, parameters, variables, constants = ODE_generator(my_graph,
-                                                                   linear=True)
+    formulas, parameters, variables, constants = ODE_generator(in_graph)
 
-        if nlls:
-            solution_params = least_squares(
-                fun=calculate_MSE,
-                x0=np.random.randint(0, 3, len(parameters)),
-                args=(parameters, variables, formulas, constants),
-                bounds=([-np.inf, -np.inf, -np.inf, -np.inf, 0, 0, 0, 0],
-                        [np.inf] * len(parameters)),
-                method='trf'
-            )
-        else:
-            bounds = [# Betas
-                      (None, None), (None, None),
-                      (None, None), (None, None),
-                      (None, None),
-                      # In order for this to make sense the order of the parameters is KEY!
-                      # Decay
-                      (0, np.inf), (0, np.inf),
-                      (0, np.inf), (0, np.inf),
-                       # Temp growth
-                      (None, None), (None, None),
-                      (None, None), (None, None)]
-            assert len(bounds) == len(parameters), "Assign one upper and lower bound for each parameter"
-            solution_params = minimize(fun=calculate_MSE,
-                                       x0=np.random.randn(len(parameters)),
-                                       args=(
-                                       parameters, variables, formulas,
-                                       constants),
-                                       bounds=bounds,
-                                       method='L-BFGS-B'
-                                       )
+    if nlls:
+        optimize_result = least_squares(
+            fun=calculate_MSE,
+            x0=np.random.randint(0, 3, len(parameters)),
+            args=(parameters, variables, formulas, constants),
+            bounds=([-np.inf, -np.inf, -np.inf, -np.inf, 0, 0, 0, 0],
+                    [np.inf] * len(parameters)),
+            method='trf'
+        )
+    else:
+        # Currently hardcoded
+        bounds = [# Betas
+                  (None, None), (None, None),
+                  (None, None), (None, None),
+                  (None, None),
+                  # In order for this to make sense the order of the parameters is KEY!
+                  # Decay
+                  (0, np.inf), (0, np.inf),
+                  (0, np.inf), (0, np.inf),
+                   # Temp growth
+                  (None, None), (None, None),
+                  (None, None), (None, None)]
+        assert len(bounds) == len(parameters), "Assign one upper and lower bound for each parameter"
+        optimize_result = minimize(fun=calculate_MSE,
+                                   x0=np.random.randn(len(parameters)),
+                                   args=(
+                                   parameters, variables, formulas,
+                                   constants),
+                                   bounds=bounds,
+                                   method='L-BFGS-B'
+                                   )
+        # assert optimize_result.success, f'Optimisation failed: {optimize_result.message}'
+    logging.info('========================')
+    logging.info(optimize_result)
+    logging.info('========================')
+    logging.info('========================')
 
-        print('========================')
-        print(solution_params)
-        print('========================')
-        print('========================')
+    param_dict = dict(zip(parameters, optimize_result.x))
+    og_time = time_points
+    if loadsatime:
+        time_points = np.linspace(0, 24, 50)
+    ode_result = num_solve_ODE(outcomes_function=calculate_ODEs_outcome,
+                               y0=y[:, 0],
+                               time_span=[time_points[0], time_points[-1]],
+                               t_eval=time_points,
+                               variable_names=variables,
+                               params_dict=param_dict,
+                               formulas=formulas,
+                               constants=constants)
 
-        my_parameters = solution_params.x
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    # fig.set_size_inches(15, 8)
+    fig.suptitle('Comparison real vs estimated')
+    for row in ode_result.y:
+        ax1.plot(ode_result.t, row)
+        ax1.set_title('y_hat')
 
-        param_dict = dict(zip(parameters, solution_params.x))
+    for row in y:
+        ax2.plot(og_time, row)
+        ax2.set_title('y')
 
-        solution = num_solve_ODE(outcomes_function=calculate_ODEs_outcome,
-                                 y0=average_module_expression[:, 0],
-                                 time_span=[col_names[0], col_names[-1]],
-                                 t_eval=col_names,
-                                 variable_names=variables,
-                                 params_dict=param_dict,
-                                 formulas=formulas,
-                                 constants=constants)
+    plt.show()
+    # plt.close()
 
-        fig, (ax1, ax2) = plt.subplots(1, 2)
-        # fig.set_size_inches(15, 8)
-        fig.suptitle('Comparison real vs estimated')
-        for row in solution.y:
-            ax1.plot(solution.t, row)
-            ax1.set_title('y_hat')
+    return optimize_result, ode_result
 
-        for row in average_module_expression:
-            ax2.plot(solution.t, row)
-            ax2.set_title('y')
 
-        plt.show()
-        # plt.close()
+def retrying_from_scratch(in_path: Path,
+                          measured_expressions: ExpressionMatrixTimeSeries):
+    my_graph = graph_preprocessing(in_path)
 
-        return my_parameters, solution_params
+    # # Uncomment to try with fully connected graph
+    # my_graph = nx.complete_graph(4, create_using=nx.DiGraph)
+    # mapping_dict = {i: f'MODULE{i}' for i in my_graph.nodes}
+    # my_graph = nx.relabel_nodes(my_graph, mapping_dict)
 
-    solve_ODE(nlls=False)
+    n_clusters = 4
+    measured_expressions.keep_only_shoot()
+    measured_expressions.merge_biological_samples()
+    measured_expressions.keep_only_de_genes(std_cutoff=1.5)
+    col_names, average_module_expression = \
+        measured_expressions.get_clusters_expressions_with_time(n_clusters)
 
-    # Next step, fit to simulation and/or incorporate temperature
+    optim_result, ode_result = solve_ODE(
+        average_module_expression, col_names, my_graph, nlls=False,
+        loadsatime=True)
+
+    second_fit_result, fitting_to_sim_values = solve_ODE(
+        ode_result.y, ode_result.t, my_graph, nlls=False)
+    logging.info('Original params')
+    logging.info(optim_result.x)
+    logging.info('Guessed params')
+    logging.info(second_fit_result.x)
