@@ -1,3 +1,4 @@
+import logging
 import re
 from pathlib import Path
 
@@ -48,3 +49,11 @@ def get_info_from_gse5628(sample_names: list[str] | pd.Index) -> dict:
         rep_nr = re.search(r'Rep\d', sample).group()
         out_dict['rep_nr'].append(rep_nr)
     return out_dict
+
+def de_print_fun(xk, convergence=None):
+    """Logs the convergence value during differential evolution.
+
+    Can be provided as callback keyword during the differential
+    evolution function call.
+    """
+    logging.info(f'Convergence: {convergence*100:.2f}%')
