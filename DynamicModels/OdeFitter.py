@@ -25,13 +25,9 @@ class OdeFitter:
         for param_name in ode_model.get_param_names():
             min_value = -param_limit
             max_value = param_limit
-            # Decay rates cannot be negative
             if 'delta' in param_name:
-                # Min value always at 0 helps speed up solving IVP for some reason?
+                # Decay rates cannot be negative
                 min_value = 0.
-            # elif 't' in param_name:
-            #     min_value = -.2
-            #     max_value = 0
             self.params.add(param_name, value=np.random.uniform(-1, 1),
                             min=min_value, max=max_value)
         self.init_condition_names = []
