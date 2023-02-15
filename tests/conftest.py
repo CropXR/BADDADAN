@@ -16,8 +16,8 @@ from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from DynamicModels.OdeModel import OdeModel
 
 pd.options.display.width = 0
-GEOparse.logger.set_verbosity('INFO')
-logging.basicConfig(level=logging.INFO)
+# GEOparse.logger.set_verbosity('INFO')
+# logging.basicConfig(level=logging.INFO)
 
 
 @pytest.fixture
@@ -45,11 +45,20 @@ def static_expression_two_temps_arabidopsis() -> ExpressionMatrix:
 
 
 @pytest.fixture
-def my_time_series_expressions(my_expression_annotation: ExpressionArrayAnnotation) -> ExpressionMatrixTimeSeries:
+def my_time_series_expressions_from_file(my_expression_annotation: ExpressionArrayAnnotation) -> ExpressionMatrixTimeSeries:
     time_series_expressions = Path(
         '../data/time_series_datasets/GSE5628_family.soft')
     expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
         time_series_expressions, my_expression_annotation, log2_transform=True)
+    with open('../data/time_series_datasets/GSE5628_family_ExpressionMatrixTime.pickle', 'wb') as f:
+        pickle.dump(expr_mat_time, f)
+    return expr_mat_time
+
+
+@pytest.fixture
+def my_time_series_expressions(my_expression_annotation: ExpressionArrayAnnotation) -> ExpressionMatrixTimeSeries:
+    with open('../data/time_series_datasets/GSE5628_family_ExpressionMatrixTime.pickle', 'rb') as f:
+        expr_mat_time = pickle.load(f)
     return expr_mat_time
 
 # @pytest.fixture
