@@ -3,7 +3,9 @@ import re
 from pathlib import Path
 
 import GEOparse
+import numpy as np
 import pandas as pd
+from matplotlib import pyplot as plt
 from sklearn.model_selection import RepeatedStratifiedKFold
 
 
@@ -57,3 +59,19 @@ def de_print_fun(xk, convergence=None):
     evolution function call.
     """
     logging.info(f'Convergence: {convergence*100:.2f}%')
+
+
+def plot_y_and_y_hat(y: np.ndarray, y_hat: np.ndarray, t: np.ndarray | list):
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    # fig.set_size_inches(15, 8)
+    # fig.suptitle('Comparison real vs estimated')
+    for row in y:
+        ax1.plot(t, row)
+        ax1.set_title('y')
+
+    for row in y_hat:
+        ax2.plot(t, row)
+        ax2.set_title('y_hat')
+
+    plt.show()
+    return
