@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 
 import numpy as np
 from lmfit import Parameters, minimize
@@ -80,26 +81,54 @@ class OdeFitter:
                                 f"\nParams: {params}")
         return y_pred
 
-    def fit(self, t_start=None, t_end=None) -> MinimizerResult:
-        output = minimize(self.loss_function,
-                          self.params,
-                          method='lbfgs',
-                          # method='differential_evolution',
-                          kws={'t': self.time_points,
-                               'y_real': self.measured_data,
-                               't_start': t_start,
-                               't_end': t_end},
-                          # fit_kws={"callback": de_print_fun,
-                          #          "polish": False,
-                          #          "popsize": 8,
-                          #          "workers": 8,
-                          #          "maxiter": 10}
-                          )
-        # logging.info('Fitting complete. Updating params')
-        # self.params = output.params
-        # self.fitting_complete = True
-        return output
-        # output.params.pretty_print()
+    def fit(self, t_start: float = None, t_end: float = None,
+            method: Literal['lbfgs', 'differential_evolution',
+                            'basinhopping'] = 'lbfgs') -> MinimizerResult:
+        """Find optimal parameters for ODE
+
+        :param t_start: Timepoint to start simulation, defaults to lowest time point
+        :param t_end:  Timepoint to end simulation, defaults to highest time point
+        :param method: Optimisation method to use
+        :return: result of minimisation
+        """
+        match method:
+            case 'lbfgs':
+                return minimize(self.loss_function,
+                                self.params,
+                                method='lbfgs',
+                                kws={'t': self.time_points,
+                                     'y_real': self.measured_data,
+                                     't_start': t_start,
+                                     't_end': t_end}
+                                )
+            case 'differential_evolution':
+                return minimize(self.loss_function,
+                                self.params,
+                                method='differential_evolution',
+                                kws={'t': self.time_points,
+                                     'y_real': self.measured_data,
+                                     't_start': t_start,
+                                     't_end': t_end},
+                                fit_kws={"callback": de_print_fun,
+                                         "polish": False,
+                                         "popsize": 4,
+                                         "workers": 4,
+                                         "maxiter": 2}
+                                )
+            case 'basinhopping':
+                return minimize(self.loss_function,
+                                self.params,
+                                method='basinhopping',
+                                kws={'t': self.time_points,
+                                     'y_real': self.measured_data,
+                                     't_start': t_start,
+                                     't_end': t_end},
+                                # fit_kws={'disp': True,
+                                #          'niter': 5}
+                                )
+            case _:
+                raise NotImplementedError(f'Optimisation method: {method} '
+                                          f'is currently not supported')
 
     def set_params(self):
         raise NotImplementedError
