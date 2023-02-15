@@ -52,12 +52,23 @@ def my_time_series_expressions(my_expression_annotation: ExpressionArrayAnnotati
         time_series_expressions, my_expression_annotation, log2_transform=True)
     return expr_mat_time
 
+# @pytest.fixture
+# def my_grn() -> ModuleRegulatoryNetwork:
+#     path_to_network_edges = Path(
+#         '../data/time_series_datasets/aracne_network_edges.csv')
+#     path_to_orignal_cluster = Path(
+#         '../data/time_series_datasets/my_clustering_edgelist.csv')
+#     my_graph = ModuleRegulatoryNetwork.from_lpan_edge_csv(path_to_network_edges,
+#                                                           top_rank=25)
+#     my_graph.add_tf_module_mappings(path_to_orignal_cluster)
+#     return my_graph
+
 @pytest.fixture
 def my_grn() -> ModuleRegulatoryNetwork:
     path_to_network_edges = Path(
-        '../data/time_series_datasets/aracne_network_edges.csv')
+        '../Explanatory_tutorial/aracne_network_edges.csv')
     path_to_orignal_cluster = Path(
-        '../data/time_series_datasets/my_clustering_edgelist.csv')
+        '../Explanatory_tutorial/my_clustering_edgelist.csv')
     my_graph = ModuleRegulatoryNetwork.from_lpan_edge_csv(path_to_network_edges,
                                                           top_rank=25)
     my_graph.add_tf_module_mappings(path_to_orignal_cluster)
