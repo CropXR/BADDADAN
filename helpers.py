@@ -6,7 +6,9 @@ import GEOparse
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+from scipy.integrate._ivp.ivp import OdeResult
 from sklearn.model_selection import RepeatedStratifiedKFold
+from scipy.interpolate import make_interp_spline, BSpline, PchipInterpolator
 
 
 def split_based_on_temp(expression_matrix,
@@ -61,17 +63,44 @@ def de_print_fun(xk, convergence=None):
     logging.info(f'Convergence: {convergence*100:.2f}%')
 
 
-def plot_y_and_y_hat(y: np.ndarray, y_hat: np.ndarray, t: np.ndarray | list):
+def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
+                     model_fit: OdeResult):
+    """Plot real data y and model prediction y_hat
+
+    :param y_real: Numpy array containing measured data. One variable per row
+    :param model_fit: Numpy array, must be same shape as y
+    :param t_real: Time points at which to draw the function. Must be same for
+               both arrays
+    :return:
+    """
     fig, (ax1, ax2) = plt.subplots(1, 2)
     # fig.set_size_inches(15, 8)
     # fig.suptitle('Comparison real vs estimated')
-    for row in y:
-        ax1.plot(t, row)
+    for row in y_real:
+        ax1.plot(t_real, row)
         ax1.set_title('y')
 
-    for row in y_hat:
-        ax2.plot(t, row)
+    for row in model_fit.y:
+        ax2.plot(model_fit.t, row)
         ax2.set_title('y_hat')
 
     plt.show()
-    return
+
+def fit_spline(data: np.ndarray, time: list | np.ndarray,
+               num_timepoints: int = 50) -> tuple[np.ndarray, np.ndarray]:
+    """Interpolate through data
+
+    :param data: numpy array, which should contain columns that correspond
+    to observations at different time points, and row that correspond to
+    different variables (e.g. gene modules)
+    :param time: Time points at which original data was measured
+    :param num_timepoints: How many timepoints to interpolate
+    :return: new_timepoints, and interpolated data that belongs to it.
+    """
+    new_time = np.linspace(min(time), max(time), num=num_timepoints)
+    out_array = np.empty((len(data), num_timepoints))
+    for i, row in enumerate(data):
+        # spline = make_interp_spline(time, row)
+        spline = PchipInterpolator(time, row)
+        out_array[i, :] = spline(new_time)
+    return new_time, out_array
