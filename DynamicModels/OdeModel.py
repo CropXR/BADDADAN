@@ -1,6 +1,7 @@
 import logging
 
 import networkx as nx
+from lmfit import Parameters
 
 from DynamicModels.MyFormula import MyFormula
 
@@ -12,27 +13,22 @@ class OdeModel:
         self.formula_per_module: list[MyFormula] = []
 
     def __repr__(self):
-        return ('OdeInferenceClass:\n'
+        return ('OdeModel:\n'
                 + '\n'.join([f'{formula}' for formula in self.formula_per_module]))
 
-    def __call__(self, t: float, y: list[float], *params: float):
+    def __call__(self, t: float, y: list[float], params: dict):
         """Allows system of ODEs to be called. In this case returns dy/dt
-        for all y. Params should be a list which matches the parameter names"""
-        assert len(params) == self.nr_params, 'Supplied nr of parameters does not match actual number of parameters'
-        param_dict = dict(zip(self.get_param_names(), params))
-        logging.debug(f'Mapped params in the following way: {param_dict}')
-        return [formula(t, y, param_dict) for formula in self.formula_per_module]
+        for all y. Params should be a list which matches the parameter names
+        """
+        logging.debug(f'Mapped params in the following way: {params}')
+        return [formula(t, y, params) for formula in self.formula_per_module]
 
     def construct_formula_per_module(self, graph: nx.DiGraph):
         """For each module, generate a formula based on the connectivity of the module in the graph"""
         # Iterate over modules in lexicographic order
         for module in sorted(list(graph)):
             regulators = list(graph.predecessors(module))
-            if len(self.formula_per_module) == 0:
-                init_i = 0
-            else:
-                init_i = self.formula_per_module[-1].next_param_suffix
-            formula = MyFormula(module, regulators, init_i=init_i)
+            formula = MyFormula(module, regulators)
             self.formula_per_module.append(formula)
             self.nr_params += formula.nr_params
 
