@@ -1,7 +1,6 @@
 import logging
 
 import networkx as nx
-from lmfit import Parameters
 
 from DynamicModels.MyFormula import MyFormula
 
@@ -16,7 +15,8 @@ class OdeModel:
         return ('OdeModel:\n'
                 + '\n'.join([f'{formula}' for formula in self.formula_per_module]))
 
-    def __call__(self, t: float, y: list[float], params: dict):
+    def __call__(self, t: float, y: list[float],
+                 params: dict[str, float]) -> list[float]:
         """Allows system of ODEs to be called. In this case returns dy/dt
         for all y. Params should be a list which matches the parameter names
         """

@@ -27,12 +27,12 @@ class MyFormula:
         self.formula_string = ' + '.join(formula_segments)
 
         # Add decay factor, its suffix is always equal to the module it belongs to
-        d_param_name = f'delta{self.module_index}'
+        d_param_name = f'delta_{self.module_index}'
         self.params.append(d_param_name)
         self.formula_string += f' - {d_param_name} * y[{self.module_index}]'
 
         # Add factor which expresses the change in expression based on temperature
-        gamma_param_name = f'gamma{self.module_index}'
+        gamma_param_name = f'gamma_{self.module_index}'
         self.params.append(gamma_param_name)
         self.formula_string += f' + {gamma_param_name} * temp'
 
