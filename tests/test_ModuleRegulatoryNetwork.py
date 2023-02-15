@@ -11,7 +11,7 @@ import seaborn as sns
 
 from helpers import plot_y_and_y_hat
 
-logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO)
 # logging.basicConfig(level=logging.DEBUG)
 
 
@@ -34,9 +34,10 @@ def test_fit_ode_to_data(
         my_time_series_expressions.get_clusters_expressions_with_time(n_clusters)
     initial_sim_fit = OdeFitter(my_ode, my_data, my_time)
     # Note: look into the initial parameter values
-    optimal_fit = initial_sim_fit.fit()
-    # logging.info(fit_report(optimal_fit))
-    print(fit_report(optimal_fit))
+    # optimal_fit = initial_sim_fit.fit(method='basinhopping')
+    optimal_fit = initial_sim_fit.fit(method='lbfgs')
+    logging.info(fit_report(optimal_fit))
+    # print(fit_report(optimal_fit))
 
     # Next step: simulate the data with these params
     simulated_data = initial_sim_fit.predict_values(optimal_fit.params, my_time)
@@ -50,7 +51,6 @@ def test_fit_ode_to_data(
     fit_to_simul = try_again.predict_values(second_fit.params, my_time)
 
     plot_y_and_y_hat(y=simulated_data.y, y_hat=fit_to_simul.y, t=fit_to_simul.t)
-    # logging.info(fit_report(second_fit))
-    print(fit_report(second_fit))
-    # This time the parameters get quite close ...
+    logging.info(fit_report(second_fit))
+    # print(fit_report(second_fit))
     assert True
