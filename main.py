@@ -1,9 +1,6 @@
 import logging
 from pathlib import Path
 
-import GEOparse
-import numpy as np
-import pandas as pd
 import typer
 from lmfit import fit_report
 
@@ -48,11 +45,13 @@ def fit_ode_to_data(
     my_time_series_expressions.keep_only_de_genes(std_cutoff=1.5)
     my_time, my_data = \
         my_time_series_expressions.get_clusters_expressions_with_time(n_clusters)
-    interp_time, interp_data = fit_spline(my_data, my_time, num_timepoints=50)
+
+    # # Interpolate data
+    interp_time, interp_data = fit_spline(my_data, my_time, num_timepoints=20)
     my_time, my_data = interp_time, interp_data
     initial_sim_fit = OdeFitter(my_ode, my_data, my_time)
     # Note: look into the initial parameter values
-    # optimal_fit = initial_sim_fit.fit(method='basinhopping')
+    # optimal_fit = initial_sim_fit.fit(method='differential_evolution')
     optimal_fit = initial_sim_fit.fit()
     logging.info(fit_report(optimal_fit))
     # print(fit_report(optimal_fit))
@@ -78,4 +77,3 @@ def fit_ode_to_data(
 
 if __name__ == "__main__":
     typer.run(stub_main)
-

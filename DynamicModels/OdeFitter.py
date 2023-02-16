@@ -8,7 +8,6 @@ from scipy.integrate import solve_ivp
 from scipy.integrate._ivp.ivp import OdeResult
 
 from DynamicModels.OdeModel import OdeModel
-from helpers import de_print_fun
 
 
 class OdeFitter:
@@ -28,7 +27,8 @@ class OdeFitter:
             if 'delta' in param_name:
                 # Decay rates cannot be negative
                 min_value = 0.
-            self.params.add(param_name, value=np.random.uniform(-1, 1),
+            self.params.add(param_name,
+                            value=np.random.uniform(min_value/3, max_value/3),
                             min=min_value, max=max_value)
         self.init_condition_names = []
         for i, init_value in enumerate(measured_data[:, 0]):
@@ -43,15 +43,16 @@ class OdeFitter:
 
     def loss_function(self, params: Parameters, t: np.ndarray,
                       y_real: np.ndarray, t_start=None,
-                      t_end=None) -> np.ndarray:
-        """
-        Return squared residuals between y_real and a predictions
+                      t_end=None, return_scalar=False) -> np.ndarray | float:
+        """Return squared residuals between y_real and predictions
         at time points t for a given set params.
         """
         if t_start is not None or t_end is not None:
             selected_time_points = (t_start <= t) & (t <= t_end)
             y_real = y_real[:, selected_time_points]
         y_pred = self.predict_values(params, t, t_start, t_end)
+        if return_scalar:
+            np.mean(np.square(y_pred.y - y_real))
         return np.square(y_pred.y - y_real)
 
     def predict_values(self, params: Parameters, t: np.ndarray, t_start=None,
@@ -78,8 +79,7 @@ class OdeFitter:
         return y_pred
 
     def fit(self, t_start: float = None, t_end: float = None,
-            method: Literal['lbfgs', 'differential_evolution',
-                            'basinhopping'] = 'lbfgs') -> MinimizerResult:
+            method: Literal['lbfgs', 'differential_evolution', 'basinhopping', 'shgo'] = 'lbfgs') -> MinimizerResult:
         """Find optimal parameters for ODE
 
         :param t_start: Timepoint to start simulation, defaults to lowest time point
@@ -95,7 +95,8 @@ class OdeFitter:
                                 kws={'t': self.time_points,
                                      'y_real': self.measured_data,
                                      't_start': t_start,
-                                     't_end': t_end}
+                                     't_end': t_end},
+                                options=dict(disp=1)
                                 )
             case 'differential_evolution':
                 return minimize(self.loss_function,
@@ -104,12 +105,13 @@ class OdeFitter:
                                 kws={'t': self.time_points,
                                      'y_real': self.measured_data,
                                      't_start': t_start,
-                                     't_end': t_end},
-                                fit_kws={"callback": de_print_fun,
-                                         "polish": False,
-                                         "popsize": 4,
-                                         "workers": 4,
-                                         "maxiter": 2}
+                                     't_end': t_end,
+                                     'return_scalar': True},
+                                max_nfev=20_000,
+                                workers=1,
+                                # popsize=4,
+                                # polish=False,
+                                disp=True
                                 )
             case 'basinhopping':
                 return minimize(self.loss_function,
@@ -119,8 +121,20 @@ class OdeFitter:
                                      'y_real': self.measured_data,
                                      't_start': t_start,
                                      't_end': t_end},
-                                # fit_kws={'disp': True,
-                                #          'niter': 5}
+                                disp=True,
+                                niter=300
+                                )
+            case 'shgo':
+                return minimize(self.loss_function,
+                                self.params,
+                                method='shgo',
+                                kws={'t': self.time_points,
+                                     'y_real': self.measured_data,
+                                     't_start': t_start,
+                                     't_end': t_end,
+                                     'return_scalar': True},
+                                max_nfev=10_000,
+                                options=dict(disp=True)
                                 )
             case _:
                 raise NotImplementedError(f'Optimisation method: {method} '
