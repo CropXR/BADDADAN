@@ -69,7 +69,8 @@ class MyFormula:
         init_val = {"y": y}
         # Merge all dicts
         local_dict = init_val | params | temperature
-        return eval(self.compiled_formula_string, {}, local_dict)
+        result = eval(self.compiled_formula_string, {}, local_dict)
+        return result
 
     def time_to_heatstress(self, t: float) -> float:
         # Assume that t is in minutes. And temperature was 30 degrees during the first 3 hours, 22 degrees after that.
