@@ -72,7 +72,7 @@ class OdeFitter:
             if name not in self.init_condition_names
         }
         y_pred = solve_ivp(self.odes, (t_start, t_end), y0, t_eval=t,
-                           args=[param_dict])
+                           args=[param_dict], method='Radau')
         assert y_pred.success, (f"Integration failed: {y_pred.message}"
                                 f"\nParams: {params}")
         return y_pred
