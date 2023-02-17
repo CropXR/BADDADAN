@@ -169,7 +169,6 @@ class ExpressionMatrix:
         return ExpressionMatrixTest(self.df)
 
 
-
 class ExpressionMatrixTraining(ExpressionMatrix):
     """Can be created from ExpressionMatrix by command like:
 
@@ -219,17 +218,17 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         out_df.to_csv(out_file_path, sep=' ', columns=['cluster_id'],
                       header=False)
 
-    def get_cluster_per_gene(self) -> dict:
+    def get_cluster_per_gene(self) -> dict[str, int]:
         """For each gene, get its cluster_id. Can only be called after
         self.do_hierachical_clustering() has been called.
 
-        :returns: Dict with gene name as key and cluster_ID as value .
+        :returns: Dict with gene name as key and cluster_ID as value.
         """
         assert 'cluster_id' in self.df.columns,\
                 'Run do_hierachical_clustering() first!'
         return self.df.cluster_id.to_dict()
 
-    def get_genes_per_cluster(self) -> dict:
+    def get_genes_per_cluster(self) -> dict[int, list[str]]:
         """For each cluster, get Gene IDs. Can only be called after
         self.do_hierachical_clustering() has been called.
 
@@ -237,8 +236,10 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         """
         assert 'cluster_id' in self.df.columns,\
                 'Run do_hierachical_clustering() first!'
-
-        return self.df.groupby('cluster_id').groups
+        # Ensure that the genes are returned as list, and not an index object
+        return {cluster_id: genes.tolist()
+                for cluster_id, genes
+                in self.df.groupby('cluster_id').groups.items()}
 
     def do_hierachical_clustering(self, n_cluster: int,
                                   do_plotting: bool = False) -> None:
@@ -348,8 +349,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         return out_df
 
     def _get_gene_expression_long_form(self):
-        assert self.has_been_clustered, ('Cluster genes first, '
-                                         'you hovercraft full of eels. '
+        assert self.has_been_clustered, ('Cluster genes first.'
                                          'I.e. call the .do_hierarchical_clustering() method before calling this method.')
         # TODO create private method of this snippet of code is used twice atm
         # Drop final column and add it later
