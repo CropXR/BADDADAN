@@ -1,4 +1,5 @@
 import logging
+import random
 
 import networkx as nx
 
@@ -23,8 +24,14 @@ class OdeModel:
         logging.debug(f'Mapped params in the following way: {params}')
         return [formula(t, y, params) for formula in self.formula_per_module]
 
+    def get_module_names(self):
+        return [formula.module_name for formula in self.formula_per_module]
+
     def construct_formula_per_module(self, graph: nx.DiGraph):
-        """For each module, generate a formula based on the connectivity of the module in the graph"""
+        """
+        For each module, generate a formula based on the connectivity of
+        the module in the graph
+        """
         # Iterate over modules in lexicographic order
         for module in sorted(list(graph)):
             regulators = list(graph.predecessors(module))
@@ -38,3 +45,19 @@ class OdeModel:
         for formula in self.formula_per_module:
             all_params.extend(formula.params)
         return all_params
+
+    def add_random_regulator_to_module(self, module_idx: int):
+        # Get candidate regulators first
+        candidate_regulators = self.get_module_names()
+        # # Uncomment to assume that module cannot regulate itself
+        # candidate_regulators.pop(module_idx)
+        # Cannot pick modules which are already a regulator
+        for regulator in self.formula_per_module[module_idx].regulator_names:
+            candidate_regulators.remove(regulator)
+        if candidate_regulators:
+            regulator_to_add = random.choice(candidate_regulators)
+            new_param_name = self.formula_per_module[module_idx].add_regulator(regulator_to_add)
+            return new_param_name
+        else:
+            logging.info('Could not do thickening, module too thicc')
+            return False

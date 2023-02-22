@@ -20,10 +20,10 @@ class OdeFitter:
         self.time_points = time_points
         self.params = Parameters()
         # TODO how to handle guesses for initial params/constraints?
-        param_limit = 10
+        self.param_limit = 10
         for param_name in ode_model.get_param_names():
-            min_value = -param_limit
-            max_value = param_limit
+            min_value = -self.param_limit
+            max_value = self.param_limit
             if 'delta' in param_name:
                 # Decay rates cannot be negative
                 min_value = 0.
@@ -79,7 +79,7 @@ class OdeFitter:
         return y_pred
 
     def fit(self, t_start: float = None, t_end: float = None,
-            method: Literal['lbfgs', 'differential_evolution', 'basinhopping', 'shgo'] = 'lbfgs') -> MinimizerResult:
+            method: Literal['lbfgs', 'bfgs', 'differential_evolution', 'basinhopping', 'shgo'] = 'lbfgs') -> MinimizerResult:
         """Find optimal parameters for ODE
 
         :param t_start: Timepoint to start simulation, defaults to lowest time point
@@ -88,10 +88,10 @@ class OdeFitter:
         :return: result of minimisation
         """
         match method:
-            case 'lbfgs':
+            case 'lbfgs' | 'bfgs':
                 return minimize(self.loss_function,
                                 self.params,
-                                method='lbfgs',
+                                method=method,
                                 kws={'t': self.time_points,
                                      'y_real': self.measured_data,
                                      't_start': t_start,
@@ -140,5 +140,41 @@ class OdeFitter:
                 raise NotImplementedError(f'Optimisation method: {method} '
                                           f'is currently not supported')
 
+    def thickening_thinning(self, nr_rounds: int) -> MinimizerResult:
+        for i in range(nr_rounds):
+            minimizer_result = self.fit()
+            best_params = minimizer_result.params
+            # Get which module performs worst
+            worst_module = self.get_worst_module(best_params)
+            self.do_thickening(worst_module)
+            # TODO implement thinning
+            logging.info(f'Iteration {i}\nLoss: {minimizer_result.residual}\n')
+        return self.fit()
+
     def set_params(self):
         raise NotImplementedError
+
+    def do_thickening(self, module_idx: int):
+        new_param_name = self.odes.add_random_regulator_to_module(module_idx)
+        if new_param_name:
+            min_value = -self.param_limit
+            max_value = self.param_limit
+            self.params.add(new_param_name,
+                            value=np.random.uniform(min_value/3, max_value/3),
+                            min=min_value, max=max_value)
+
+    def get_worst_module(self, best_params: Parameters):
+        loss_per_module = np.sum(self.loss_function(best_params, self.time_points, self.measured_data), axis=1)
+        worst_module_idx = np.argmax(loss_per_module)
+        return worst_module_idx
+
+    def get_best_module(self, best_params: Parameters) -> int:
+        loss_per_module = np.sum(
+            self.loss_function(best_params, self.time_points,
+                               self.measured_data), axis=1)
+        best_module_idx = np.argmin(loss_per_module)
+        return best_module_idx
+
+    def do_thinning(self):
+        raise NotImplementedError
+
