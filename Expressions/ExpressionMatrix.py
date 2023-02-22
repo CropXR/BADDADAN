@@ -449,3 +449,22 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         time_points = time_points / 60
         module_expressions = new_df.to_numpy()
         return time_points, module_expressions
+
+    def write_tf2_input_file(self, out_path: Path):
+        """Create file that can be pasted into the TF2network website
+        (http://bioinformatics.psb.ugent.be/webtools/TF2Network/index.php).
+
+        :param out_path: Filename of output txt file
+        """
+        genes_with_clusters = self.get_cluster_per_gene()
+        lines = []
+        for gene_name, cluster_id in genes_with_clusters.items():
+            if ';' in gene_name:
+                # In case there are multiple gene names, just take the first one
+                gene_name = gene_name.split(';')[0]
+            if not gene_name.startswith('AT'):
+                # Gene could not be annotated, so tf2 won't find it
+                continue
+            lines.append(f'{cluster_id} {gene_name}\n')
+        with out_path.open('w') as f:
+            f.writelines(lines)

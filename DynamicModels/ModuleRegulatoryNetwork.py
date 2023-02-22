@@ -25,7 +25,7 @@ class ModuleRegulatoryNetwork:
 
     def plot_network(self, node_color_map: list = None,
                      draw_func: Callable = nx.draw_kamada_kawai,
-                     out_path: Path = None):
+                     out_path: Path = None, with_labels=True):
         """Plot network using matplotlib."""
 
         node_color_map = ['blue' if (node in self.get_tfs()) else 'orange'
@@ -40,7 +40,7 @@ class ModuleRegulatoryNetwork:
                           in self.graph.edges.data('origin')]
 
         draw_func(self.graph, node_color=node_color_map,
-                  edge_color=edge_color_map, with_labels=True)
+                  edge_color=edge_color_map, with_labels=with_labels)
         if out_path:
             plt.savefig(out_path)
         else:
@@ -65,6 +65,24 @@ class ModuleRegulatoryNetwork:
                                           create_using=nx.DiGraph)
         return cls(a_graph)
 
+    @classmethod
+    def from_tf2_tsv(cls, in_path: Path):
+        """Create object from output of TF2Network file
+
+        :param in_path: Path to .tsv output file of tf2network
+        :return:
+        """
+        # TODO implement top ranks here?
+        df = pd.read_csv(in_path, sep='\t')
+        df['target'] = 'MODULE' + df['GeneSet'].astype(str)
+        df['regulator_with_prefix'] = 'TF_' + df['Regulator'].astype(str)
+        df['origin'] = cls.id_of_binding
+        my_graph = nx.from_pandas_edgelist(df, source='regulator_with_prefix',
+                                          target='target',
+                                          edge_attr='origin',
+                                          create_using=nx.DiGraph)
+        return cls(my_graph)
+
     def add_tf_module_mappings(self, path_to_orignal_cluster: Path) -> None:
         """Include what TFs are transcribed by which cluster.
         Add these edges with this method, input file is created from
@@ -79,9 +97,12 @@ class ModuleRegulatoryNetwork:
 
     def clean_up_network(self) -> None:
         """Remove all non-binding TFs and unused modules."""
+        # TODO perhaps we can keep bidirectional edges, i.e. module
+        #  self-regulation might happen(?)
         self.remove_bidirectional_edges()
         self.remove_non_binding_tfs()
         self.remove_unused_modules()
+        self.remove_untranscribed_tfs()
 
     def remove_non_binding_tfs(self) -> None:
         """Delete transcription factors from the graph that do not bind to
@@ -105,7 +126,6 @@ class ModuleRegulatoryNetwork:
         for module in self.get_modules():
             if (self.graph.in_degree(module) == self.graph.out_degree(module) == 0):
                 unused_modules.append(module)
-        # Remove them
         self.graph.remove_nodes_from(unused_modules)
 
     def remove_bidirectional_edges(self):
@@ -128,7 +148,7 @@ class ModuleRegulatoryNetwork:
         edges_to_add = []
         for tf in self.get_tfs():
             original_module = list(self.graph.predecessors(tf))
-            assert len(original_module) == 1, 'TF can only be transcribed by one module'
+            assert len(original_module) == 1, f'TF ({tf} can only be transcribed by one module'
             # List contains only one item, extract it.
             original_module = original_module[0]
             target_modules = list(self.graph.successors(tf))
@@ -157,3 +177,16 @@ class ModuleRegulatoryNetwork:
         ode_out = OdeModel()
         ode_out.construct_formula_per_module(self.graph)
         return ode_out
+
+    def remove_untranscribed_tfs(self):
+        """Remove TFs from graph that are not transcribed by any of the modules.
+        I.e. TFs that have an in-degree of 0
+        """
+        non_binding_tfs = []
+        for tf_name in self.get_tfs():
+            out_degree = self.graph.in_degree(tf_name)
+            if out_degree == 0:
+                non_binding_tfs.append(tf_name)
+        # Remove them
+        self.graph.remove_nodes_from(non_binding_tfs)
+

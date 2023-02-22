@@ -37,21 +37,24 @@ def stub_main(
 
 def fit_ode_to_data(
         my_ode: OdeModel,
-        my_time_series_expressions: ExpressionMatrixTimeSeries
+        my_time_series_expressions: ExpressionMatrixTimeSeries,
+        std_cutoff=1.5
 ):
     n_clusters = 4
     my_time_series_expressions.keep_only_shoot()
     my_time_series_expressions.merge_biological_samples()
-    my_time_series_expressions.keep_only_de_genes(std_cutoff=1.5)
+    my_time_series_expressions.keep_only_de_genes(std_cutoff=std_cutoff)
     my_time, my_data = \
         my_time_series_expressions.get_clusters_expressions_with_time(n_clusters)
-
-    # # Interpolate data
-    interp_time, interp_data = fit_spline(my_data, my_time, num_timepoints=20)
+    my_time_series_expressions.get_genes_per_cluster()
+    # Interpolate data
+    interp_time, interp_data = fit_spline(my_data, my_time, num_timepoints=50)
     my_time, my_data = interp_time, interp_data
     initial_sim_fit = OdeFitter(my_ode, my_data, my_time)
     # Note: look into the initial parameter values
     # optimal_fit = initial_sim_fit.fit(method='differential_evolution')
+    # optimal_fit = initial_sim_fit.thickening_thinning(3)
+    # optimal_fit = initial_sim_fit.fit(method='bfgs')
     optimal_fit = initial_sim_fit.fit()
     logging.info(fit_report(optimal_fit))
     # print(fit_report(optimal_fit))
@@ -63,16 +66,43 @@ def fit_ode_to_data(
 
     plot_y_and_y_hat(y_real=my_data, t_real=my_time,
                      model_fit=simulated_data)
+    #
+    # # And try to fit model again
+    # try_again = OdeFitter(my_ode, simulated_data.y, simulated_data.t)
+    # second_fit = try_again.fit()
+    # fit_to_simul = try_again.predict_values(second_fit.params, simulated_data.t)
+    #
+    # plot_y_and_y_hat(y_real=simulated_data.y, t_real=simulated_data.t,
+    #                  model_fit=fit_to_simul)
+    # logging.info(fit_report(second_fit))
+    # # print(fit_report(second_fit))
 
-    # And try to fit model again
-    try_again = OdeFitter(my_ode, simulated_data.y, simulated_data.t)
-    second_fit = try_again.fit()
-    fit_to_simul = try_again.predict_values(second_fit.params, simulated_data.t)
+def thickening_thinning(
+        my_ode: OdeModel,
+        my_time_series_expressions: ExpressionMatrixTimeSeries,
+        std_cutoff=1.5
+):
+    n_clusters = 4
+    my_time_series_expressions.keep_only_shoot()
+    my_time_series_expressions.merge_biological_samples()
+    my_time_series_expressions.keep_only_de_genes(std_cutoff=std_cutoff)
+    my_time, my_data = \
+        my_time_series_expressions.get_clusters_expressions_with_time(n_clusters)
+    my_time_series_expressions.get_genes_per_cluster()
+    # Interpolate data
+    interp_time, interp_data = fit_spline(my_data, my_time, num_timepoints=15)
+    my_time, my_data = interp_time, interp_data
+    initial_sim_fit = OdeFitter(my_ode, my_data, my_time)
+    # Note: look into the initial parameter values
+    # optimal_fit = initial_sim_fit.fit(method='differential_evolution')
+    optimal_fit = initial_sim_fit.thickening_thinning(nr_rounds=3)
 
-    plot_y_and_y_hat(y_real=simulated_data.y, t_real=simulated_data.t,
-                     model_fit=fit_to_simul)
-    logging.info(fit_report(second_fit))
-    # print(fit_report(second_fit))
+    predicted_values = initial_sim_fit.predict_values(optimal_fit.params, my_time)
+
+    plot_y_and_y_hat(y_real=my_data, t_real=my_time,
+                     model_fit=predicted_values)
+
+    logging.info(fit_report(optimal_fit))
 
 
 if __name__ == "__main__":

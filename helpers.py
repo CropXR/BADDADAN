@@ -73,12 +73,13 @@ def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
                both arrays
     :return:
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig, (ax1, ax2) = plt.subplots(1, 2, sharey='all')
     # fig.set_size_inches(15, 8)
     # fig.suptitle('Comparison real vs estimated')
-    for row in y_real:
-        ax1.plot(t_real, row)
+    for i, row in enumerate(y_real):
+        ax1.plot(t_real, row, label=f'Module{i}')
         ax1.set_title('y')
+        ax1.legend()
 
     for row in model_fit.y:
         ax2.plot(model_fit.t, row)
