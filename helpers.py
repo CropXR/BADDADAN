@@ -64,7 +64,7 @@ def de_print_fun(xk, convergence=None):
 
 
 def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
-                     model_fit: OdeResult):
+                     model_fit: OdeResult = None):
     """Plot real data y and model prediction y_hat
 
     :param y_real: Numpy array containing measured data. One variable per row
@@ -78,12 +78,17 @@ def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
     # fig.suptitle('Comparison real vs estimated')
     for i, row in enumerate(y_real):
         ax1.plot(t_real, row, label=f'Module{i}')
-        ax1.set_title('y')
-        ax1.legend()
+    ax1.set_title('y')
+    ax1.set_ylabel('Log2 gene expression')
+    ax1.set_xlabel('Time (h)')
+    ax1.legend()
 
-    for row in model_fit.y:
-        ax2.plot(model_fit.t, row)
+    if model_fit:
+        for row in model_fit.y:
+            ax2.plot(model_fit.t, row)
         ax2.set_title('y_hat')
+        ax2.set_ylabel('Log2 gene expression')
+        ax2.set_xlabel('Time (h)')
 
     plt.show()
 
