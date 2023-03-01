@@ -61,8 +61,7 @@ def fit_ode_to_data(
 
     # more_time = np.linspace(0, 24, 50)
     # Next step: simulate the data with these params
-    simulated_data = initial_sim_fit.predict_values(optimal_fit.params,
-                                                    my_time)
+    simulated_data = initial_sim_fit.show_current_best_fit(my_time)
 
     plot_y_and_y_hat(y_real=my_data, t_real=my_time,
                      model_fit=simulated_data)
@@ -97,7 +96,7 @@ def thickening_thinning(
     # optimal_fit = initial_sim_fit.fit(method='differential_evolution')
     optimal_fit = initial_sim_fit.thickening_thinning(nr_rounds=3)
 
-    predicted_values = initial_sim_fit.predict_values(optimal_fit.params, my_time)
+    predicted_values = initial_sim_fit.show_current_best_fit(my_time)
 
     plot_y_and_y_hat(y_real=my_data, t_real=my_time,
                      model_fit=predicted_values)
