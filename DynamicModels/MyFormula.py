@@ -31,7 +31,8 @@ class MyFormula:
 
         # Add names of parameters that regulate relation between heat and non-heat temperature
         self.params.extend(['heat_temp', 'non_heat_temp'])
-
+        # Register if the module has been compiled (which speeds up its evaluation)
+        self.formula_is_compiled = False
         self.compile_formula()
 
     def compile_formula(self):

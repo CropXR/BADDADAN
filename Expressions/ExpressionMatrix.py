@@ -4,7 +4,7 @@ Contains classes that contain matrices of gene expression levels.
 from __future__ import annotations
 import logging
 from pathlib import Path
-
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -131,14 +131,52 @@ class ExpressionMatrix:
         expr_mat_test = ExpressionMatrixTest(self.df[test_cols])
         return expr_mat_train, expr_mat_test
 
-    def keep_only_de_genes(self, std_cutoff: float = 1.0) -> None:
+    def _calculate_gene_variation(self, method=Literal['std', 'mad']) -> pd.Series:
+        """Calculate for each gene how much it varies over all the samples
+
+        :param method: How to determine variation between samples:
+                        std: standard deviation
+                        mad: mean absolute deviation
+        :return: Measure of variation for each gene
+        """
+        # Select correct method to use for calculation the variation of a gene
+        match method:
+            case 'std':
+                variation_method = self.df.std
+            case 'mad':
+                variation_method = self.df.mad
+            case _:
+                raise NotImplementedError
+        # Call the method
+        return variation_method(axis=1)
+
+    def keep_genes_above_deviation_cutoff(self, cutoff: float = None, method: Literal['std', 'mad'] = 'std') -> None:
         """Remove non-differentially expressed (de) genes.
 
-        :param std_cutoff: Minimum standard deviation between samples
+        :param method: How to determine variation between samples:
+                        std: standard deviation
+                        mad: mean absolute deviation
+        :param cutoff: Minimum standard deviation between samples
                            for a gene to be included. Default: 1.0
         """
-        de_genes = self.df[self.df.std(axis=1) > std_cutoff]
-        self.df = de_genes
+        variation = self._calculate_gene_variation(method)
+        # Only keep genes that are above the cutoff
+        self.df = self.df[variation > cutoff]
+
+    def keep_n_most_deviating_genes(self, n_max: int = None,
+                                    method: Literal['std', 'mad'] = 'std') -> None:
+        """Remove non-differentially expressed (de) genes.
+
+        :param method: How to determine variation between samples:
+                        std: standard deviation
+                        mad: mean absolute deviation
+        :param n_max: Number of genes to keep. E.g. 1000 will give you the
+            top 1000 genes with highest variation between samples.
+        """
+        variation = self._calculate_gene_variation(method)
+        subset_genes = variation.sort_values(ascending=False).head(n_max)
+        self.df = self.df.loc[subset_genes.index]
+
 
     def quantile_normalize(self, ref_mappings: ExpressionMatrix | None = None):
         if ref_mappings is None:
@@ -318,7 +356,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
     def plot_clusters_over_time(self) -> None:
         """Plot mean expression of clusters over time.
-
         """
         sns.set_theme()
         some_df = self._get_gene_expression_long_form()
@@ -440,6 +477,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """For fitting ODEs, get expression of clusters over time.
         First array in tuple indicates time_points in minutes, second array
         indicates module expressions.
+
+        :return: tuple of time points, module expressions
         """
         some_df = self._get_cluster_expression_long_form(n_clusters)
         new_df = some_df.pivot(index='cluster_id', columns='elapsed_mins',
