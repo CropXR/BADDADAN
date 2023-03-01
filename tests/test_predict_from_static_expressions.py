@@ -60,7 +60,7 @@ def test_random_classifier(
 def test_expression_of_clusters_in_seeds_vs_plants(
         static_expression_two_temps_arabidopsis: ExpressionMatrix,
         my_seed_expressions: ExpressionMatrix):
-    static_expression_two_temps_arabidopsis.keep_only_de_genes(1)
+    static_expression_two_temps_arabidopsis.keep_genes_above_deviation_cutoff(1)
     my_seed_expressions = my_seed_expressions.to_expressionmatrix_test()
     my_seed_expressions.quantile_normalize(
         static_expression_two_temps_arabidopsis)

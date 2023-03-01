@@ -94,7 +94,7 @@ def my_tf2_input(my_time_series_expressions):
     """
     my_time_series_expressions.keep_only_shoot()
     my_time_series_expressions.merge_biological_samples()
-    my_time_series_expressions.keep_only_de_genes(std_cutoff=1)
+    my_time_series_expressions.keep_genes_above_deviation_cutoff(cutoff=1)
     my_time_series_expressions.do_hierachical_clustering(4)
     my_time_series_expressions.write_tf2_input_file(Path('../data/time_series_datasets/tf2network_approach/genes_per_cluster_cutoff1.txt'))
     my_time_series_expressions.plot_clusters_over_time()
@@ -110,9 +110,9 @@ def my_tf2_ode():
     my_grn.add_tf_module_mappings(
         Path('../data/time_series_datasets/my_clustering_edgelist.csv'))
     my_grn.clean_up_network()
-    my_grn.plot_network()
+    # my_grn.plot_network(with_labels=False)
     module_module = my_grn.get_module_module_network()
-    # module_module.plot_network()
+    # module_module.plot_network(with_labels=False)
     return module_module.convert_to_ode()
 
 @pytest.fixture

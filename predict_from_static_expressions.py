@@ -27,7 +27,7 @@ def lin_regress_on_modules(expr_mat: ExpressionMatrix, n_cluster: int):
     y_pred_list = []
     reg_scores = []
     for expr_matr_train, expr_matr_test in split_based_on_temp(expr_mat):
-        expr_matr_train.keep_only_de_genes()
+        expr_matr_train.keep_genes_above_deviation_cutoff()
         overview_df = expr_matr_train.extract_module_expressions(n_cluster, for_static_predictions=True)
         gene_to_module = expr_matr_train.get_cluster_per_gene()
 
@@ -91,7 +91,7 @@ def preprocess_expression_matrix_and_cluster(
     """Do some basic preprocessing on expression matrix, after that
     perform clustering
     """
-    expr_mat.keep_only_de_genes(std_cutoff=std_cutoff)
+    expr_mat.keep_genes_above_deviation_cutoff(cutoff=std_cutoff)
     expr_mat.quantile_normalize()
     overview_df = expr_mat.extract_module_expressions(
         n_cluster,

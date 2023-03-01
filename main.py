@@ -43,13 +43,13 @@ def fit_ode_to_data(
     n_clusters = 4
     my_time_series_expressions.keep_only_shoot()
     my_time_series_expressions.merge_biological_samples()
-    my_time_series_expressions.keep_only_de_genes(std_cutoff=std_cutoff)
+    my_time_series_expressions.keep_genes_above_deviation_cutoff(cutoff=std_cutoff)
     my_time, my_data = \
         my_time_series_expressions.get_clusters_expressions_with_time(n_clusters)
+    # plot_y_and_y_hat(my_data, my_time)
     my_time_series_expressions.get_genes_per_cluster()
     # Interpolate data
-    interp_time, interp_data = fit_spline(my_data, my_time, num_timepoints=50)
-    my_time, my_data = interp_time, interp_data
+    # my_time, my_data = fit_spline(my_data, my_time, num_timepoints=50)
     initial_sim_fit = OdeFitter(my_ode, my_data, my_time)
     # Note: look into the initial parameter values
     # optimal_fit = initial_sim_fit.fit(method='differential_evolution')
@@ -85,7 +85,7 @@ def thickening_thinning(
     n_clusters = 4
     my_time_series_expressions.keep_only_shoot()
     my_time_series_expressions.merge_biological_samples()
-    my_time_series_expressions.keep_only_de_genes(std_cutoff=std_cutoff)
+    my_time_series_expressions.keep_genes_above_deviation_cutoff(cutoff=std_cutoff)
     my_time, my_data = \
         my_time_series_expressions.get_clusters_expressions_with_time(n_clusters)
     my_time_series_expressions.get_genes_per_cluster()
