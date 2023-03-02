@@ -21,7 +21,7 @@ class OdeFitter:
         self.time_points = time_points
         self.params = Parameters()
         # TODO how to handle guesses for initial params/constraints?
-        self.param_limit = 10
+        self.param_limit = 15
         for param_name in ode_model.get_param_names():
             min_value = -self.param_limit
             max_value = self.param_limit
@@ -55,7 +55,7 @@ class OdeFitter:
         y_pred = self.odes.calculate_solution(params, t, init_condition_names,
                                               t_start, t_end)
         if return_scalar:
-            return np.mean(np.square(y_pred.y - y_real))
+            return float(np.mean(np.square(y_pred.y - y_real)))
         loss = np.square(y_pred.y - y_real)
         return loss
 
@@ -88,7 +88,7 @@ class OdeFitter:
                                        'y_real': self.measured_data,
                                        't_start': t_start,
                                        't_end': t_end,
-                                       'return_scalar': False},
+                                       'return_scalar': True},
                                   options=dict(disp=1),
                                   )
             case 'differential_evolution':
