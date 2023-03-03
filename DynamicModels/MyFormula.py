@@ -14,7 +14,7 @@ class MyFormula:
         self.module_name = module_name
         self.module_index = int(module_name[-1]) - 1
         self.params = []
-        self.regulator_names = regulator_names
+        self.regulator_names = []
         self.formula_string = ''
         for regulator in regulator_names:
             self.add_regulator(regulator)
@@ -45,6 +45,22 @@ class MyFormula:
     def nr_params(self):
         """Get the number of parameters"""
         return len(self.params)
+
+    @staticmethod
+    def generate_linear_term(param_name: str, var_name: str,
+                             is_positive: bool = True) -> str:
+        """For a given parameter name and variable name, return the mathematical
+        expresssion that linearly describes their relationship.
+
+        :param param_name: Name of the parameter which describes the relationship
+        :param var_name: Name of variable that should be multiplied
+        with the parameter
+        :param is_positive: If true, the expression will start with a '+'. If
+        false the expression will start with a '-'.
+        :return: example: the string '+ beta_2_0 * y[0]'
+        """
+        operator = '+' if is_positive else '-'
+        return f'{operator} {param_name} * {var_name}'
 
     def __repr__(self):
         return f'Formula of {self.module_name}={self.formula_string} ' \
@@ -79,11 +95,38 @@ class MyFormula:
             temp = params['non_heat_temp']
         return temp
 
-    def add_regulator(self, regulator):
+    def add_regulator(self, regulator: str):
+        """Add a regulator (e.g. MODULE2) to the equation. And returns name of
+        the new parameter
+
+        :param regulator: Name of regulator module, e.g. MODULE3
+        :return: Name of the new parameter
+        """
         regulator_index = int(regulator[-1]) - 1
         b_param_name = f'beta_{regulator_index}_{self.module_index}'
+        self.regulator_names.append(regulator)
         self.params.append(b_param_name)
         # Currently assume linear relationship
-        self.formula_string += f'+ {b_param_name} * y[{regulator_index}]'
+        self.formula_string += self.generate_linear_term(
+            b_param_name, f'y[{regulator_index}]')
         self.formula_is_compiled = False
         return b_param_name
+
+    def remove_regulator(self, regulator_to_remove: str):
+        """Remove the regulator from the equation. Only works if regulator
+        is already present in the formula.
+
+        :param regulator_to_remove: Name of regulator module, e.g. MODULE3
+        :return: Name of the new parameter"""
+        regulator_index = int(regulator_to_remove[-1]) - 1
+        b_param_name = f'beta_{regulator_index}_{self.module_index}'
+        assert regulator_to_remove in self.regulator_names,\
+            'Regulator cannot be removed, it is not present in the current formula'
+        self.params.remove(b_param_name)
+        self.regulator_names.remove(regulator_to_remove)
+        string_to_remove_from_formula = self.generate_linear_term(
+            b_param_name, f'y[{regulator_index}]')
+        self.formula_string = self.formula_string.replace(
+            string_to_remove_from_formula, '')
+        self.formula_is_compiled = False
+        return True
