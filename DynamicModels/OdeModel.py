@@ -58,7 +58,8 @@ class OdeModel:
         :param target_module_idx: Index to use for the target module
         of the connection (e.g. 0 is the first module)
         :param origin_module_idx: If specified, connection
-        will be from this module to the target module.
+        will be from this module to the target module. If no module is
+        specified, pick a random module.
         :return: If connection was added, return the name of the parameter
         that describes the interaction. If no new connection could
         be added, return False.
@@ -67,7 +68,7 @@ class OdeModel:
         candidate_regulators = self.get_module_names()
         if not origin_module_idx:
             # Pick a random regulator
-            # Uncomment this line to assume that module cannot regulate itself
+            # Comment this line to assume that module can regulate itself
             candidate_regulators.pop(target_module_idx)
             # Cannot pick modules which are already a regulator
             for regulator in self.formula_per_module[target_module_idx].regulator_names:
@@ -83,16 +84,41 @@ class OdeModel:
         new_param_name = self.formula_per_module[target_module_idx].add_regulator(regulator_to_add)
         return new_param_name
 
+    def remove_regulator_from_module(self, target_module_idx: int,
+                                     origin_module_idx: int = None) -> None:
+        """From the module, remove a regulator. If no origin module is provided,
+        pick a random one.
+
+        :param target_module_idx: Index of module from which regulator
+        should be removed
+        :param origin_module_idx: (Optional) Index of module which should be
+        removed as regulator of target_module.
+        If not provided, a random regulator is removed.
+        """
+        formula_of_interest = self.formula_per_module[target_module_idx]
+        # Get possible regulators
+        regulators = formula_of_interest.regulator_names
+        assert regulators, (f'<{formula_of_interest}> does not have '
+                            f'any regulators. So none can be removed')
+        if not origin_module_idx:
+            # Randomly pick one to remove
+            regulator_to_remove = random.choice(regulators)
+        else:
+            regulator_to_remove = self.get_module_names()[origin_module_idx]
+        formula_of_interest.remove_regulator(regulator_to_remove)
+
     def calculate_solution(self, params: Parameters,
                            t: np.ndarray, init_condition_names: list[str],
                            t_start=None,
                            t_end=None) -> OdeResult:
-        """Return values at time points t, given a set of params
+        """Return values at time points t, given a set of params.
+        I.e. this calculates the full solution over time of the system of ODEs.
 
         :param params: Parameters to use when solving the system of ODEs
         :param t: time points at which to save the solution
         :param init_condition_names: List of strings that are the names of
-        the initial conditions. E.g ['y0', 'y1']
+        the initial conditions. E.g ['y0', 'y1']. These are needed to
+        split off from the parameters that are provided
         :param t_start: (Optional), time point to start calculation of
         the solution
         :param t_end: (Optional), time point to end calculation of the solution
