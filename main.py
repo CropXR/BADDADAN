@@ -47,11 +47,10 @@ def fit_ode_to_data(
     my_time, my_data = \
         my_time_series_expressions.get_clusters_expressions_with_time(n_clusters)
     # plot_y_and_y_hat(my_data, my_time)
-    my_time_series_expressions.get_genes_per_cluster()
+    # my_time_series_expressions.get_genes_per_cluster()
     # Interpolate data
     # my_time, my_data = fit_spline(my_data, my_time, num_timepoints=50)
     initial_sim_fit = OdeFitter(my_ode, my_data, my_time)
-    # Note: look into the initial parameter values
     # optimal_fit = initial_sim_fit.fit(method='differential_evolution')
     # optimal_fit = initial_sim_fit.thickening_thinning(3)
     # optimal_fit = initial_sim_fit.fit(method='bfgs')
@@ -61,7 +60,7 @@ def fit_ode_to_data(
 
     # more_time = np.linspace(0, 24, 50)
     # Next step: simulate the data with these params
-    simulated_data = initial_sim_fit.show_current_best_fit(my_time)
+    simulated_data = initial_sim_fit.calculate_current_best_fit(my_time)
 
     plot_y_and_y_hat(y_real=my_data, t_real=my_time,
                      model_fit=simulated_data)
@@ -96,7 +95,7 @@ def thickening_thinning(
     # optimal_fit = initial_sim_fit.fit(method='differential_evolution')
     optimal_fit = initial_sim_fit.thickening_thinning(nr_rounds=3)
 
-    predicted_values = initial_sim_fit.show_current_best_fit(my_time)
+    predicted_values = initial_sim_fit.calculate_current_best_fit(my_time)
 
     plot_y_and_y_hat(y_real=my_data, t_real=my_time,
                      model_fit=predicted_values)

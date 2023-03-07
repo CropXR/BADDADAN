@@ -20,8 +20,7 @@ class OdeFitter:
         self.has_been_fitted = False
         self.time_points = time_points
         self.params = Parameters()
-        # TODO how to handle guesses for initial params/constraints?
-        self.param_limit = 15
+        self.param_limit = 10
         for param_name in ode_model.get_param_names():
             min_value = -self.param_limit
             max_value = self.param_limit
@@ -59,7 +58,7 @@ class OdeFitter:
         loss = np.square(y_pred.y - y_real)
         return loss
 
-    def show_current_best_fit(self, t: np.ndarray) -> OdeResult:
+    def calculate_current_best_fit(self, t: np.ndarray) -> OdeResult:
         """Calculate the solution of the ODEs for the set of
          parameters that fitting found
          """
