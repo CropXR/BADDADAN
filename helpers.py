@@ -76,7 +76,7 @@ def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
     fig, (ax1, ax2) = plt.subplots(1, 2, sharey='all')
     # fig.set_size_inches(15, 8)
     # fig.suptitle('Comparison real vs estimated')
-    for i, row in enumerate(y_real):
+    for i, row in enumerate(y_real, start=1):
         ax1.plot(t_real, row, label=f'Module{i}')
     ax1.set_title('y')
     ax1.set_ylabel('Log2 gene expression')
