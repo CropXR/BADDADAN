@@ -34,7 +34,7 @@ class OdeFitter:
         self.init_condition_names = []
         for i, init_value in enumerate(measured_data[:, 0]):
             init_y_name = f'y{i}'
-            self.params.add(init_y_name, value=init_value, vary=False)
+            self.params.add(init_y_name, value=init_value, vary=True)
             self.init_condition_names.append(init_y_name)
 
         # Restrain non_heat_temp and heat_temp so they always sum to one

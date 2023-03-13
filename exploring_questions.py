@@ -36,10 +36,10 @@ def inference_with_thickened_ode_structure(ode_model: OdeModel):
         ("beta_2_3", 0.80666603),
         ("delta_3", 1.49367792),
         ("gamma_3", -1.62143388),
-        ("y0", 3.19831, False),
-        ("y1", 3.924275, False),
-        ("y2", 2.327565, False),
-        ("y3", 3.115082, False)
+        ("y0", 3.19831),
+        ("y1", 3.924275),
+        ("y2", 2.327565),
+        ("y3", 3.115082)
     )
     init_condition_names = ['y0', 'y1', 'y2', 'y3']
 
@@ -94,10 +94,10 @@ def inference_with_thinned_ode_structure(ode_model: OdeModel):
         ("beta_2_3", 0.80666603),
         ("delta_3", 1.49367792),
         ("gamma_3", -1.62143388),
-        ("y0", 3.19831, False),
-        ("y1", 3.924275, False),
-        ("y2", 2.327565, False),
-        ("y3", 3.115082, False)
+        ("y0", 3.19831),
+        ("y1", 3.924275),
+        ("y2", 2.327565),
+        ("y3", 3.115082)
     )
     init_condition_names = ['y0', 'y1', 'y2', 'y3']
 
