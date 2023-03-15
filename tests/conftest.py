@@ -46,7 +46,7 @@ def static_expression_two_temps_arabidopsis() -> ExpressionMatrix:
 
 
 @pytest.fixture
-def my_time_series_expressions_from_file(
+def my_time_series_expressions(
         my_expression_annotation: ExpressionArrayAnnotation) -> ExpressionMatrixTimeSeries:
     """Run this to generate the expression matrix from the raw original data
     and save a copy of the preprocessed file as a pickle. This can be used later
