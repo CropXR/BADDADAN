@@ -507,3 +507,45 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             lines.append(f'{cluster_id} {gene_name}\n')
         with out_path.open('w') as f:
             f.writelines(lines)
+
+    def get_correlation(self, module_index: int, tf_name: str,
+                        plot: bool = False, method: str = 'pearson') -> float:
+        """Calculate the correlation between mean expression of a module and a
+        transcription factor
+
+        :param module_index: the index of the module (e.g. 1)
+        :param tf_name: Name of transcription factor
+        :return: Pearson(?) correlation coefficient
+        """
+        # TODO eventually check if this can be moved higher up in the hierarchy
+        assert self.has_been_clustered, 'Cluster object first'
+        module_expressions = self.df.groupby('cluster_id').mean()
+        selected_module_expression = module_expressions.loc[module_index]
+
+        tf_expressions = self.df.loc[tf_name]
+        tf_expressions = tf_expressions.drop('cluster_id')
+        if plot:
+            fig, ax = plt.subplots()
+            ax.plot(selected_module_expression.to_numpy(),
+                    tf_expressions.to_numpy(), 'o')
+            ax.set_xlabel(f'Module {module_index} expression')
+            ax.set_ylabel(f'{tf_name} expression')
+            plt.show()
+        return tf_expressions.corr(selected_module_expression, method=method)
+
+    def check_if_tfs_created_by_module(self, my_grn: ModuleRegulatoryNetwork,
+                                       do_plotting: bool = False):
+        """Check if TFs are 'created' by their module.
+
+        To do this, we verify that the mean expression of the module is
+        positively correlated with the transcription factor it produces.
+        """
+        debug_corrs = []
+        all_module_tf_pairs = my_grn.get_tfs_and_their_producing_module()
+        for module, tf in all_module_tf_pairs:
+            corr = self.get_correlation(module, tf, do_plotting)
+            assert corr > .1, f'HUH?! Module {module} is not positively correlated ' \
+                              f'with the TF ({tf}) it produces'
+            debug_corrs.append(corr)
+        return True
+

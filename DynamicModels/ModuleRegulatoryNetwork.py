@@ -11,7 +11,7 @@ from DynamicModels.OdeModel import OdeModel
 
 class ModuleRegulatoryNetwork:
     # Standard prefixes
-    tf_prefix = 'TF'
+    tf_prefix = 'TF_'
     module_prefix = 'MODULE'
 
     # Descriptors used in graph to describe function of edge
@@ -23,8 +23,7 @@ class ModuleRegulatoryNetwork:
     def __init__(self, graph: nx.DiGraph):
         self.graph = graph
 
-    def plot_network(self, node_color_map: list = None,
-                     draw_func: Callable = nx.draw_kamada_kawai,
+    def plot_network(self, draw_func: Callable = nx.draw_kamada_kawai,
                      out_path: Path = None, with_labels=True):
         """Plot network using matplotlib."""
 
@@ -74,8 +73,8 @@ class ModuleRegulatoryNetwork:
         """
         # TODO implement top ranks here?
         df = pd.read_csv(in_path, sep='\t')
-        df['target'] = 'MODULE' + df['GeneSet'].astype(str)
-        df['regulator_with_prefix'] = 'TF_' + df['Regulator'].astype(str)
+        df['target'] = cls.module_prefix + df['GeneSet'].astype(str)
+        df['regulator_with_prefix'] = cls.tf_prefix + df['Regulator'].astype(str)
         df['origin'] = cls.id_of_binding
         my_graph = nx.from_pandas_edgelist(df, source='regulator_with_prefix',
                                           target='target',
@@ -189,4 +188,26 @@ class ModuleRegulatoryNetwork:
                 non_binding_tfs.append(tf_name)
         # Remove them
         self.graph.remove_nodes_from(non_binding_tfs)
+
+    def get_tfs_and_their_producing_module(self) -> list[tuple[int, str]]:
+        """Get pairs of module -> transcription factor.
+
+        These pairs can be used to verify that modules are positively
+        correlated with the products they produce - (as you would expect).
+
+        :returns: List of tuples. Each tuple contains a module index (as int)
+        and a tf that it produces (as str).
+        """
+        out_list = []
+        for module_name, tf_name, origin in self.graph.edges(data='origin'):
+            if origin == 'transcribed_by':
+                # Remove the module and tf prefix
+                module_without_prefix = module_name.removeprefix(self.module_prefix)
+                module_without_prefix = int(module_without_prefix)
+                tf_name_without_prefix = tf_name.removeprefix(self.tf_prefix)
+
+                out_list.append(
+                    (module_without_prefix, tf_name_without_prefix)
+                )
+        return out_list
 
