@@ -9,7 +9,7 @@ import pandas as pd
 from scipy.integrate import solve_ivp
 from scipy.optimize import differential_evolution
 from scipy.optimize import minimize as scipy_minimize
-from lmfit import minimize as lmfit_minimize
+from lmfit import minimize as lmfit_minimize, Parameters
 
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
@@ -115,19 +115,16 @@ def ODE_generator(a_graph):
     return module_formulas, parameters, variables, constants
 
 
-def calculate_ODEs_outcome(t, y0, variable_names, params_dict, formulas,
+def calculate_ODEs_outcome(t, y0, variable_names, params: Parameters, formulas,
                            constants):
-    '''
-    Returns the value for the modules differential expression
+    """Returns the value for the modules differential expression
     given a set of parameters
 
     To use eval it is needed to provide a dictionary with the arguments necesary to evaluate
     the string. Here the variable values (e.g. initial conditions) and parameter values are
     used to evaluate every formula.
-    '''
-
+    """
     def time_to_heatstress(t: float):
-
         if t < 3:  # Hours
             temp = 1.
         else:
@@ -137,27 +134,12 @@ def calculate_ODEs_outcome(t, y0, variable_names, params_dict, formulas,
     constants_dict = dict(zip(constants, time_to_heatstress(t)))
 
     # assign initial conditions to be evaluated
-    variable_dict = dict \
-        (zip(variable_names, y0))
+    variable_dict = dict(zip(variable_names, y0))
 
-    local_dict = variable_dict | params_dict | constants_dict  # Merge dictionaries to evaluate
+    # Merge dictionaries to evaluate
+    local_dict = variable_dict | constants_dict | params.valuesdict()
 
     return [eval(formulas[formula], {}, local_dict) for formula in formulas]
-
-
-def num_solve_ODE(outcomes_function, y0, time_span, params_dict, formulas,
-                  variable_names, constants, t_eval=None):
-    """Solve the ODE numerically given parameter values
-
-    Simply use a fancy euler's method to calculate y given t:
-    i.e. y = y0 + epsilon*dy kind of thing
-    (notice that in the linear settings analytic solution is easily computable!)
-    """
-    return solve_ivp(fun=outcomes_function,
-                     t_span=time_span,
-                     y0=y0,
-                     t_eval=t_eval,
-                     args=(variable_names, params_dict, formulas, constants))
 
 
 def graph_preprocessing(in_path: Path) -> nx.DiGraph:
@@ -193,100 +175,99 @@ def graph_preprocessing(in_path: Path) -> nx.DiGraph:
     return my_graph_class.graph
 
 
-def calculate_MSE(params, param_names, variable_names, formulas,
-                  constants, y, time_points):
-    param_dict = dict(
-        zip(param_names, params))  # Notice this is not random anymore!
-
-    solution = num_solve_ODE(outcomes_function=calculate_ODEs_outcome,
-                             y0=y[:, 0],
-                             time_span=[time_points[0], time_points[-1]],
-                             t_eval=time_points,
-                             variable_names=variable_names,
-                             params_dict=param_dict,
-                             formulas=formulas,
-                             constants=constants)
+def calculate_MSE(params, variable_names, formulas, constants, y, time_points):
+    solution = solve_ivp(fun=calculate_ODEs_outcome,
+                         t_span=(time_points[0], time_points[-1]),
+                         y0=y[:, 0],
+                         t_eval=time_points,
+                         args=(variable_names,
+                               params,
+                               formulas,
+                               constants))
 
     assert solution.success, f"The solver broke down: {solution.message}"
     y_hat = solution.y
 
     # y = average_module_expression.to_numpy()
     mse = np.mean((y - y_hat) ** 2)
+    # mse = (y - y_hat) ** 2
     logging.debug(f'{mse=}')
-
+    # Prevent function from returning infinity
+    if mse < -1e200:
+        mse = -1e200
+    elif mse > 1e200:
+        mse = 1e200
     return mse
 
 
-def solve_ODE(y, time_points, in_graph, loadsatime=False):
-    formulas, parameters, variables, constants = ODE_generator(in_graph)
+def fit_ode(y, time_points, in_graph, loadsatime=False):
+    formulas, parameter_names, variables, constants = ODE_generator(in_graph)
     # Currently hardcoded
-    bounds = [  # Betas
-        (-10, 10), (-10, 10),
-        (-10, 10), (-10, 10),
-        (-10, 10),
-        # In order for this to make sense the order of the parameters is KEY!
-        # Decay
-        (0, 10), (0, 10),
-        (0, 10), (0, 10),
-        # Temp growth
-        (-10, 10), (-10, 10),
-        (-10, 10), (-10, 10), ]
-    assert len(bounds) == len(
-        parameters), "Assign one upper and lower bound for each parameter"
+    params = Parameters()
+    for param_name in parameter_names:
+        lower_lim = 0 if 'delta' in param_name else -10
+        params.add(name=param_name, value=np.random.rand(),
+                   min=lower_lim, max=10)
+    # bounds = [  # Betas
+    #     (-10, 10), (-10, 10),
+    #     (-10, 10), (-10, 10),
+    #     (-10, 10),
+    #     # In order for this to make sense the order of the parameter_names is KEY!
+    #     # Decay
+    #     (0, 10), (0, 10),
+    #     (0, 10), (0, 10),
+    #     # Temp growth
+    #     (-10, 10), (-10, 10),
+    #     (-10, 10), (-10, 10), ]
 
-    optimize_result = differential_evolution(func=calculate_MSE,
-                                             bounds=bounds,
-                                             args=(
-                                                 parameters, variables,
-                                                 formulas,
-                                                 constants, y, time_points),
-                                             # x0=np.random.randn(len(parameters)),
-                                             callback=de_print_fun,
-                                             polish=False,
-                                             popsize=8,
-                                             workers=8,
-                                             maxiter=10)
-    # optimize_result = lmfit_minimize(calculate_MSE,
-    #                                  params=...,
-    #
-    #                                  kws={'t': self.time_points,
-    #                                       'y_real': self.measured_data,
-    #                                       't_start': t_start,
-    #                                       't_end': t_end},
-    #                                  args=(parameters, variables, formulas,
-    #                                        constants, y, time_points),
-    #                                  method='differential_evolution',
-    #                                  fit_kws={"callback": de_print_fun,
-    #                                           "polish": False,
-    #                                           "popsize": 8,
-    #                                           "workers": 8,
-    #                                           "maxiter": 10}
-    #                                  )
-    # optimize_result = scipy_minimize(fun=calculate_MSE,
-    #                            x0=np.random.randn(len(parameters)),
-    #                            args=(parameters, variables, formulas,
-    #                                  constants, y, time_points),
-    #                            bounds=bounds,
-    #                            method='L-BFGS-B'
-    #                            )
+    # optimize_result = differential_evolution(func=calculate_MSE,
+    #                                          bounds=bounds,
+    #                                          args=(
+    #                                              parameter_names, variables,
+    #                                              formulas,
+    #                                              constants, y, time_points),
+    #                                          # x0=np.random.randn(len(parameter_names)),
+    #                                          callback=de_print_fun,
+    #                                          polish=False,
+    #                                          popsize=8,
+    #                                          workers=8,
+    #                                          maxiter=10)
+    optimize_result = lmfit_minimize(calculate_MSE,
+                                     params=params,
+                                     kws={'variable_names': variables,
+                                          'formulas': formulas,
+                                          'constants': constants,
+                                          'y': y,
+                                          'time_points': time_points
+                                          },
+                                     method='lbfgsb',
+                                     # nan_policy='omit',
+                                     # method='differential_evolution',
+                                     # fit_kws={"callback": de_print_fun,
+                                     #          "polish": False,
+                                     #          "popsize": 4,
+                                     #          "workers": 4,
+                                     #          "maxiter": 2}
+                                     )
+
     # assert optimize_result.success, f'Optimisation failed: {optimize_result.message}'
     logging.info('========================')
     logging.info(optimize_result)
     logging.info('========================')
     logging.info('========================')
 
-    param_dict = dict(zip(parameters, optimize_result.x))
+    best_params = optimize_result.params
     og_time = time_points
     if loadsatime:
         time_points = np.linspace(0, 24, 50)
-    ode_result = num_solve_ODE(outcomes_function=calculate_ODEs_outcome,
-                               y0=y[:, 0],
-                               time_span=[time_points[0], time_points[-1]],
-                               t_eval=time_points,
-                               variable_names=variables,
-                               params_dict=param_dict,
-                               formulas=formulas,
-                               constants=constants)
+    ode_result = solve_ivp(fun=calculate_ODEs_outcome,
+                           y0=y[:, 0],
+                           t_span=(time_points[0], time_points[-1]),
+                           t_eval=time_points,
+                           args=(variables,
+                                 best_params,
+                                 formulas,
+                                 constants))
 
     fig, (ax1, ax2) = plt.subplots(1, 2)
     # fig.set_size_inches(15, 8)
@@ -317,15 +298,16 @@ def retrying_from_scratch(in_path: Path,
     n_clusters = 4
     measured_expressions.keep_only_shoot()
     measured_expressions.merge_biological_samples()
-    measured_expressions.keep_only_de_genes(std_cutoff=1.5)
+    measured_expressions.keep_genes_above_deviation_cutoff(cutoff=1.5)
+    # measured_expressions.keep_only_de_genes(std_cutoff=173)
     col_names, average_module_expression = \
         measured_expressions.get_clusters_expressions_with_time(n_clusters)
 
-    optim_result, ode_result = solve_ODE(average_module_expression, col_names,
-                                         my_graph, loadsatime=True)
+    optim_result, ode_result = fit_ode(average_module_expression, col_names,
+                                       my_graph, loadsatime=True)
 
-    second_fit_result, fitting_to_sim_values = solve_ODE(ode_result.y,
-                                                         ode_result.t, my_graph)
+    second_fit_result, fitting_to_sim_values = fit_ode(ode_result.y,
+                                                       ode_result.t, my_graph)
     logging.info('Original params')
     logging.info(optim_result.x)
     logging.info('Guessed params')
