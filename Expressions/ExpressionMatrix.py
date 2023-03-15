@@ -14,6 +14,7 @@ from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
 import qnorm
 
+from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628
 
@@ -30,6 +31,8 @@ class ExpressionMatrix:
                    biological samples
         """
         self.df = df
+        # Drop duplicates
+        self.df = self.df[~self.df.index.duplicated(keep='first')]
         self.has_been_clustered = False
 
     def __repr__(self):
@@ -176,7 +179,6 @@ class ExpressionMatrix:
         variation = self._calculate_gene_variation(method)
         subset_genes = variation.sort_values(ascending=False).head(n_max)
         self.df = self.df.loc[subset_genes.index]
-
 
     def quantile_normalize(self, ref_mappings: ExpressionMatrix | None = None):
         if ref_mappings is None:
@@ -411,7 +413,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         expression_df['cluster'] = expression_df.ID_REF.apply(lambda x: self.get_cluster_per_gene()[x])
         expression_df['time'] = expression_df['time'] / np.timedelta64(1, 'h')
         return expression_df
-
 
     def get_lpan_input_modules(self, n_clusters: int) -> pd.DataFrame:
         """For gene modules, get output that can be used to input into the Rscript LPAN workflow.
