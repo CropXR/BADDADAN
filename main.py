@@ -19,8 +19,8 @@ logging.basicConfig(level=logging.INFO)
 
 def annotate_microarray_expression(
         expression_path: Path = typer.Option(
-            ..., help='Path to geo expression file. Works on .soft format, '
-                      'others have not been tested.'),
+            ..., help='Path to geo expression file. Works on .soft and .csv '
+                      'format. Others have not been tested.'),
         output_path: Path = typer.Option(
             ..., help='Path to filename where .csv of annotated expression'
                       ' data will be saved.'),
@@ -29,15 +29,28 @@ def annotate_microarray_expression(
             help='Path to annotation of micro array. '
                  'Arabidopsis ATH1 annotation is provided by default.'),
         log2_transform: bool = typer.Option(
-            False, help='Perform log2 transformation on expression data.')
+            False, help='Perform log2 transformation on expression data.'),
+        csv_separator: str = typer.Option(
+            '\t', help='Seperator to use when splitting csv columns')
 ):
     """From a geo expression file and annotation file. Generate output file
     where microarray expressions use gene labels (e.g. AT1G65110) instead of
     the default affymetrix probe_ids (e.g. 263139_at)"""
     expression_annotation = ExpressionArrayAnnotation(annotation_path)
-    expression_matrix = ExpressionMatrix.from_geo_file(expression_path,
-                                                       expression_annotation,
-                                                       log2_transform=log2_transform)
+    match expression_path.suffix:
+        case '.soft':
+            logging.info('Detected .soft file')
+            expression_matrix = ExpressionMatrix.from_geo_file(expression_path,
+                                                               expression_annotation,
+                                                               log2_transform=log2_transform)
+        case '.csv':
+            logging.info('Detected .csv file')
+            expression_matrix = ExpressionMatrix.from_csv(expression_path,
+                                                          expression_annotation,
+                                                          log2_transform,
+                                                          csv_separator)
+        case _:
+            raise NotImplementedError('Cannot parse file format that is currently provided')
     expression_matrix.df.to_csv(output_path)
     logging.info(f'Successfullly saved output to {output_path}')
 
