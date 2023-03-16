@@ -3,8 +3,12 @@ Contains classes that contain matrices of gene expression levels.
 """
 from __future__ import annotations
 import logging
+import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Literal
+import re
+import subprocess
 
 import numpy as np
 import pandas as pd
@@ -16,7 +20,7 @@ import qnorm
 
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
-from helpers import get_info_from_gse5628
+from helpers import get_info_from_gse5628, standardize
 
 
 class ExpressionMatrix:
@@ -208,6 +212,33 @@ class ExpressionMatrix:
         assert type(self) != ExpressionMatrixTest, 'Is already an ExpressionMatrixTest object. Conversion is pointless.'
         return ExpressionMatrixTest(self.df)
 
+    def save_expression_to_txt(self, file_name: Path, do_standardize=True):
+        """Save the expression values to txt.
+
+        File is formatted so the expressions
+        can be analysed by FLAME (https://code.google.com/archive/p/flame-clustering/source/default/source).
+        I.e. the first row describes the number of rows and columns, and
+        items in every row are seperated by a space.
+
+        :parameter file_name: Path on which to save the txt output file
+        """
+        nr_rows, nr_cols = self.df.shape
+        first_line = f'{nr_rows} {nr_cols}\n'
+
+        with file_name.open('w+') as f:
+            f.write(first_line)
+
+        df = self.df.copy()
+        # Save all the gene names
+        gene_names_with_index = df.index.to_series(
+            index=[i for i in range(len(df))])
+
+        # Standardize (if needed) and save the dataframe
+        normalized_df = standardize(df, axis=1) if do_standardize else df
+        normalized_df.to_csv(file_name, sep=' ', header=False, index=False,
+                             mode='a')
+        return gene_names_with_index.to_dict()
+
 
 class ExpressionMatrixTraining(ExpressionMatrix):
     """Can be created from ExpressionMatrix by command like:
@@ -314,6 +345,40 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         # n_cluster+1 because numpy upper limit excludes that integer
         self.df['cluster_id'] = np.random.randint(1, n_cluster+1,
                                                   len(self.df))
+        self.has_been_clustered = True
+
+    def do_flame_clustering(self, flame_bin_path: Path, do_standardize=True):
+        """
+        Parts taken from https://github.com/saeyslab/moduledetection-evaluation/blob/master/lib/methods/clustering.py
+        :param flame_bin_path:
+        :return:
+        """
+        assert not self.has_been_clustered
+        with TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            temp_expression_path = tmpdir / 'expression.txt'
+            gene_dict = self.save_expression_to_txt(temp_expression_path,
+                                                    do_standardize)
+            process = subprocess.run([str(flame_bin_path), str(temp_expression_path)],
+                                     shell=False, check=True,
+                                     capture_output=True, text=True)
+            output = process.stdout
+
+        gene_to_cluster = {}
+        for row in output.split("\n\n"):
+            if row.startswith("Cluster") and "outliers" not in row:
+                all_numbers_in_string = [int(i) for i in re.findall(r'\d+', row)]
+                module_id = all_numbers_in_string.pop(0)
+                module_size = all_numbers_in_string.pop(0)
+                logging.info(f"{module_id}: size {module_size}")
+                for gene_idx in all_numbers_in_string:
+                    gene_name = gene_dict[gene_idx]
+                    gene_to_cluster[gene_name] = module_id
+                    # TODO handle fuzzy membership here
+                assert list(gene_to_cluster.values()).count(module_id) == module_size
+
+        cluster_labels = self.df.index.map(gene_to_cluster)
+        self.df['cluster_id'] = cluster_labels
         self.has_been_clustered = True
 
 
