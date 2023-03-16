@@ -14,25 +14,32 @@ from predict_from_static_expressions import plot_pred_vs_real
 
 # pd.options.display.width = 0
 # GEOparse.logger.set_verbosity('INFO')
-# logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 
 
-def stub_main(
-        expression_path: Path = typer.Option(...,
-                                             help='Path to geo expression file'),
-        annotation_path: Path = typer.Option(...,
-                                             help='Path to annotation of micro array'),
-        n_cluster: int = typer.Option(5,
-                                      help='Number of gene clusters to '
-                                           'extract'),
+def annotate_microarray_expression(
+        expression_path: Path = typer.Option(
+            ..., help='Path to geo expression file. Works on .soft format, '
+                      'others have not been tested.'),
+        output_path: Path = typer.Option(
+            ..., help='Path to filename where .csv of annotated expression'
+                      ' data will be saved.'),
+        annotation_path: Path = typer.Option(
+            Path(f'{__file__}/../data/resources/affy_ATH1_array_elements-2010-12-20.txt').resolve(),
+            help='Path to annotation of micro array. '
+                 'Arabidopsis ATH1 annotation is provided by default.'),
+        log2_transform: bool = typer.Option(
+            False, help='Perform log2 transformation on expression data.')
 ):
-    """Deprecated, might reuse this at some point though"""
+    """From a geo expression file and annotation file. Generate output file
+    where microarray expressions use gene labels (e.g. AT1G65110) instead of
+    the default affymetrix probe_ids (e.g. 263139_at)"""
     expression_annotation = ExpressionArrayAnnotation(annotation_path)
     expression_matrix = ExpressionMatrix.from_geo_file(expression_path,
-                                                       expression_annotation)
-    expression_matrix = expression_matrix.keep_only_wt_samples()
-    plot_pred_vs_real(expression_matrix, n_cluster)
-    # do_cv_for_nclust(expression_matrix)
+                                                       expression_annotation,
+                                                       log2_transform=log2_transform)
+    expression_matrix.df.to_csv(output_path)
+    logging.info(f'Successfullly saved output to {output_path}')
 
 
 def fit_ode_to_data(
@@ -104,4 +111,4 @@ def thickening_thinning(
 
 
 if __name__ == "__main__":
-    typer.run(stub_main)
+    typer.run(annotate_microarray_expression)
