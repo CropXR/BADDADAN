@@ -11,6 +11,19 @@ from sklearn.model_selection import RepeatedStratifiedKFold
 from scipy.interpolate import make_interp_spline, BSpline, PchipInterpolator
 
 
+def standardize(df: pd.DataFrame, axis=0) -> pd.DataFrame:
+    """Normalize gene expression data
+
+    Based on https://github.com/saeyslab/moduledetection-evaluation/blob/master/lib/methods/clustering.py
+    """
+    # I assume this normalizes per sample in the original implementation?
+    if axis == 0:
+        return (df - df.mean()) / df.std()
+    elif axis == 1:
+        transposed_df = df.T
+        row_normalised = (transposed_df - transposed_df.mean()) / (transposed_df.std())
+        return row_normalised.T
+
 def split_based_on_temp(expression_matrix,
                         n_splits: int = 3,
                         n_repeats: int = 3):
