@@ -277,7 +277,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
 
     def save_cluster_gene_edge_list(self, out_file_path: Path,
                                     tf_filter_list: None | list[str] = None):
-        """Save edge list that maps transcription factors to their gene"""
+        """Save edge list that maps transcription factors to their module"""
         if tf_filter_list is None:
             # Is this realistically ever used without tf_filter_
             out_df = self.df
@@ -514,6 +514,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """
         tf_annotation_df = pd.read_csv(path_to_tf_file, sep='\t')
         is_tf = self.df.index.isin(tf_annotation_df.Gene_ID)
+        assert is_tf.any(), 'No transcription factors in the modules. ' \
+                            'Consider increasing the number of genes that you consider'
         tfs_df, non_tfs_df = self.df[is_tf], self.df[~is_tf]
 
         return (ExpressionMatrixTimeSeries(non_tfs_df),
