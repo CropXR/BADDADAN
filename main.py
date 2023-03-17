@@ -35,7 +35,8 @@ def annotate_microarray_expression(
 ):
     """From a geo expression file and annotation file. Generate output file
     where microarray expressions use gene labels (e.g. AT1G65110) instead of
-    the default affymetrix probe_ids (e.g. 263139_at)"""
+    the default affymetrix probe_ids (e.g. 263139_at)
+    """
     expression_annotation = ExpressionArrayAnnotation(annotation_path)
     match expression_path.suffix:
         case '.soft':
