@@ -54,7 +54,7 @@ def my_time_series_expressions(
     time_series_expressions = Path(
         '../data/time_series_datasets/GSE5628_family.soft')
     expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
-        time_series_expressions, my_expression_annotation, log2_transform=True)
+        time_series_expressions, my_expression_annotation, log2_transform=False)
     with open('../data/time_series_datasets/GSE5628_family_ExpressionMatrixTime.pickle', 'wb') as f:
         pickle.dump(expr_mat_time, f)
     return expr_mat_time
