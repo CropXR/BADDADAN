@@ -1,39 +1,53 @@
 from __future__ import annotations
 
+import logging
+from enum import Enum
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Generator, Literal
 
 import networkx as nx
 import pandas as pd
 from matplotlib import pyplot as plt
-from DynamicModels.OdeModel import OdeModel
+import seaborn as sns
 
+from DynamicModels.OdeModel import OdeModel
+from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
+
+
+class EdgeRelation(Enum):
+    """Describes what the relationship between nodes means in the graph.
+
+    Relationship can be that a TF binds to a module, that a modules produces
+    a TF, or that a module regulates another module.
+    """
+    BINDS_TO = 'binds_to'
+    TRANSCRIBED_BY = 'transcribed_by'
+    REGULATES = 'regulates'
+    UPREGULATES = 'upregulates'
+    DOWNREGULATES = 'downregulates'
+    UP_OR_DOWN = 'unclear_regulation_direction'
 
 class ModuleRegulatoryNetwork:
     # Standard prefixes
     tf_prefix = 'TF_'
     module_prefix = 'MODULE'
 
-    # Descriptors used in graph to describe function of edge
-    id_of_binding = 'binds_to'
-    id_of_transcription = 'transcribed_by'
-    # This is used for module-module interactions
-    id_of_regulation = 'regulates'
-
     def __init__(self, graph: nx.DiGraph):
         self.graph = graph
 
-    def plot_network(self, draw_func: Callable = nx.draw_kamada_kawai,
+    def plot_network(self, draw_func: Callable = nx.draw,
                      out_path: Path = None, with_labels=True):
         """Plot network using matplotlib."""
 
         node_color_map = ['blue' if (node in self.get_tfs()) else 'orange'
                           for node in self.graph.nodes]
 
-        # TODO convert to an ENUM at some point?
-        edge_mapping_dict = {self.id_of_regulation: 'green',
-                             self.id_of_binding: 'brown',
-                             self.id_of_transcription: 'black'}
+        edge_mapping_dict = {EdgeRelation.REGULATES: 'green',
+                             EdgeRelation.BINDS_TO: 'brown',
+                             EdgeRelation.TRANSCRIBED_BY: 'black',
+                             EdgeRelation.UPREGULATES: 'green',
+                             EdgeRelation.DOWNREGULATES: 'red',
+                             EdgeRelation.UP_OR_DOWN: 'gray'}
 
         edge_color_map = [edge_mapping_dict[origin] for _, _, origin
                           in self.graph.edges.data('origin')]
@@ -46,7 +60,9 @@ class ModuleRegulatoryNetwork:
             plt.show()
 
     @classmethod
-    def from_lpan_edge_csv(cls, lpan_file_path: Path, top_rank: int = None):
+    def from_lpan_edge_csv(
+            cls, lpan_file_path: Path, top_rank: int = None
+    ) -> ModuleRegulatoryNetwork:
         """Constructor to create object from lpan edge csv.
 
         :param lpan_file_path: Path to csv output by LPAN.
@@ -57,7 +73,7 @@ class ModuleRegulatoryNetwork:
         some_df = pd.read_csv(lpan_file_path)
         if top_rank:
             some_df = some_df[some_df['rank'] < top_rank]
-        some_df['origin'] = cls.id_of_binding
+        some_df['origin'] = EdgeRelation.BINDS_TO
         a_graph = nx.from_pandas_edgelist(some_df, source='regulator',
                                           target='target',
                                           edge_attr='origin',
@@ -65,17 +81,17 @@ class ModuleRegulatoryNetwork:
         return cls(a_graph)
 
     @classmethod
-    def from_tf2_tsv(cls, in_path: Path):
+    def from_tf2_tsv(cls, in_path: Path) -> ModuleRegulatoryNetwork:
         """Create object from output of TF2Network file
 
         :param in_path: Path to .tsv output file of tf2network
-        :return:
+        :return: Moduleregulatory network that contains TFs and modules
         """
         # TODO implement top ranks here?
         df = pd.read_csv(in_path, sep='\t')
         df['target'] = cls.module_prefix + df['GeneSet'].astype(str)
         df['regulator_with_prefix'] = cls.tf_prefix + df['Regulator'].astype(str)
-        df['origin'] = cls.id_of_binding
+        df['origin'] = EdgeRelation.BINDS_TO
         my_graph = nx.from_pandas_edgelist(df, source='regulator_with_prefix',
                                           target='target',
                                           edge_attr='origin',
@@ -92,7 +108,7 @@ class ModuleRegulatoryNetwork:
         # Invert connections, because <TF:is transcribed by:Module>
         original_connections = original_connections.reverse()
         self.graph.add_edges_from(original_connections.edges,
-                                  origin=self.id_of_transcription)
+                                  origin=EdgeRelation.TRANSCRIBED_BY)
 
     def clean_up_network(self) -> None:
         """Remove all non-binding TFs and unused modules."""
@@ -132,12 +148,13 @@ class ModuleRegulatoryNetwork:
         TF bind to that module, because that is kinda senseless and probably
         a false-positive.
         """
-        bidirectional_edges = [(u, v, data) for (u, v, data) in self.graph.edges(data=True)
+        bidirectional_edges = [(u, v, data) for (u, v, data)
+                               in self.graph.edges(data=True)
                                if u in self.graph[v]]
 
         # Remove binds-to edges
         edges_to_be_removed = [(u, v) for (u, v, data) in bidirectional_edges
-                               if data['origin'] == self.id_of_binding]
+                               if data['origin'] == EdgeRelation.BINDS_TO]
 
         self.graph.remove_edges_from(edges_to_be_removed)
 
@@ -151,11 +168,17 @@ class ModuleRegulatoryNetwork:
             # List contains only one item, extract it.
             original_module = original_module[0]
             target_modules = list(self.graph.successors(tf))
-            # Potentially can make this add connections from multiple modules. But not implemented now.
-            new_edges = [(original_module, target_module) for target_module in target_modules]
-            edges_to_add.extend(new_edges)
+            if len(target_modules) > 1:
+                raise NotImplementedError("Currently TFs can only bind to "
+                                          "one module. If you get this error, "
+                                          "it's time to implement new "
+                                          "functionality.")
+            target_module = target_modules[0]
+            regulation_type = self.graph.edges[tf, target_module]['origin']
+            new_edge = (original_module, target_module, {'origin': regulation_type})
+            edges_to_add.append(new_edge)
         out_graph = nx.DiGraph()
-        out_graph.add_edges_from(edges_to_add, origin=self.id_of_regulation)
+        out_graph.add_edges_from(edges_to_add)
         return ModuleRegulatoryNetwork(out_graph)
 
     def get_modules(self) -> list:
@@ -168,10 +191,14 @@ class ModuleRegulatoryNetwork:
 
     def convert_to_ode(self) -> OdeModel:
         """Convert the graph to an object that contains all equations
-        to perform fitting of the ODEs. This can only be called after .get_module_module_network() has been executed.
+        to perform fitting of the ODEs. This can only be called
+        after .get_module_module_network() has been executed.
         """
         # Ensure that network is ModuleModule network
-        assert all(self.id_of_regulation in edge for edge in self.graph.edges(data='origin')), 'Make sure you have removed all TFs from regulatory network and converted it to Module-Module network'
+        assert all(EdgeRelation.REGULATES in edge
+                   for edge in self.graph.edges(data='origin')
+                   ), ('Make sure you have removed all TFs from regulatory '
+                      'network and converted it to Module-Module network')
         # Todo keep names of edges involved here in some way?
         ode_out = OdeModel()
         ode_out.construct_formula_per_module(self.graph)
@@ -189,25 +216,85 @@ class ModuleRegulatoryNetwork:
         # Remove them
         self.graph.remove_nodes_from(non_binding_tfs)
 
-    def get_tfs_and_their_producing_module(self) -> list[tuple[int, str]]:
-        """Get pairs of module -> transcription factor.
+    def get_filtered_module_tf_edges(
+            self, edge_filter_id: EdgeRelation
+    ) -> Generator[tuple[str, str]]:
+        """Get pairs of module and transcription factor.
 
+        Use edge_filter_id to filter the edges. If 'binds_to' is provided
+        as filter, you will get pairs of modules and the TFs that bind to them.
+        These can be used to infer if TFs up- or downregulate a module.
+
+        If 'transcribed_by' is provided as a filter, you will get pairs of
+        modules, and the transcripiton factor that they transcribe.
         These pairs can be used to verify that modules are positively
         correlated with the products they produce - (as you would expect).
 
-        :returns: List of tuples. Each tuple contains a module index (as int)
-        and a tf that it produces (as str).
+        :returns: Generator of tuples. If filtering for transcription,
+        the first item in the tuple is the module, the second is the TFs.
+        If filtering for binding, the first item in the tuple is the TF,
+        and the second is the module.
         """
-        out_list = []
-        for module_name, tf_name, origin in self.graph.edges(data='origin'):
-            if origin == 'transcribed_by':
-                # Remove the module and tf prefix
-                module_without_prefix = module_name.removeprefix(self.module_prefix)
-                module_without_prefix = int(module_without_prefix)
-                tf_name_without_prefix = tf_name.removeprefix(self.tf_prefix)
+        for node1, node2, origin in self.graph.edges(data='origin'):
+            if origin == edge_filter_id:
+                yield node1, node2
 
-                out_list.append(
-                    (module_without_prefix, tf_name_without_prefix)
-                )
-        return out_list
+    def check_if_tfs_created_by_module(self,
+                                       expressions: ExpressionMatrixTimeSeries,
+                                       do_plotting: bool = False):
+        """Check if TFs are 'created' by their module.
 
+        To do this, we verify that the mean expression of the module is
+        positively correlated with the transcription factor it produces.
+        """
+        debug_corrs = []
+        all_module_tf_pairs = self.get_filtered_module_tf_edges(
+            EdgeRelation.TRANSCRIBED_BY)
+        for module_name, tf_name in all_module_tf_pairs:
+            # Remove the prefixes from module and tf
+            module_without_prefix = module_name.removeprefix(self.module_prefix)
+            module_without_prefix = int(module_without_prefix)
+            tf_name_without_prefix = tf_name.removeprefix(self.tf_prefix)
+            corr = expressions.get_correlation(module_without_prefix,
+                                               tf_name_without_prefix, plot=False)
+            assert corr > .3, f'HUH?! Module {module_name} is not positively correlated ' \
+                              f'with the TF ({tf_name}) it produces'
+            debug_corrs.append(corr)
+        if do_plotting:
+            sns.boxplot(debug_corrs)
+        return True
+
+    def set_up_or_downregulation(self,
+                                 expressions: ExpressionMatrixTimeSeries,
+                                 threshold: float = .2):
+        """For each TF, find it out if up-/downregulates its target module.
+
+        This is done by looking at the correlation between the TF and the target
+        module. If high correlation, we assign upregulation. If low correlation,
+        we assign downregulation.
+
+        :param expressions: ExpressionMatrix which contains expressions of genes
+        :param threshold: When to assign up/down regulation. If below threshold,
+        connection is assigned the UP_OR_DOWN label.
+        """
+        edge_attr_dict = {}
+        all_tfs_and_binding_sites = self.get_filtered_module_tf_edges(
+            edge_filter_id=EdgeRelation.BINDS_TO)
+        for tf_name, module_name in all_tfs_and_binding_sites:
+            # Remove the module and tf prefix
+            module_without_prefix = module_name.removeprefix(
+                self.module_prefix)
+            module_without_prefix = int(module_without_prefix)
+            tf_name_without_prefix = tf_name.removeprefix(self.tf_prefix)
+            # See how the tf and module correlate
+            corr = expressions.get_correlation(module_without_prefix,
+                                               tf_name_without_prefix, plot=False)
+            logging.debug(corr)
+            if corr < -threshold:
+                direction = EdgeRelation.DOWNREGULATES
+            elif corr > threshold:
+                direction = EdgeRelation.UPREGULATES
+            else:
+                direction = EdgeRelation.UP_OR_DOWN
+            edge_attr_dict[(tf_name, module_name)] = {'origin': direction}
+        nx.set_edge_attributes(self.graph, edge_attr_dict)
