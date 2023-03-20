@@ -97,13 +97,17 @@ def my_tf2_input(my_time_series_expressions):
     http://bioinformatics.psb.ugent.be/webtools/TF2Network/
     to get putative regulators per cluster
     """
-    cutoff = 1.5
     my_time_series_expressions.keep_only_shoot()
     my_time_series_expressions.merge_biological_samples()
-    my_time_series_expressions.keep_genes_above_deviation_cutoff(cutoff=cutoff)
+    my_time_series_expressions.keep_n_most_deviating_genes(1000, 'mad')
     my_time_series_expressions.do_hierachical_clustering(4)
+    # my_time_series_expressions.plot_clusters_over_time()
     my_time_series_expressions.write_tf2_input_file(
-        Path(f'../data/time_series_datasets/tf2network_approach/genes_per_cluster_cutoff{cutoff}.txt'))
+        Path(f'../data/time_series_datasets/tf2network_approach/01_tf2network_input_1000_highest_mad_genes.txt'))
+    my_time_series_expressions.save_tf_produced_by_module_file(
+        Path('../data/time_series_datasets/tf2network_approach/02_gene_to_module.csv'),
+        Path('../data/resources/Ath_TF_list.txt')
+    )
     # my_time_series_expressions.plot_clusters_over_time()
     return my_time_series_expressions
 
@@ -114,15 +118,16 @@ def my_tf2_ode(my_tf2_input: ExpressionMatrixTimeSeries):
     the direct export button on the main page)
     """
     my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(
-        Path('../data/time_series_datasets/tf2network_approach/tf2network_output_stdev_cutoff_1_5.tsv'))
+        Path('../data/time_series_datasets/tf2network_approach/03_tf2network_output.tsv'))
     my_grn.add_tf_module_mappings(
-        Path('../data/time_series_datasets/my_clustering_edgelist.csv'))
+        Path('../data/time_series_datasets/tf2network_approach/02_gene_to_module.csv'))
     my_grn.clean_up_network()
     # my_grn.plot_network(with_labels=True)
-    my_tf2_input.check_if_tfs_created_by_module(my_grn, do_plotting=False)
+    my_grn.check_if_tfs_created_by_module(my_tf2_input, do_plotting=False)
+    my_grn.set_up_or_downregulation(my_tf2_input)
     # my_tf2_input.get_correlation(2, 'AT1G18330')
     module_module = my_grn.get_module_module_network()
-    # module_module.plot_network(with_labels=False)
+    module_module.plot_network(with_labels=True)
     return module_module.convert_to_ode()
 
 @pytest.fixture

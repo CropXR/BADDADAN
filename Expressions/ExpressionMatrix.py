@@ -18,7 +18,6 @@ from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
 import qnorm
 
-from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628, standardize
 
@@ -157,7 +156,9 @@ class ExpressionMatrix:
         # Call the method
         return variation_method(axis=1)
 
-    def keep_genes_above_deviation_cutoff(self, cutoff: float = None, method: Literal['std', 'mad'] = 'std') -> None:
+    def keep_genes_above_deviation_cutoff(
+            self, cutoff: float = None, method: Literal['std', 'mad'] = 'std'
+    ) -> None:
         """Remove non-differentially expressed (de) genes.
 
         :param method: How to determine variation between samples:
@@ -275,17 +276,22 @@ class ExpressionMatrixTraining(ExpressionMatrix):
             return summary_df.pivot(index='sample', columns='cluster_id', values='expression')
         return summary_df
 
-    def save_cluster_gene_edge_list(self, out_file_path: Path,
-                                    tf_filter_list: None | list[str] = None):
-        """Save edge list that maps transcription factors to their module"""
-        if tf_filter_list is None:
-            # Is this realistically ever used without tf_filter_
-            out_df = self.df
-        else:
-            prefixed_index = self.tf_prefix + self.df.index.astype(str)
-            out_df = self.df[prefixed_index.isin(tf_filter_list)]
-            out_df.index = prefixed_index[prefixed_index.isin(tf_filter_list)]
-            out_df['cluster_id'] = self.module_prefix + out_df.cluster_id.astype(str)
+    def save_tf_produced_by_module_file(self, out_file_path: Path,
+                                        tf_list_path: Path):
+        """Save edge list that maps transcription factors to their module
+
+        :param out_file_path: Path to output csv file.
+        :param tf_list_path: Path to list of transcription factors. Must contain
+        a column called 'Gene_ID'.
+        """
+        # Get transcription factors
+        tf_df = pd.read_csv(tf_list_path, sep='\t')
+        tf_list = tf_df['Gene_ID'].to_list()
+        # Find which transcription factors are in the expressionmatrix
+        out_df = self.df[self.df.index.isin(tf_list)].copy()
+        # Add prefixes to modules and transcription factors
+        out_df.index = self.tf_prefix + out_df.index.astype(str)
+        out_df['cluster_id'] = self.module_prefix + out_df.cluster_id.astype(str)
         out_df.to_csv(out_file_path, sep=' ', columns=['cluster_id'],
                       header=False)
 
@@ -350,8 +356,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
     def do_flame_clustering(self, flame_bin_path: Path, do_standardize=True):
         """
         Parts taken from https://github.com/saeyslab/moduledetection-evaluation/blob/master/lib/methods/clustering.py
-        :param flame_bin_path:
-        :return:
+        :param flame_bin_path: Path to flame binary
         """
         assert not self.has_been_clustered
         with TemporaryDirectory() as tmpdir:
@@ -480,8 +485,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         return expression_df
 
     def get_lpan_input_modules(self, n_clusters: int) -> pd.DataFrame:
-        """For gene modules, get output that can be used to input into the Rscript LPAN workflow.
-        (https://github.com/LiLabAtVT/LPANetwork)
+        """For gene modules, get output that can be used to input into the
+        Rscript LPAN workflow. (https://github.com/LiLabAtVT/LPANetwork)
 
         :param n_clusters: Number of clusters.
         :return: Output that resembles that can be used for lpan.
@@ -583,7 +588,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
         :param module_index: the index of the module (e.g. 1)
         :param tf_name: Name of transcription factor
-        :return: Pearson(?) correlation coefficient
+        :return: Pearson correlation coefficient
         """
         # TODO eventually check if this can be moved higher up in the hierarchy
         assert self.has_been_clustered, 'Cluster object first'
@@ -601,19 +606,5 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             plt.show()
         return tf_expressions.corr(selected_module_expression, method=method)
 
-    def check_if_tfs_created_by_module(self, my_grn: ModuleRegulatoryNetwork,
-                                       do_plotting: bool = False):
-        """Check if TFs are 'created' by their module.
 
-        To do this, we verify that the mean expression of the module is
-        positively correlated with the transcription factor it produces.
-        """
-        debug_corrs = []
-        all_module_tf_pairs = my_grn.get_tfs_and_their_producing_module()
-        for module, tf in all_module_tf_pairs:
-            corr = self.get_correlation(module, tf, do_plotting)
-            assert corr > .1, f'HUH?! Module {module} is not positively correlated ' \
-                              f'with the TF ({tf}) it produces'
-            debug_corrs.append(corr)
-        return True
 
