@@ -1,23 +1,64 @@
+from __future__ import annotations
+
 import logging
 import random
-
 import networkx as nx
 import numpy as np
 from lmfit import Parameters
 from scipy.integrate._ivp.ivp import OdeResult, solve_ivp
 
-from DynamicModels.MyFormula import MyFormula
+from DynamicModels.ModuleRegulatoryNetwork import (ModuleRegulatoryNetwork,
+                                                   EdgeRelation)
+from DynamicModels.Formula import LinearFormula, NonLinearFormula
 
 
 class OdeModel:
     """Stores the ODEs for all modules. Can also be used to calculate next time steps."""
-    def __init__(self):
-        self.nr_params = 0
-        self.formula_per_module: list[MyFormula] = []
+
+    def __init__(self, formula_per_module: list[LinearFormula], is_nonlinear):
+        self.formula_per_module = formula_per_module
+        self.is_nonlinear = is_nonlinear
 
     def __repr__(self):
         return ('OdeModel:\n'
-                + '\n'.join([f'{formula}' for formula in self.formula_per_module]))
+                + '\n'.join([f'{formula}'
+                             for formula in self.formula_per_module]))
+
+    @property
+    def nr_params(self):
+        return sum(formula.nr_params for formula in self.formula_per_module)
+
+    @classmethod
+    def construct_from_regulatory_network(
+            cls, gene_network: ModuleRegulatoryNetwork, nonlinear: bool = False
+    ) -> OdeModel:
+        """Create ODE network from ModuleRegulatoryNetwork.
+
+        Ensure that it has been converted to a module-module network
+        (with .get_module_module_network()).
+        """
+        formulas = []
+        graph = gene_network.graph
+        regulatory_directions = [(regulator, module, origin)
+                                 for (regulator, module, origin)
+                                 in graph.edges(data='origin')]
+        if nonlinear:
+            assert all(origin in {EdgeRelation.DOWNREGULATES,
+                                  EdgeRelation.UP_OR_DOWN,
+                                  EdgeRelation.UPREGULATES}
+                       for _, _, origin in regulatory_directions), \
+                ('Make sure you have removed all TFs from regulatory '
+                 'network and converted it to Module-Module network')
+        # Iterate over modules in lexicographic order
+        for module in sorted(list(graph)):
+            if nonlinear:
+                regulator_edges = graph.in_edges(module, data='origin')
+                formula = NonLinearFormula(module, regulator_edges)
+            else:
+                regulators = list(graph.predecessors(module))
+                formula = LinearFormula(module, regulators)
+            formulas.append(formula)
+        return cls(formulas, nonlinear)
 
     def compute_one_step(self, t: float, y: list[float],
                          params: dict[str, float]) -> list[float]:
@@ -30,18 +71,6 @@ class OdeModel:
     def get_module_names(self):
         """Get the names of all modules in the model"""
         return [formula.module_name for formula in self.formula_per_module]
-
-    def construct_formula_per_module(self, graph: nx.DiGraph):
-        """
-        For each module, generate a formula based on the connectivity of
-        the module in the graph
-        """
-        # Iterate over modules in lexicographic order
-        for module in sorted(list(graph)):
-            regulators = list(graph.predecessors(module))
-            formula = MyFormula(module, regulators)
-            self.formula_per_module.append(formula)
-            self.nr_params += formula.nr_params
 
     def get_param_names(self):
         """Get names of all parameters"""
@@ -71,7 +100,8 @@ class OdeModel:
             # Comment this line to assume that module can regulate itself
             candidate_regulators.pop(target_module_idx)
             # Cannot pick modules which are already a regulator
-            for regulator in self.formula_per_module[target_module_idx].regulator_names:
+            for regulator in self.formula_per_module[
+                target_module_idx].regulator_names:
                 candidate_regulators.remove(regulator)
             if candidate_regulators:
                 regulator_to_add = random.choice(candidate_regulators)
@@ -81,7 +111,8 @@ class OdeModel:
                 return False
         else:
             regulator_to_add = candidate_regulators[origin_module_idx]
-        new_param_name = self.formula_per_module[target_module_idx].add_regulator(regulator_to_add)
+        new_param_name = self.formula_per_module[
+            target_module_idx].add_regulator(regulator_to_add)
         return new_param_name
 
     def remove_regulator_from_module(self, target_module_idx: int,

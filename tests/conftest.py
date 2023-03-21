@@ -128,7 +128,7 @@ def my_tf2_ode(my_tf2_input: ExpressionMatrixTimeSeries):
     # my_tf2_input.get_correlation(2, 'AT1G18330')
     module_module = my_grn.get_module_module_network()
     module_module.plot_network(with_labels=True)
-    return module_module.convert_to_ode()
+    return OdeModel.construct_from_regulatory_network(module_module, nonlinear=True)
 
 @pytest.fixture
 def my_module_module_network(my_grn: ModuleRegulatoryNetwork) -> ModuleRegulatoryNetwork:

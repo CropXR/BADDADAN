@@ -24,9 +24,13 @@ class OdeFitter:
         for param_name in ode_model.get_param_names():
             min_value = -self.param_limit
             max_value = self.param_limit
-            if 'delta' in param_name:
+            if 'delta' in param_name or 'k_' in param_name:
                 # Decay rates cannot be negative
                 min_value = 0.
+            if self.odes.is_nonlinear and 'beta_' in param_name:
+                # Beta values cannot be negative in nonlinear model
+                min_value = 0.
+
             self.params.add(param_name,
                             value=np.random.uniform(min_value / 3,
                                                     max_value / 3),

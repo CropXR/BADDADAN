@@ -10,7 +10,6 @@ import pandas as pd
 from matplotlib import pyplot as plt
 import seaborn as sns
 
-from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 
 
@@ -26,6 +25,7 @@ class EdgeRelation(Enum):
     UPREGULATES = 'upregulates'
     DOWNREGULATES = 'downregulates'
     UP_OR_DOWN = 'unclear_regulation_direction'
+
 
 class ModuleRegulatoryNetwork:
     # Standard prefixes
@@ -189,21 +189,6 @@ class ModuleRegulatoryNetwork:
         """Return list of all transcription factor nodes"""
         return [node for node in self.graph.nodes if self.tf_prefix in node]
 
-    def convert_to_ode(self) -> OdeModel:
-        """Convert the graph to an object that contains all equations
-        to perform fitting of the ODEs. This can only be called
-        after .get_module_module_network() has been executed.
-        """
-        # Ensure that network is ModuleModule network
-        assert all(EdgeRelation.REGULATES in edge
-                   for edge in self.graph.edges(data='origin')
-                   ), ('Make sure you have removed all TFs from regulatory '
-                      'network and converted it to Module-Module network')
-        # Todo keep names of edges involved here in some way?
-        ode_out = OdeModel()
-        ode_out.construct_formula_per_module(self.graph)
-        return ode_out
-
     def remove_untranscribed_tfs(self):
         """Remove TFs from graph that are not transcribed by any of the modules.
         I.e. TFs that have an in-degree of 0
@@ -262,6 +247,7 @@ class ModuleRegulatoryNetwork:
             debug_corrs.append(corr)
         if do_plotting:
             sns.boxplot(debug_corrs)
+            plt.show()
         return True
 
     def set_up_or_downregulation(self,
