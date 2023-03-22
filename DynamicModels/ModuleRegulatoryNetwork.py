@@ -53,7 +53,7 @@ class ModuleRegulatoryNetwork:
                           in self.graph.edges.data('origin')]
 
         draw_func(self.graph, node_color=node_color_map,
-                  edge_color=edge_color_map, with_labels=with_labels)
+                  edge_color=edge_color_map, with_labels=with_labels, arrowsize=20)
         if out_path:
             plt.savefig(out_path)
         else:
@@ -168,17 +168,17 @@ class ModuleRegulatoryNetwork:
             # List contains only one item, extract it.
             original_module = original_module[0]
             target_modules = list(self.graph.successors(tf))
-            if len(target_modules) > 1:
-                raise NotImplementedError("Currently TFs can only bind to "
-                                          "one module. If you get this error, "
-                                          "it's time to implement new "
-                                          "functionality.")
-            target_module = target_modules[0]
-            regulation_type = self.graph.edges[tf, target_module]['origin']
-            new_edge = (original_module, target_module, {'origin': regulation_type})
-            edges_to_add.append(new_edge)
+            for target_module in target_modules:
+                regulation_type = self.graph.edges[tf, target_module]['origin']
+                if regulation_type == EdgeRelation.UP_OR_DOWN:
+                    logging.warning(f'{original_module} -> {target_module}. Has edge of unknown interaction. Omitting from graph')
+                    continue
+                new_edge = (original_module, target_module, {'origin': regulation_type})
+                edges_to_add.append(new_edge)
         out_graph = nx.DiGraph()
         out_graph.add_edges_from(edges_to_add)
+        # TODO do additional cleanup here in case there are duplicate
+        #  edges between nodes, but they have different annotations
         return ModuleRegulatoryNetwork(out_graph)
 
     def get_modules(self) -> list:
@@ -246,13 +246,16 @@ class ModuleRegulatoryNetwork:
                               f'with the TF ({tf_name}) it produces'
             debug_corrs.append(corr)
         if do_plotting:
+            sns.set_style()
             sns.boxplot(debug_corrs)
+            plt.ylim((0, 1))
             plt.show()
         return True
 
     def set_up_or_downregulation(self,
                                  expressions: ExpressionMatrixTimeSeries,
-                                 threshold: float = .2):
+                                 threshold: float = .2,
+                                 do_plotting=False):
         """For each TF, find it out if up-/downregulates its target module.
 
         This is done by looking at the correlation between the TF and the target
@@ -264,6 +267,7 @@ class ModuleRegulatoryNetwork:
         connection is assigned the UP_OR_DOWN label.
         """
         edge_attr_dict = {}
+        debug_corrs = []
         all_tfs_and_binding_sites = self.get_filtered_module_tf_edges(
             edge_filter_id=EdgeRelation.BINDS_TO)
         for tf_name, module_name in all_tfs_and_binding_sites:
@@ -275,7 +279,7 @@ class ModuleRegulatoryNetwork:
             # See how the tf and module correlate
             corr = expressions.get_correlation(module_without_prefix,
                                                tf_name_without_prefix, plot=False)
-            logging.debug(corr)
+            debug_corrs.append(corr)
             if corr < -threshold:
                 direction = EdgeRelation.DOWNREGULATES
             elif corr > threshold:
@@ -284,3 +288,7 @@ class ModuleRegulatoryNetwork:
                 direction = EdgeRelation.UP_OR_DOWN
             edge_attr_dict[(tf_name, module_name)] = {'origin': direction}
         nx.set_edge_attributes(self.graph, edge_attr_dict)
+        if do_plotting:
+            sns.set_style()
+            sns.swarmplot(debug_corrs)
+            plt.show()
