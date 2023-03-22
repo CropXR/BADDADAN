@@ -61,9 +61,10 @@ def fit_ode_to_data(
         my_time_series_expressions: ExpressionMatrixTimeSeries,
         std_cutoff=1.5
 ):
+    # Assume that data has already been clustered
     my_time, my_data = \
         my_time_series_expressions.get_clusters_expressions_with_time(0)
-    # plot_y_and_y_hat(my_data, my_time)
+    plot_y_and_y_hat(my_data, my_time)
     # my_time_series_expressions.get_genes_per_cluster()
     # Interpolate data
     # my_time, my_data = fit_spline(my_data, my_time, num_timepoints=50)

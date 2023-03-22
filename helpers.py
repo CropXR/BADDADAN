@@ -92,7 +92,7 @@ def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
     for i, row in enumerate(y_real, start=1):
         ax1.plot(t_real, row, label=f'Module{i}')
     ax1.set_title('y')
-    ax1.set_ylabel('Log2 gene expression')
+    ax1.set_ylabel('Gene expression')
     ax1.set_xlabel('Time (h)')
     ax1.legend()
 
@@ -100,7 +100,7 @@ def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
         for row in model_fit.y:
             ax2.plot(model_fit.t, row)
         ax2.set_title('y_hat')
-        ax2.set_ylabel('Log2 gene expression')
+        ax2.set_ylabel('Gene expression')
         ax2.set_xlabel('Time (h)')
 
     plt.show()
