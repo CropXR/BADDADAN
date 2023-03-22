@@ -330,17 +330,19 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         :returns: Dataframe with cluster_id column which indicates the
                   clustering.
         """
-        # Calculate pearson correlation between genes as distance measure
+        # Calculate pearson correlation
         subset_corr = np.corrcoef(self.df)
+        # Calculate distance
+        dist = 1 - subset_corr
         # Create linkage matrix and infer clusters
-        linkage_matrix = linkage(subset_corr, method='complete')
+        linkage_matrix = linkage(dist, method='complete')
         clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
         if do_plotting:
             # Create colours to use in clustermap
             lut = dict(zip([i for i in range(1, n_cluster + 1)],
                            sns.color_palette(n_colors=n_cluster)))
             row_colors = [lut[i] for i in clustering]
-            sns.clustermap(subset_corr, row_linkage=linkage_matrix,
+            sns.clustermap(dist, row_linkage=linkage_matrix,
                            col_linkage=linkage_matrix, row_colors=row_colors)
             plt.show()
         self.df = self.df.assign(cluster_id=clustering)
