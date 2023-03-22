@@ -5,6 +5,7 @@ import random
 import networkx as nx
 import numpy as np
 from lmfit import Parameters
+from matplotlib import pyplot as plt
 from scipy.integrate._ivp.ivp import OdeResult, solve_ivp
 
 from DynamicModels.ModuleRegulatoryNetwork import (ModuleRegulatoryNetwork,
@@ -172,6 +173,11 @@ class OdeModel:
         y_pred = solve_ivp(self.compute_one_step, (t_start, t_end), y0,
                            t_eval=t,
                            args=[param_dict], method='Radau')
+        if not y_pred.success:
+            logging.warning('Integration failed, but showing solution nevertheless')
+            for row in y_pred.y:
+                plt.plot(y_pred.t, row)
+            plt.show()
         assert y_pred.success, (f"Integration failed: {y_pred.message}"
                                 f"\nParams: {params}")
         return y_pred
