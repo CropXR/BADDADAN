@@ -2,7 +2,7 @@ import logging
 from typing import Literal
 
 import numpy as np
-from lmfit import Parameters, minimize
+from lmfit import Parameters, minimize, fit_report
 from lmfit.minimizer import MinimizerResult
 from scipy.integrate import solve_ivp
 from scipy.integrate._ivp.ivp import OdeResult
@@ -138,6 +138,7 @@ class OdeFitter:
 
         self.params = result.params
         self.has_been_fitted = True
+        logging.info(fit_report(result))
         return result
 
     def thickening_thinning(self, nr_rounds: int) -> MinimizerResult:
