@@ -428,16 +428,24 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         col_mask = [col for col in self.df.columns if 'Shoot' in col]
         self.df = self.df[col_mask]
 
-    def plot_clusters_over_time(self) -> None:
-        """Plot mean expression of clusters over time.
+    def plot_clusters_over_time(self, plot_units: bool = False) -> None:
+        """Plot expression of clusters over time.
+
+        :param plot_units: If true, plot line for each gene individually.
+                            If false, plot mean of all genes in a cluster.
         """
         sns.set_theme()
         some_df = self._get_gene_expression_long_form()
-        # sns.lineplot(data=some_df, x='time', y='expression',
-        #              hue='cluster', palette=sns.color_palette())
 
-        sns.lineplot(data=some_df, x='time', y='expression',
-                     hue='cluster', style='replicate', palette=sns.color_palette(), errorbar='sd')
+        if plot_units:
+            sns.relplot(data=some_df, x='time', y='expression', kind='line',
+                        hue='cluster', col='cluster',
+                        palette=sns.color_palette(),
+                        units='ID_REF', estimator=None, lw=1, alpha=.2)
+        else:
+            sns.lineplot(data=some_df, x='time', y='expression',
+                         hue='cluster', style='replicate',
+                         palette=sns.color_palette(), errorbar='sd')
         plt.show()
         # sns.stripplot(data=some_df, x='time', y='expression',
         #                hue='cluster', palette=sns.color_palette())
