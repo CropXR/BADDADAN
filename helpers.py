@@ -1,14 +1,12 @@
 import logging
 import re
-from pathlib import Path
 
-import GEOparse
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from scipy.integrate._ivp.ivp import OdeResult
 from sklearn.model_selection import RepeatedStratifiedKFold
-from scipy.interpolate import make_interp_spline, BSpline, PchipInterpolator
+from scipy.interpolate import PchipInterpolator
 
 
 def standardize(df: pd.DataFrame, axis=0) -> pd.DataFrame:
@@ -16,6 +14,12 @@ def standardize(df: pd.DataFrame, axis=0) -> pd.DataFrame:
 
     Based on https://github.com/saeyslab/moduledetection-evaluation/blob/master/lib/methods/clustering.py
     """
+    logging.warning("Not sure if we want to do normalisation row-wise, column-wise, or both ways. Make sure you don't forget this")
+    # array = df.to_numpy()
+    # norm_array = (array - array.mean()) / (array.std())
+    # df.iloc[:, :] = norm_array
+    #
+    # return df
     # I assume this normalizes per sample in the original implementation?
     if axis == 0:
         return (df - df.mean()) / df.std()

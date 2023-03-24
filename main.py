@@ -4,12 +4,14 @@ from pathlib import Path
 import typer
 from lmfit import fit_report
 
+
 from DynamicModels.OdeFitter import OdeFitter
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
 from helpers import plot_y_and_y_hat, fit_spline
+from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 from predict_from_static_expressions import plot_pred_vs_real
 
 # pd.options.display.width = 0
@@ -56,29 +58,28 @@ def annotate_microarray_expression(
     logging.info(f'Successfullly saved output to {output_path}')
 
 
-def fit_ode_to_data(
-        my_ode: OdeModel,
-        my_time_series_expressions: ExpressionMatrixTimeSeries,
-        std_cutoff=1.5
-):
+def fit_ode_to_data(my_ode: OdeModel,
+                    my_time_series_expressions: ExpressionMatrixTimeSeries):
     # Assume that data has already been clustered
     my_time, my_data = \
         my_time_series_expressions.get_clusters_expressions_with_time(0)
-    plot_y_and_y_hat(my_data, my_time)
+    # plot_y_and_y_hat(my_data, my_time)
     # my_time_series_expressions.get_genes_per_cluster()
-    # Interpolate data
-    # my_time, my_data = fit_spline(my_data, my_time, num_timepoints=50)
-    initial_sim_fit = OdeFitter(my_ode, my_data, my_time)
-    # optimal_fit = initial_sim_fit.fit(method='differential_evolution')
-    # optimal_fit = initial_sim_fit.thickening_thinning(3)
-    # optimal_fit = initial_sim_fit.fit(method='bfgs')
-    optimal_fit = initial_sim_fit.fit()
-    logging.info(fit_report(optimal_fit))
-    # print(fit_report(optimal_fit))
+
+    # # Fit single model
+    fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=2000)
+    fit.fit()
+
+    # Fit multiple models simultaneously
+    # nr_fits = 5
+    # fitters = [OdeFitter(my_ode, my_data, my_time,
+    #                      heat_end_time=3, param_limit=2000)
+    #            for _ in range(nr_fits)]
+    # fit = fit_multiple_fitters(fitters)
 
     # more_time = np.linspace(0, 24, 50)
     # Next step: simulate the data with these params
-    simulated_data = initial_sim_fit.calculate_current_best_fit(my_time)
+    simulated_data = fit.calculate_current_best_fit(my_time)
 
     plot_y_and_y_hat(y_real=my_data, t_real=my_time,
                      model_fit=simulated_data)
