@@ -44,7 +44,8 @@ def inference_with_thickened_ode_structure(ode_model: OdeModel):
     init_condition_names = ['y0', 'y1', 'y2', 'y3']
 
     # Create dummy data
-    simulated_data = ode_model.calculate_solution(simulation_params, t, init_condition_names)
+    simulated_data = ode_model.calculate_solution(simulation_params, t,
+                                                  init_condition_names)
     # plot_y_and_y_hat(y_real=simulated_data.y, t_real=t)
 
     # Fit ODE with removed connection
@@ -102,7 +103,8 @@ def inference_with_thinned_ode_structure(ode_model: OdeModel):
     init_condition_names = ['y0', 'y1', 'y2', 'y3']
 
     # Create dummy data
-    simulated_data = ode_model.calculate_solution(simulation_params, t, init_condition_names)
+    simulated_data = ode_model.calculate_solution(simulation_params, t,
+                                                  init_condition_names)
     # plot_y_and_y_hat(y_real=simulated_data.y, t_real=t)
     # print(ode_model)
     # Fit ODE with removed connection
