@@ -1,11 +1,32 @@
 import logging
 import re
-from pathlib import Path
 
-import GEOparse
+import numpy as np
 import pandas as pd
+from matplotlib import pyplot as plt
+from scipy.integrate._ivp.ivp import OdeResult
 from sklearn.model_selection import RepeatedStratifiedKFold
+from scipy.interpolate import PchipInterpolator
 
+
+def standardize(df: pd.DataFrame, axis=0) -> pd.DataFrame:
+    """Normalize gene expression data
+
+    Based on https://github.com/saeyslab/moduledetection-evaluation/blob/master/lib/methods/clustering.py
+    """
+    logging.warning("Not sure if we want to do normalisation row-wise, column-wise, or both ways. Make sure you don't forget this")
+    # array = df.to_numpy()
+    # norm_array = (array - array.mean()) / (array.std())
+    # df.iloc[:, :] = norm_array
+    #
+    # return df
+    # I assume this normalizes per sample in the original implementation?
+    if axis == 0:
+        return (df - df.mean()) / df.std()
+    elif axis == 1:
+        transposed_df = df.T
+        row_normalised = (transposed_df - transposed_df.mean()) / (transposed_df.std())
+        return row_normalised.T
 
 def split_based_on_temp(expression_matrix,
                         n_splits: int = 3,
@@ -57,3 +78,52 @@ def de_print_fun(xk, convergence=None):
     evolution function call.
     """
     logging.info(f'Convergence: {convergence*100:.2f}%')
+
+
+def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
+                     model_fit: OdeResult = None):
+    """Plot real data y and model prediction y_hat
+
+    :param y_real: Numpy array containing measured data. One variable per row
+    :param model_fit: Numpy array, must be same shape as y
+    :param t_real: Time points at which to draw the function. Must be same for
+               both arrays
+    :return:
+    """
+    fig, (ax1, ax2) = plt.subplots(1, 2, sharey='all')
+    # fig.set_size_inches(15, 8)
+    # fig.suptitle('Comparison real vs estimated')
+    for i, row in enumerate(y_real, start=1):
+        ax1.plot(t_real, row, label=f'Module{i}')
+    ax1.set_title('y')
+    ax1.set_ylabel('Gene expression')
+    ax1.set_xlabel('Time (h)')
+    ax1.legend()
+
+    if model_fit:
+        for row in model_fit.y:
+            ax2.plot(model_fit.t, row)
+        ax2.set_title('y_hat')
+        ax2.set_ylabel('Gene expression')
+        ax2.set_xlabel('Time (h)')
+
+    plt.show()
+
+def fit_spline(data: np.ndarray, time: list | np.ndarray,
+               num_timepoints: int = 50) -> tuple[np.ndarray, np.ndarray]:
+    """Interpolate through data
+
+    :param data: numpy array, which should contain columns that correspond
+    to observations at different time points, and row that correspond to
+    different variables (e.g. gene modules)
+    :param time: Time points at which original data was measured
+    :param num_timepoints: How many timepoints to interpolate
+    :return: new_timepoints, and interpolated data that belongs to it.
+    """
+    new_time = np.linspace(min(time), max(time), num=num_timepoints)
+    out_array = np.empty((len(data), num_timepoints))
+    for i, row in enumerate(data):
+        # spline = make_interp_spline(time, row)
+        spline = PchipInterpolator(time, row)
+        out_array[i, :] = spline(new_time)
+    return new_time, out_array
