@@ -29,8 +29,6 @@ class FormulaSuperClass:
         self.params.append(gamma_param_name)
         self.formula_string += f' + {gamma_param_name} * temp'
 
-        # Add names of parameters that regulate relation between heat and non-heat temperature
-        self.params.extend(['heat_temp', 'non_heat_temp'])
         # Register if the module has been compiled (which speeds up its evaluation)
         self.formula_is_compiled = False
 
@@ -84,24 +82,13 @@ class FormulaSuperClass:
                   given parameters and expressions of modules.
         """
         # Create dict for all these things
-        temperature = {"temp": self.time_to_heatstress(t, params)}
         init_val = {"y": y}
         # Merge all dicts
-        local_dict = init_val | params | temperature
+        local_dict = init_val | params
         if not self.formula_is_compiled:
             self.compile_formula()
         result = eval(self.compiled_formula_string, {}, local_dict)
         return result
-
-    def time_to_heatstress(self, t: float, params: dict) -> float:
-        # Assume that t is in hours.
-        if t < 3:
-            logging.debug(f'Still in heatstress 🔥🔥🔥🔥 {t=}')
-            temp = params['heat_temp']
-        else:
-            logging.debug(f'No longer in heatstress ❄❄❄❄ {t=}')
-            temp = params['non_heat_temp']
-        return temp
 
     @property
     def nr_params(self):
