@@ -104,7 +104,8 @@ def my_tf2_input(my_time_series_expressions):
     my_time_series_expressions.merge_biological_samples()
     my_time_series_expressions.keep_n_most_deviating_genes(total_genes, 'mad')
     my_time_series_expressions.do_hierachical_clustering(4, do_plotting=False)
-    # my_time_series_expressions.plot_clusters_over_time()
+    # my_time_series_expressions.plot_clusters_over_time(plot_units=False)
+    # my_time_series_expressions.plot_clusters_over_time(plot_units=True)
     my_time_series_expressions.write_tf2_input_file(
         Path(f'../data/time_series_datasets/tf2network_approach/{total_genes}_highest_mad/01_tf2network_input_{total_genes}_highest_mad_genes.txt'))
     my_time_series_expressions.save_tf_produced_by_module_file(
@@ -131,7 +132,7 @@ def my_tf2_ode(my_tf2_input: ExpressionMatrixTimeSeries):
     my_grn.clean_up_network()
     # my_grn.plot_network(with_labels=True)
     my_grn.check_if_tfs_created_by_module(my_tf2_input, do_plotting=False)
-    my_grn.set_up_or_downregulation(my_tf2_input, do_plotting=True)
+    my_grn.set_up_or_downregulation(my_tf2_input, do_plotting=False)
     # my_tf2_input.get_correlation(2, 'AT1G18330')
     module_module = my_grn.get_module_module_network()
     # module_module.plot_network(with_labels=True)
