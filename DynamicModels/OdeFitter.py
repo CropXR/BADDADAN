@@ -1,4 +1,5 @@
 import logging
+
 from typing import Literal
 
 import numpy as np
@@ -14,14 +15,21 @@ class OdeFitter:
     """Class to estimate parameters for ODEs, given real data"""
 
     def __init__(self, ode_model: OdeModel, measured_data: np.ndarray,
-                 time_points: np.ndarray):
+                 time_points: np.ndarray, heat_end_time: float,
+                 param_limit: float = 800.,
+                 method: Literal['lbfgs', 'bfgs',
+                                 'differential_evolution',
+                                 'basinhopping', 'shgo'] = 'lbfgs'):
         self.odes = ode_model
         self.measured_data = measured_data
         self.has_been_fitted = False
+        self.method = method
         self.time_points = time_points
+        self.param_limit = param_limit
+
+        # Set parameters
         self.params = Parameters()
-        self.param_limit = 10
-        for param_name in ode_model.get_param_names():
+        for param_name in self.odes.get_param_names():
             min_value = -self.param_limit
             max_value = self.param_limit
             if 'delta' in param_name or 'k_' in param_name:
@@ -30,33 +38,35 @@ class OdeFitter:
             if self.odes.is_nonlinear and 'beta_' in param_name:
                 # Beta values cannot be negative in nonlinear model
                 min_value = 0.
+            if 'gamma' in param_name:
+                min_value = -10
+                max_value = 10
 
             self.params.add(param_name,
-                            value=np.random.uniform(min_value / 3,
-                                                    max_value / 3),
+                            value=np.random.uniform(min_value,
+                                                    max_value),
                             min=min_value, max=max_value)
         self.init_condition_names = []
-        for i, init_value in enumerate(measured_data[:, 0]):
+        for i, init_value in enumerate(self.measured_data[:, 0]):
             init_y_name = f'y{i}'
-            self.params.add(init_y_name, value=init_value, vary=True)
+            self.params.add(init_y_name, value=init_value, vary=True, min=0,
+                            max=max(self.measured_data[:, 0]) * 2)
             self.init_condition_names.append(init_y_name)
-
+        # Add moment when heatstress ends
+        self.params.add('heat_end_time', value=heat_end_time, vary=False)
         # Restrain non_heat_temp and heat_temp so they always sum to one
-        self.params.add('non_heat_temp', value=np.random.rand(), min=0, max=1)
+        self.params.add('non_heat_temp', value=np.random.rand(), min=0.1, max=.9)
         self.params.add('heat_temp', expr='1 - non_heat_temp')
-        # # Does doing this line below stop the equation from exploding?
-        # self.params.add('heat_temp', value=np.random.rand(), min=0, max=1)
 
     def loss_function(self, params: Parameters, t: np.ndarray,
-                      y_real: np.ndarray, t_start=None,
-                      t_end=None, return_scalar=False) -> np.ndarray | float:
+                      y_real: np.ndarray,
+                      return_scalar=False) -> np.ndarray | float:
         """Return squared residuals between y_real and predictions
         at time points t for a given set params.
         """
         # Get names of 'parameters' that are the initial conditions
         init_condition_names = self.init_condition_names
-        y_pred = self.odes.calculate_solution(params, t, init_condition_names,
-                                              t_start, t_end)
+        y_pred = self.odes.calculate_solution(params, t, init_condition_names)
         if return_scalar:
             return float(np.mean(np.square(y_pred.y - y_real)))
         loss = np.square(y_pred.y - y_real)
@@ -70,27 +80,18 @@ class OdeFitter:
         return self.odes.calculate_solution(self.params, t,
                                             self.init_condition_names)
 
-    def fit(self, t_start: float = None,
-            t_end: float = None,
-            method: Literal['lbfgs', 'bfgs',
-                            'differential_evolution',
-                            'basinhopping', 'shgo'] = 'lbfgs') -> MinimizerResult:
+    def fit(self) -> MinimizerResult:
         """Find optimal parameters for ODE
 
-        :param t_start: Timepoint to start simulation, defaults to lowest time point
-        :param t_end:  Timepoint to end simulation, defaults to highest time point
-        :param method: Optimisation method to use
         :return: result of minimisation
         """
-        match method:
+        match self.method:
             case 'lbfgs' | 'bfgs':
                 result = minimize(self.loss_function,
                                   self.params,
-                                  method=method,
+                                  method=self.method,
                                   kws={'t': self.time_points,
                                        'y_real': self.measured_data,
-                                       't_start': t_start,
-                                       't_end': t_end,
                                        'return_scalar': True},
                                   options=dict(disp=1),
                                   )
@@ -100,10 +101,8 @@ class OdeFitter:
                                   method='differential_evolution',
                                   kws={'t': self.time_points,
                                        'y_real': self.measured_data,
-                                       't_start': t_start,
-                                       't_end': t_end,
                                        'return_scalar': True},
-                                  max_nfev=20_000,
+                                  # max_nfev=20_000,
                                   workers=1,
                                   # popsize=4,
                                   # polish=False,
@@ -114,9 +113,7 @@ class OdeFitter:
                                   self.params,
                                   method='basinhopping',
                                   kws={'t': self.time_points,
-                                       'y_real': self.measured_data,
-                                       't_start': t_start,
-                                       't_end': t_end},
+                                       'y_real': self.measured_data},
                                   disp=True,
                                   niter=300
                                   )
@@ -126,14 +123,12 @@ class OdeFitter:
                                   method='shgo',
                                   kws={'t': self.time_points,
                                        'y_real': self.measured_data,
-                                       't_start': t_start,
-                                       't_end': t_end,
                                        'return_scalar': True},
                                   max_nfev=10_000,
                                   options=dict(disp=True)
                                   )
             case _:
-                raise NotImplementedError(f'Optimisation method: {method} '
+                raise NotImplementedError(f'Optimisation method: {self.method} '
                                           f'is currently not supported')
 
         self.params = result.params
@@ -164,6 +159,9 @@ class OdeFitter:
                                                     max_value / 3),
                             min=min_value, max=max_value)
 
+    def do_thinning(self):
+        raise NotImplementedError
+
     def get_worst_module(self, best_params: Parameters) -> int:
         loss_per_module = np.sum(
             self.loss_function(best_params, self.time_points,
@@ -177,6 +175,3 @@ class OdeFitter:
                                self.measured_data), axis=1)
         best_module_idx = np.argmin(loss_per_module)
         return best_module_idx
-
-    def do_thinning(self):
-        raise NotImplementedError

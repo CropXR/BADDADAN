@@ -16,7 +16,9 @@ from DynamicModels.Formula import LinearFormula, NonLinearFormula
 class OdeModel:
     """Stores the ODEs for all modules. Can also be used to calculate next time steps."""
 
-    def __init__(self, formula_per_module: list[LinearFormula], is_nonlinear):
+    def __init__(self,
+                 formula_per_module: list[LinearFormula | NonLinearFormula],
+                 is_nonlinear: bool):
         self.formula_per_module = formula_per_module
         self.is_nonlinear = is_nonlinear
 
@@ -78,6 +80,8 @@ class OdeModel:
         all_params = []
         for formula in self.formula_per_module:
             all_params.extend(formula.params)
+        # Add names of parameters that regulate external temperature
+        all_params.extend(['heat_temp', 'non_heat_temp', 'heat_end_time'])
         return all_params
 
     def add_regulator_to_module(self, target_module_idx: int,
@@ -139,10 +143,8 @@ class OdeModel:
             regulator_to_remove = self.get_module_names()[origin_module_idx]
         formula_of_interest.remove_regulator(regulator_to_remove)
 
-    def calculate_solution(self, params: Parameters,
-                           t: np.ndarray, init_condition_names: list[str],
-                           t_start=None,
-                           t_end=None) -> OdeResult:
+    def calculate_solution(self, params: Parameters, t: np.ndarray,
+                           init_condition_names: list[str]) -> OdeResult:
         """Return values at time points t, given a set of params.
         I.e. this calculates the full solution over time of the system of ODEs.
 
@@ -151,33 +153,58 @@ class OdeModel:
         :param init_condition_names: List of strings that are the names of
         the initial conditions. E.g ['y0', 'y1']. These are needed to
         split off from the parameters that are provided
-        :param t_start: (Optional), time point to start calculation of
         the solution
-        :param t_end: (Optional), time point to end calculation of the solution
         :return: Result of the ODE in OdeResult object
         """
-        if t_start is None:
-            t_start = min(t)
-        if t_end is None:
-            t_end = max(t)
-        if t_start is not None or t_end is not None:
-            selected_time_points = (t_start <= t) & (t <= t_end)
-            t = t[selected_time_points]
+        params = params.valuesdict()
         # Split off initial conditions
-        y0 = [value for name, value in params.valuesdict().items()
-              if name in init_condition_names]
-        param_dict = {
-            name: value for name, value in params.valuesdict().items()
-            if name not in init_condition_names
-        }
-        y_pred = solve_ivp(self.compute_one_step, (t_start, t_end), y0,
-                           t_eval=t,
-                           args=[param_dict], method='Radau')
-        if not y_pred.success:
-            logging.warning('Integration failed, but showing solution nevertheless')
-            for row in y_pred.y:
-                plt.plot(y_pred.t, row)
-            plt.show()
-        assert y_pred.success, (f"Integration failed: {y_pred.message}"
-                                f"\nParams: {params}")
-        return y_pred
+        y0 = []
+        for name in init_condition_names:
+            y0.append(params.pop(name))
+        # Split off temp related parameters
+        heat_temp = params.pop('heat_temp')
+        non_heat_temp = params.pop('non_heat_temp')
+        heat_end_time = params.pop('heat_end_time')
+
+        # Solve up until point of heat stress
+        t_start = min(t)
+        params['temp'] = heat_temp
+        t_heat_index = t <= heat_end_time
+        t_heat = t[t_heat_index]
+        y_pred_heat = solve_ivp(self.compute_one_step, (t_start, heat_end_time),
+                                y0,
+                                t_eval=t_heat,
+                                args=[params], method='Radau')
+        assert y_pred_heat.success, (
+            f"Integration failed: {y_pred_heat.message}"
+            f"\nParams: {params}")
+
+        # Solve post-heat stress
+        t_start = heat_end_time
+        params['temp'] = non_heat_temp
+        t_non_heat_index = (t > heat_end_time)
+        t_non_heat = t[t_non_heat_index]
+        # Get new initial conditions
+        end_of_heat_expressions = y_pred_heat.y[:, -1].tolist()
+        y_pred_non_heat = solve_ivp(self.compute_one_step,
+                                    (t_start, max(t_non_heat)),
+                                    end_of_heat_expressions,
+                                    t_eval=t_non_heat,
+                                    args=[params], method='Radau')
+        assert y_pred_non_heat.success, (
+            f"Integration failed: {y_pred_non_heat.message}"
+            f"\nParams: {params}")
+        all_predicted_time = np.concatenate((y_pred_heat.t, y_pred_non_heat.t))
+        all_predicted_y = np.concatenate((y_pred_heat.y, y_pred_non_heat.y),
+                                         axis=1)
+        assert np.all(all_predicted_time == t)
+        y_pred_heat.t = all_predicted_time
+        y_pred_heat.y = all_predicted_y
+        # if not y_pred.success:
+        #     logging.warning('Integration failed, but showing solution nevertheless')
+        #     for row in y_pred.y:
+        #         plt.plot(y_pred.t, row)
+        #     plt.show()
+        # assert y_pred.success, (f"Integration failed: {y_pred.message}"
+        #                         f"\nParams: {params}")
+        return y_pred_heat
