@@ -27,7 +27,8 @@ class FormulaSuperClass:
         # Add factor which expresses the change in expression based on temperature
         gamma_param_name = f'gamma_{self.module_index}'
         self.params.append(gamma_param_name)
-        self.formula_string += f' + {gamma_param_name} * temp'
+        self.formula_string += f' + {gamma_param_name} * temp * y[{self.module_index}]'
+        # self.formula_string += f' + {gamma_param_name} * temp'
 
         # Register if the module has been compiled (which speeds up its evaluation)
         self.formula_is_compiled = False
@@ -190,6 +191,8 @@ class NonLinearFormula(FormulaSuperClass):
             'Regulator cannot be removed, it is not present in the current formula'
         self.params.remove(b_param_name)
         self.regulator_names.remove(regulator_to_remove)
+        # TODO this is broken atm
+        raise NotImplementedError
         string_to_remove_from_formula = self.generate_linear_term(
             b_param_name, f'y[{regulator_index}]')
         self.formula_string = self.formula_string.replace(
