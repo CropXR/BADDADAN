@@ -93,7 +93,7 @@ class OdeFitter:
                                   kws={'t': self.time_points,
                                        'y_real': self.measured_data,
                                        'return_scalar': True},
-                                  options=dict(disp=1),
+                                  options=dict(disp=1, maxiter=1000, maxfun=1e99),
                                   )
             case 'differential_evolution':
                 result = minimize(self.loss_function,
