@@ -67,15 +67,15 @@ def fit_ode_to_data(my_ode: OdeModel,
     # my_time_series_expressions.get_genes_per_cluster()
 
     # # Fit single model
-    fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=2000)
-    fit.fit()
+    # fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=1000)
+    # fit.fit()
 
     # Fit multiple models simultaneously
-    # nr_fits = 5
-    # fitters = [OdeFitter(my_ode, my_data, my_time,
-    #                      heat_end_time=3, param_limit=2000)
-    #            for _ in range(nr_fits)]
-    # fit = fit_multiple_fitters(fitters)
+    nr_fits = 5
+    fitters = [OdeFitter(my_ode, my_data, my_time,
+                         heat_end_time=3, param_limit=2000)
+               for _ in range(nr_fits)]
+    fit = fit_multiple_fitters(fitters)
 
     # more_time = np.linspace(0, 24, 50)
     # Next step: simulate the data with these params
