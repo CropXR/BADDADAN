@@ -3,6 +3,7 @@ import logging
 import networkx as nx
 import numpy as np
 from lmfit import Parameters, fit_report
+from patsy import origin
 
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork, \
     EdgeRelation
@@ -51,7 +52,7 @@ def test_artificial_data_fit():
     # Add initial conditions
     for module_name in module_names:
         value = 2 if '1' in module_name else 1
-        init_name = f'y{int(module_name[-1])-1}'
+        init_name = f'y{int(module_name[-1]) - 1}'
         ground_truth_params.add(name=init_name, value=value)
         init_condition_names.append(init_name)
 
@@ -63,9 +64,23 @@ def test_artificial_data_fit():
 
     plot_y_and_y_hat(sim_data.y, sim_data.t)
 
+    # Change activation from MODULE3 to MODULE2 to inhibition
+    my_graph.add_edge(module_names[2], module_names[3],
+                      origin=EdgeRelation.DOWNREGULATES)
+    wrong_network = ModuleRegulatoryNetwork(my_graph)
+    nx.set_edge_attributes(wrong_network.graph,
+                           {(module_names[2], module_names[1]):
+                                {'origin': EdgeRelation.DOWNREGULATES},
+                            (module_names[0], module_names[2]):
+                                {'origin': EdgeRelation.DOWNREGULATES}}
+                           )
+    wrong_network.plot_network()
+    wrong_model = OdeModel.construct_from_regulatory_network(wrong_network,
+                                                             nonlinear=True)
+
     # Fit multiple models simultaneously
     nr_fits = 5
-    fitters = [OdeFitter(artificial_model, sim_data.y, sim_data.t,
+    fitters = [OdeFitter(wrong_model, sim_data.y, sim_data.t,
                          heat_end_time=3, param_limit=10)
                for _ in range(nr_fits)]
     my_fitter = fit_multiple_fitters(fitters)
