@@ -2,8 +2,10 @@ import csv
 import logging
 from pathlib import Path
 
+import networkx as nx
 import pandas as pd
 
+from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionMatrix import ExpressionMatrixTraining, \
     ExpressionMatrixTimeSeries, ExpressionMatrix
 from helpers import plot_y_and_y_hat
@@ -35,19 +37,8 @@ def test_keep_n_most_deviating_genes(my_time_series_expressions: ExpressionMatri
     my_time_series_expressions.keep_only_shoot()
     my_time_series_expressions.merge_biological_samples()
     my_time_series_expressions.keep_n_most_deviating_genes(1000, method='mad')
-    my_time, my_data = my_time_series_expressions.get_clusters_expressions_with_time(6)
-    plot_y_and_y_hat(y_real=my_data, t_real=my_time)
-
-    assert True
-
-def test_plot_non_tfs(my_time_series_expressions: ExpressionMatrixTimeSeries):
-    """See if we can split off transcription factors, and plot their expression"""
-    path_to_tfdb_file = Path(
-        '../data/resources/Ath_TF_list.txt')
-    non_tfs, tfs = my_time_series_expressions.split_off_tfs(path_to_tfdb_file)
-    non_tfs.keep_genes_above_deviation_cutoff(cutoff=1.8)
-    non_tfs.do_hierachical_clustering(4)
-    non_tfs.plot_clusters_over_time()
+    my_time_series_expressions.do_hierachical_clustering(4)
+    my_time_series_expressions.plot_clusters_over_time()
     assert True
 
 
@@ -56,6 +47,7 @@ def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
     used by LPAN and other pipelines downstream. Creates a file with expressions
     that LPAN uses directly, also creates file which contains edges between
     TFs and the module they belong to."""
+    raise NotImplementedError("Don't use this anymore")
     nr_clusters = 4
     some_cutoff = 1.5
     path_to_tfdb_file = Path(
@@ -79,7 +71,7 @@ def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
 
     out_file_path = Path(
         '../data/time_series_datasets/my_clustering_edgelist.csv')
-    my_time_series_expressions.save_cluster_gene_edge_list(
-        out_file_path=out_file_path, tf_filter_list=tfs.df.index.tolist())
+    my_time_series_expressions.save_tf_produced_by_module_file(
+        out_file_path=out_file_path, tf_list_path=tfs.df.index.tolist())
 
     assert True
