@@ -160,32 +160,45 @@ class ModuleRegulatoryNetwork:
 
     def get_module_module_network(self) -> ModuleRegulatoryNetwork:
         """Cut out all TFs and show direct relations between modules"""
-        # Add edges
-        edges_to_add = []
+        # Find all potential edges and filter them to make sure they all agree
+        candidate_edges = {}
         for tf in self.get_tfs():
             original_module = list(self.graph.predecessors(tf))
-            assert len(original_module) == 1, f'TF ({tf} can only be transcribed by one module'
+            assert len(
+                original_module) == 1, f'TF ({tf}) can only be transcribed by one module'
             # List contains only one item, extract it.
             original_module = original_module[0]
             target_modules = list(self.graph.successors(tf))
             for target_module in target_modules:
                 regulation_type = self.graph.edges[tf, target_module]['origin']
                 if regulation_type == EdgeRelation.UP_OR_DOWN:
-                    logging.warning(f'{original_module} -> {target_module}. Has edge of unknown interaction. Omitting from graph')
+                    # Unclear regulations can be ignored
                     continue
-                new_edge = (original_module, target_module, {'origin': regulation_type})
-                edges_to_add.append(new_edge)
+                # If edge not already in candidate edges dict, add it
+                if not (original_module, target_module) in candidate_edges:
+                    candidate_edges[(original_module, target_module)] = dict(origin=regulation_type)
+                # Check if edge agrees with existing edge
+                elif candidate_edges[(original_module, target_module)]['origin'] == regulation_type:
+                    logging.debug(f'Found agreement between regulatory '
+                                  f'direction of {original_module} -> {target_module}')
+                    continue
+                else:
+                    raise ValueError('Disagreement between regulatory directions'
+                                     ' of {original_module} -> {target_module}')
+
+        edge_list = []
+        for (origin, target), data_dict in candidate_edges.items():
+            edge_list.append((origin, target, data_dict))
+
         out_graph = nx.DiGraph()
-        out_graph.add_edges_from(edges_to_add)
-        # TODO do additional cleanup here in case there are duplicate
-        #  edges between nodes, but they have different annotations
+        out_graph.add_edges_from(edge_list)
         return ModuleRegulatoryNetwork(out_graph)
 
-    def get_modules(self) -> list:
+    def get_modules(self) -> list[str]:
         """Return list of all module nodes"""
         return [node for node in self.graph.nodes if self.module_prefix in node]
 
-    def get_tfs(self) -> list:
+    def get_tfs(self) -> list[str]:
         """Return list of all transcription factor nodes"""
         return [node for node in self.graph.nodes if self.tf_prefix in node]
 
