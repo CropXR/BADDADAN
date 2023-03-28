@@ -4,7 +4,6 @@ from pathlib import Path
 import typer
 from lmfit import fit_report
 
-
 from DynamicModels.OdeFitter import OdeFitter
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
@@ -27,7 +26,8 @@ def annotate_microarray_expression(
             ..., help='Path to filename where .csv of annotated expression'
                       ' data will be saved.'),
         annotation_path: Path = typer.Option(
-            Path(f'{__file__}/../data/resources/affy_ATH1_array_elements-2010-12-20.txt').resolve(),
+            Path(
+                f'{__file__}/../data/resources/affy_ATH1_array_elements-2010-12-20.txt').resolve(),
             help='Path to annotation of micro array. '
                  'Arabidopsis ATH1 annotation is provided by default.'),
         log2_transform: bool = typer.Option(
@@ -53,7 +53,8 @@ def annotate_microarray_expression(
                                                           log2_transform,
                                                           csv_separator)
         case _:
-            raise NotImplementedError('Cannot parse file format that is currently provided')
+            raise NotImplementedError(
+                'Cannot parse file format that is currently provided')
     expression_matrix.df.to_csv(output_path)
     logging.info(f'Successfullly saved output to {output_path}')
 
@@ -63,19 +64,58 @@ def fit_ode_to_data(my_ode: OdeModel,
     # Assume that data has already been clustered
     my_time, my_data = \
         my_time_series_expressions.get_clusters_expressions_with_time(0)
+
+    best_params_so_far = {
+        "delta_0": 3.0970e-04,
+        "gamma_0": -3.30882487,
+        "beta_1_0": 308.168437,
+        "k_1_0": 1423.49934,
+        "beta_2_0": 1609.77151,
+        "k_2_0": 1747.61527,
+        "delta_1": 0.13491609,
+        "gamma_1": -0.72451590,
+        "beta_2_1": 3868.00813,
+        "k_2_1": 3405.72210,
+        "beta_0_1": 4.79600616,
+        "k_0_1": 2483.00129,
+        "delta_2": 0.35237808,
+        "gamma_2": 0.49643743,
+        "beta_0_2": 1976.20308,
+        "k_0_2": 1.2062e-04,
+        "beta_1_2": 1859.86147,
+        "k_1_2": 15.4168390,
+        "delta_3": 5.65706872,
+        "gamma_3": 3.01388575,
+        "beta_2_3": 2443.55505,
+        "k_2_3": 838.128554,
+        "beta_1_3": 2064.37510,
+        "k_1_3": 544.943017,
+        "beta_0_3": 1070.24154,
+        "k_0_3": 474.161978,
+        "non_heat_temp": 0.71839443,
+        "heat_end_time": 3,
+        "y0": 421.740813,
+        "y1": 1551.40704,
+        "y2": 1046.54923,
+        "y3": 493.981306,
+    }
     # plot_y_and_y_hat(my_data, my_time)
     # my_time_series_expressions.get_genes_per_cluster()
 
-    # # Fit single model
-    # fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=1000)
-    # fit.fit()
+    # Fit single model
+    fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=4000)
+    for param_name in fit.params.valuesdict():
+        if param_name != 'heat_temp':
+            fit.params[param_name].set(value=best_params_so_far[param_name])
 
-    # Fit multiple models simultaneously
-    nr_fits = 5
-    fitters = [OdeFitter(my_ode, my_data, my_time,
-                         heat_end_time=3, param_limit=2000)
-               for _ in range(nr_fits)]
-    fit = fit_multiple_fitters(fitters)
+    fit.fit()
+
+    # # Fit multiple models simultaneously
+    # nr_fits = 5
+    # fitters = [OdeFitter(my_ode, my_data, my_time,
+    #                      heat_end_time=3, param_limit=4000)
+    #            for _ in range(nr_fits)]
+    # fit = fit_multiple_fitters(fitters)
 
     # more_time = np.linspace(0, 24, 50)
     # Next step: simulate the data with these params
@@ -94,6 +134,7 @@ def fit_ode_to_data(my_ode: OdeModel,
     # logging.info(fit_report(second_fit))
     # # print(fit_report(second_fit))
 
+
 def thickening_thinning(
         my_ode: OdeModel,
         my_time_series_expressions: ExpressionMatrixTimeSeries,
@@ -102,9 +143,11 @@ def thickening_thinning(
     n_clusters = 4
     my_time_series_expressions.keep_only_shoot()
     my_time_series_expressions.merge_biological_samples()
-    my_time_series_expressions.keep_genes_above_deviation_cutoff(cutoff=std_cutoff)
+    my_time_series_expressions.keep_genes_above_deviation_cutoff(
+        cutoff=std_cutoff)
     my_time, my_data = \
-        my_time_series_expressions.get_clusters_expressions_with_time(n_clusters)
+        my_time_series_expressions.get_clusters_expressions_with_time(
+            n_clusters)
     my_time_series_expressions.get_genes_per_cluster()
     # Interpolate data
     interp_time, interp_data = fit_spline(my_data, my_time, num_timepoints=15)
