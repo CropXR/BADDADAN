@@ -76,7 +76,7 @@ def test_artificial_data_fit():
                            )
     wrong_network.plot_network()
     wrong_model = OdeModel.construct_from_regulatory_network(wrong_network,
-                                                             nonlinear=True)
+                                                             nonlinear=False)
 
     # Fit multiple models simultaneously
     nr_fits = 5
