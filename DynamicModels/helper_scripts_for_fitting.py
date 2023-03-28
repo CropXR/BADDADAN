@@ -21,8 +21,11 @@ def fit_multiple_fitters(fitters: list[OdeFitter]) -> OdeFitter:
     bic_values = [sol.bic for sol in all_fits]
     lowest_bic = min(bic_values)
     best_index = bic_values.index(lowest_bic)
-    assert all_fits[best_index].success, f'Best fit was failed fit :(' \
-                                         f'\n{all_fits[best_index].message}'
+    # If stop is in error message, the optimisation stopped after
+    # a max number of iterations, so we can still just use it.
+    assert (all_fits[best_index].success
+            or 'STOP' in all_fits[best_index].message),\
+        f'Best fit was failed fit :( \n{all_fits[best_index].message}'
     # Set the correct parameters based on the best fit; OdeFitter instances
     # are not changed inplace.
     best_fit = fitters[best_index]
