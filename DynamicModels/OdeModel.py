@@ -178,6 +178,12 @@ class OdeModel:
         assert y_pred_heat.success, (
             f"Integration failed: {y_pred_heat.message}"
             f"\nParams: {params}")
+        # if not y_pred_heat.success:
+        #     # Generate basically nonsensical predictions
+        #     logging.warning('Invalid params, just returning really high error')
+        #     y_pred_heat.t = t
+        #     y_pred_heat.y = np.asarray([1.e100 for _ in t])
+        #     return y_pred_heat
 
         # Solve post-heat stress
         t_start = heat_end_time
@@ -191,6 +197,12 @@ class OdeModel:
                                     end_of_heat_expressions,
                                     t_eval=t_non_heat,
                                     args=[params], method='Radau')
+        # if not y_pred_non_heat.success:
+        #     # Generate basically nonsensical predictions
+        #     logging.warning('One integration failed')
+        #     y_pred_heat.t = t
+        #     y_pred_heat.y = np.asarray([1.e100 for _ in t])
+        #     return y_pred_heat
         assert y_pred_non_heat.success, (
             f"Integration failed: {y_pred_non_heat.message}"
             f"\nParams: {params}")
