@@ -106,6 +106,7 @@ def fit_ode_to_data(my_ode: OdeModel,
     fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=4000)
     for param_name in fit.params.valuesdict():
         if param_name != 'heat_temp':
+            # Heat temp is already restrained as 1-non_heat_temp
             fit.params[param_name].set(value=best_params_so_far[param_name])
 
     fit.fit()

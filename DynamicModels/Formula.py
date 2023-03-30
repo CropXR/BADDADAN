@@ -14,7 +14,7 @@ class FormulaSuperClass:
         :param regulator_names: List of all modules that regulate this module
         """
         self.module_name = module_name
-        self.module_index = int(module_name[-1]) - 1
+        self.module_index = int(module_name[-1])
         self.params = []
         self.regulator_names = []
         self.formula_string = ''
@@ -116,7 +116,7 @@ class LinearFormula(FormulaSuperClass):
         :param regulator: Name of regulator module, e.g. MODULE3
         :return: Name of the new parameter
         """
-        regulator_index = int(regulator[-1]) - 1
+        regulator_index = int(regulator[-1])
         b_param_name = f'beta_{regulator_index}_{self.module_index}'
         self.regulator_names.append(regulator)
         self.params.append(b_param_name)
@@ -132,7 +132,7 @@ class LinearFormula(FormulaSuperClass):
 
         :param regulator_to_remove: Name of regulator module, e.g. MODULE3
         :return: Name of the new parameter"""
-        regulator_index = int(regulator_to_remove[-1]) - 1
+        regulator_index = int(regulator_to_remove[-1])
         b_param_name = f'beta_{regulator_index}_{self.module_index}'
         assert regulator_to_remove in self.regulator_names, \
             'Regulator cannot be removed, it is not present in the current formula'
@@ -161,7 +161,7 @@ class NonLinearFormula(FormulaSuperClass):
         :param regulator: Name of regulator module, e.g. MODULE3
         :return: Name of the new parameter
         """
-        regulator_index = int(regulator[-1]) - 1
+        regulator_index = int(regulator[-1])
         b_param_name = f'beta_{regulator_index}_{self.module_index}'
         k_param_name = f'k_{regulator_index}_{self.module_index}'
         var_name = f'y[{regulator_index}]'
@@ -185,7 +185,7 @@ class NonLinearFormula(FormulaSuperClass):
 
         :param regulator_to_remove: Name of regulator module, e.g. MODULE3
         :return: Name of the new parameter"""
-        regulator_index = int(regulator_to_remove[-1]) - 1
+        regulator_index = int(regulator_to_remove[-1])
         b_param_name = f'beta_{regulator_index}_{self.module_index}'
         assert regulator_to_remove in self.regulator_names, \
             'Regulator cannot be removed, it is not present in the current formula'
