@@ -337,6 +337,8 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         # Create linkage matrix and infer clusters
         linkage_matrix = linkage(dist, method='complete')
         clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
+        # Make clustering be 0-based instead of 1-based
+        clustering = clustering - 1
         if do_plotting:
             # Create colours to use in clustermap
             lut = dict(zip([i for i in range(1, n_cluster + 1)],
