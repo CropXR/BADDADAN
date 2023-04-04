@@ -1,9 +1,11 @@
 import logging
 from pathlib import Path
 
+import numpy as np
 import typer
 from lmfit import fit_report
 
+from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from DynamicModels.OdeFitter import OdeFitter
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
@@ -59,11 +61,11 @@ def annotate_microarray_expression(
     logging.info(f'Successfullly saved output to {output_path}')
 
 
-def fit_ode_to_data(my_ode: OdeModel,
+def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
                     my_time_series_expressions: ExpressionMatrixTimeSeries):
     # Assume that data has already been clustered
     my_time, my_data = \
-        my_time_series_expressions.get_clusters_expressions_with_time(0)
+        my_time_series_expressions.get_clusters_expressions_with_time(4)
 
     best_params_so_far = {
         "delta_0": 3.0970e-04,
@@ -103,6 +105,15 @@ def fit_ode_to_data(my_ode: OdeModel,
     # my_time_series_expressions.get_genes_per_cluster()
 
     # Fit single model
+    module_network.graph.remove_edge('MODULE0', 'MODULE1')
+    best_params_so_far.pop('beta_0_1')
+    best_params_so_far.pop('k_0_1')
+    # module_network.graph.remove_edge('MODULE2', 'MODULE1')
+    # best_params_so_far.pop('beta_2_1')
+    # best_params_so_far.pop('k_2_1')
+    # module_network.plot_network()
+    my_ode = OdeModel.construct_from_regulatory_network(module_network,
+                                                        nonlinear=True)
     fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=4000)
     for param_name in fit.params.valuesdict():
         if param_name != 'heat_temp':

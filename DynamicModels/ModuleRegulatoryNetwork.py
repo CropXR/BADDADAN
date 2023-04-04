@@ -53,7 +53,7 @@ class ModuleRegulatoryNetwork:
                           in self.graph.edges.data('origin')]
 
         draw_func(self.graph, node_color=node_color_map,
-                  edge_color=edge_color_map, with_labels=with_labels, arrowsize=20)
+                  edge_color=edge_color_map, with_labels=with_labels, arrowsize=30)
         if out_path:
             plt.savefig(out_path)
         else:
