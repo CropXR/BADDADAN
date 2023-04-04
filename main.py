@@ -64,8 +64,9 @@ def annotate_microarray_expression(
 def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
                     my_time_series_expressions: ExpressionMatrixTimeSeries):
     # Assume that data has already been clustered
+    assert my_time_series_expressions.has_been_clustered
     my_time, my_data = \
-        my_time_series_expressions.get_clusters_expressions_with_time(4)
+        my_time_series_expressions.get_clusters_expressions_with_time(0)
 
     best_params_so_far = {
         "delta_0": 3.0970e-04,
