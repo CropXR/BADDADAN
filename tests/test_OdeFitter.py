@@ -18,7 +18,7 @@ def test_artificial_data_fit():
     """
     my_graph = nx.DiGraph()
     module_names = [ModuleRegulatoryNetwork.module_prefix + str(i)
-                    for i in range(1, 5)]
+                    for i in range(0, 4)]
     my_graph.add_nodes_from(module_names)
     my_graph.add_edge(module_names[0], module_names[1],
                       origin=EdgeRelation.DOWNREGULATES)
@@ -35,7 +35,7 @@ def test_artificial_data_fit():
 
     articial_network = ModuleRegulatoryNetwork(my_graph)
 
-    articial_network.plot_network()
+    # articial_network.plot_network()
     artificial_model = OdeModel.construct_from_regulatory_network(
         articial_network,
         nonlinear=True)
@@ -51,8 +51,8 @@ def test_artificial_data_fit():
 
     # Add initial conditions
     for module_name in module_names:
-        value = 2 if '1' in module_name else 1
-        init_name = f'y{int(module_name[-1]) - 1}'
+        value = 2 if '0' in module_name else 1
+        init_name = f'y{int(module_name[-1])}'
         ground_truth_params.add(name=init_name, value=value)
         init_condition_names.append(init_name)
 
@@ -64,26 +64,43 @@ def test_artificial_data_fit():
 
     plot_y_and_y_hat(sim_data.y, sim_data.t)
 
-    # Change activation from MODULE3 to MODULE2 to inhibition
-    my_graph.add_edge(module_names[2], module_names[3],
-                      origin=EdgeRelation.DOWNREGULATES)
+    # # Change activation from MODULE3 to MODULE2 to inhibition
+    # my_graph.add_edge(module_names[2], module_names[3],
+    #                   origin=EdgeRelation.DOWNREGULATES)
     wrong_network = ModuleRegulatoryNetwork(my_graph)
-    nx.set_edge_attributes(wrong_network.graph,
-                           {(module_names[2], module_names[1]):
-                                {'origin': EdgeRelation.DOWNREGULATES},
-                            (module_names[0], module_names[2]):
-                                {'origin': EdgeRelation.DOWNREGULATES}}
-                           )
-    wrong_network.plot_network()
+    # nx.set_edge_attributes(wrong_network.graph,
+    #                        {(module_names[2], module_names[1]):
+    #                             {'origin': EdgeRelation.DOWNREGULATES},
+    #                         (module_names[0], module_names[2]):
+    #                             {'origin': EdgeRelation.DOWNREGULATES}}
+    #                        )
+    # wrong_network.plot_network()
     wrong_model = OdeModel.construct_from_regulatory_network(wrong_network,
-                                                             nonlinear=False)
+                                                             nonlinear=True)
 
     # Fit multiple models simultaneously
-    nr_fits = 5
-    fitters = [OdeFitter(wrong_model, sim_data.y, sim_data.t,
-                         heat_end_time=3, param_limit=10)
-               for _ in range(nr_fits)]
-    my_fitter = fit_multiple_fitters(fitters)
+    my_fitter = OdeFitter(wrong_model, sim_data.y, sim_data.t,
+                          heat_end_time=3, param_limit=10)
+    # my_fitter.params = ground_truth_params
+    np.random.seed(420)
+    for param_name in my_fitter.params.valuesdict():
+        if param_name != 'heat_end_time':
+            # Heat temp is already restrained as 1-non_heat_temp
+            value = np.random.normal(1, .5)
+            my_fitter.params[param_name].set(value=value)
+    # #
+    my_fitter.params['non_heat_temp'].set(value=.3)
+    my_fitter.params['heat_temp'].set(expr='1-non_heat_temp')
+    my_fitter.params['y0'].set(value=2)
+    my_fitter.params['heat_end_time'].set(value=3, vary=False)
+    # # my_fitter.params['k_1_2'].set(value=0)
+    my_fitter.fit()
+
+    # nr_fits = 5
+    # fitters = [OdeFitter(wrong_model, sim_data.y, sim_data.t,
+    #                      heat_end_time=3, param_limit=10)
+    #            for _ in range(nr_fits)]
+    # my_fitter = fit_multiple_fitters(fitters)
 
     fit_result = my_fitter.calculate_current_best_fit(sim_data.t)
     plot_y_and_y_hat(sim_data.y, sim_data.t, fit_result)
