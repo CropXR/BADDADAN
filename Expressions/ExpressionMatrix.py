@@ -292,6 +292,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         # Add prefixes to modules and transcription factors
         out_df.index = self.tf_prefix + out_df.index.astype(str)
         out_df['cluster_id'] = self.module_prefix + out_df.cluster_id.astype(str)
+        out_file_path.parent.mkdir(exist_ok=True, parents=True)
         out_df.to_csv(out_file_path, sep=' ', columns=['cluster_id'],
                       header=False)
 
@@ -590,7 +591,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                 # Gene could not be annotated, so tf2 won't find it
                 continue
             lines.append(f'{cluster_id} {gene_name}\n')
-        with out_path.open('w') as f:
+        out_path.parent.mkdir(exist_ok=True, parents=True)
+        with out_path.open('w+') as f:
             f.writelines(lines)
 
     def get_correlation(self, module_index: int, tf_name: str,
