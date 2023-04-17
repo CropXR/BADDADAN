@@ -68,50 +68,42 @@ def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
     my_time, my_data = \
         my_time_series_expressions.get_clusters_expressions_with_time(0)
 
-    best_params_so_far = {
-        "delta_0": 3.0970e-04,
-        "gamma_0": -3.30882487,
-        "beta_1_0": 308.168437,
-        "k_1_0": 1423.49934,
-        "beta_2_0": 1609.77151,
-        "k_2_0": 1747.61527,
-        "delta_1": 0.13491609,
-        "gamma_1": -0.72451590,
-        "beta_2_1": 3868.00813,
-        "k_2_1": 3405.72210,
-        "beta_0_1": 4.79600616,
-        "k_0_1": 2483.00129,
-        "delta_2": 0.35237808,
-        "gamma_2": 0.49643743,
-        "beta_0_2": 1976.20308,
-        "k_0_2": 1.2062e-04,
-        "beta_1_2": 1859.86147,
-        "k_1_2": 15.4168390,
-        "delta_3": 5.65706872,
-        "gamma_3": 3.01388575,
-        "beta_2_3": 2443.55505,
-        "k_2_3": 838.128554,
-        "beta_1_3": 2064.37510,
-        "k_1_3": 544.943017,
-        "beta_0_3": 1070.24154,
-        "k_0_3": 474.161978,
-        "non_heat_temp": 0.71839443,
-        "heat_end_time": 3,
-        "y0": 421.740813,
-        "y1": 1551.40704,
-        "y2": 1046.54923,
-        "y3": 493.981306,
-    }
+    best_params_so_far = {"delta_0": 0.17532228,
+    "gamma_0": -2.14097991,
+    "beta_1_0": 762.202767,
+    "k_1_0": 3985.07493,
+    "beta_2_0": 2528.66586,
+    "k_2_0": 319.454016,
+    "delta_1": 1.85614978,
+    "gamma_1": -1.41899524,
+    "beta_2_1": 3888.65189,
+    "k_2_1": 2056.78999,
+    "beta_0_1": 3568.11827,
+    "k_0_1": 174.857312,
+    "delta_2": 0.37376163,
+    "gamma_2": -4.2744e-06,
+    "beta_0_2": 3900.14532,
+    "k_0_2": 48.1692338,
+    "beta_1_2": 7.2092e-05,
+    "k_1_2": 2479.98758,
+    "delta_3": 0.84871707,
+    "gamma_3": -1.8385e-05,
+    "beta_2_3": 1304.28210,
+    "k_2_3": 149.496149,
+    "beta_1_3": 3981.49013,
+    "k_1_3": 124.317746,
+    "beta_0_3": 3927.17949,
+    "k_0_3": 1.54640211,
+    "non_heat_temp": 0.78914551,
+    "y0": 480.407205,
+    "y1": 1510.77635,
+    "y2": 994.706971,
+    "y3": 448.590875,
+     "heat_end_time": 3,
+     "heat_temp": 0.19436015}
     # plot_y_and_y_hat(my_data, my_time)
     # my_time_series_expressions.get_genes_per_cluster()
 
-    # Fit single model
-    module_network.graph.remove_edge('MODULE0', 'MODULE1')
-    best_params_so_far.pop('beta_0_1')
-    best_params_so_far.pop('k_0_1')
-    # module_network.graph.remove_edge('MODULE2', 'MODULE1')
-    # best_params_so_far.pop('beta_2_1')
-    # best_params_so_far.pop('k_2_1')
     # module_network.plot_network()
     my_ode = OdeModel.construct_from_regulatory_network(module_network,
                                                         nonlinear=True)
@@ -120,15 +112,9 @@ def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
         if param_name != 'heat_temp':
             # Heat temp is already restrained as 1-non_heat_temp
             fit.params[param_name].set(value=best_params_so_far[param_name])
-
+    fit.params["heat_end_time"].set(value=3, vary=False)
+    fit.params["heat_temp"].set(expr='1 - non_heat_temp')
     fit.fit()
-
-    # # Fit multiple models simultaneously
-    # nr_fits = 5
-    # fitters = [OdeFitter(my_ode, my_data, my_time,
-    #                      heat_end_time=3, param_limit=4000)
-    #            for _ in range(nr_fits)]
-    # fit = fit_multiple_fitters(fitters)
 
     # more_time = np.linspace(0, 24, 50)
     # Next step: simulate the data with these params
