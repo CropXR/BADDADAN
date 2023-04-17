@@ -239,12 +239,18 @@ class ModuleRegulatoryNetwork:
 
     def check_if_tfs_created_by_module(self,
                                        expressions: ExpressionMatrixTimeSeries,
-                                       do_plotting: bool = False):
+                                       do_plotting: bool = False,
+                                       remove_low_corr: bool = False):
         """Check if TFs are 'created' by their module.
 
         To do this, we verify that the mean expression of the module is
         positively correlated with the transcription factor it produces.
         """
+        if remove_low_corr:
+            logging.warning('REMOVING LOW CORRELATION TFS BECAUSE IT '
+                            'WAS SPECIFIED IN THE FUNCTION CALL')
+            tfs_to_remove = set()
+
         debug_corrs = []
         all_module_tf_pairs = self.get_filtered_module_tf_edges(
             EdgeRelation.TRANSCRIBED_BY)
@@ -254,14 +260,29 @@ class ModuleRegulatoryNetwork:
             module_without_prefix = int(module_without_prefix)
             tf_name_without_prefix = tf_name.removeprefix(self.tf_prefix)
             corr = expressions.get_correlation(module_without_prefix,
-                                               tf_name_without_prefix, plot=False)
-            assert corr > .3, f'HUH?! Module {module_name} is not positively correlated ' \
-                              f'with the TF ({tf_name}) it produces'
+                                               tf_name_without_prefix,
+                                               plot=False, method='pearson')
             debug_corrs.append(corr)
+            if not remove_low_corr:
+                assert corr > .3, f'HUH?! Module {module_name} is not positively correlated ' \
+                                  f'with the TF ({tf_name}) it produces. Can be fixed by running this function with remove_low_corr=True'
+            elif corr < .3:
+
+                tfs_to_remove.add(tf_name)
+            else:
+                continue
+        if remove_low_corr:
+            logging.info(
+                f'Removing {tfs_to_remove} because correlation between their '
+                f'expression and the module that produces them is too low'
+            )
+            self.graph.remove_nodes_from(tfs_to_remove)
+
         if do_plotting:
             sns.set_style()
             sns.boxplot(debug_corrs)
-            plt.ylim((0, 1))
+            sns.swarmplot(debug_corrs, color=sns.color_palette()[1])
+            plt.ylim((-.5, 1))
             plt.show()
         return True
 
