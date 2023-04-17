@@ -163,6 +163,20 @@ def thickening_thinning(
 
     logging.info(fit_report(optimal_fit))
 
+def compare_clusterings(
+        cluster_path1: Path,
+        cluster_path2: Path,
+):
+    """Compare the clusterings created by two different
+    pipelines to see if they agree. E.g. you can pass it two
+    gene_to_module.csv files to compare them
+    """
+    df1 = pd.read_csv(cluster_path1, sep=' ', names=['gene', 'module'])
+    df2 = pd.read_csv(cluster_path2, sep=' ', names=['gene', 'module'])
+
+    merged_df = df1.merge(df2, on='gene')
+    agreement_score = adjusted_rand_score(merged_df.module_x.to_list(), merged_df.module_y.to_list())
+    print(agreement_score)
 
 if __name__ == "__main__":
     typer.run(annotate_microarray_expression)
