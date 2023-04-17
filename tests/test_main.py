@@ -44,3 +44,8 @@ def test_thickening_thinning(
         my_time_series_expressions: ExpressionMatrixTimeSeries
 ):
     thickening_thinning(my_tf2_network, my_time_series_expressions, std_cutoff=1)
+
+def test_compare_clusterings():
+    log2_cluster = Path('../data/time_series_datasets/tf2network_approach/2000_highest_mad_log2/02_gene_to_module.csv')
+    raw_cluster = Path('../data/time_series_datasets/tf2network_approach/2000_highest_mad/02_gene_to_module.csv')
+    compare_clusterings(log2_cluster, raw_cluster)
