@@ -70,64 +70,38 @@ def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
     my_time, my_data = \
         my_time_series_expressions.get_clusters_expressions_with_time(0)
 
-    best_params_so_far = {"delta_0": 0.17532228,
-    "gamma_0": -2.14097991,
-    "beta_1_0": 762.202767,
-    "k_1_0": 3985.07493,
-    "beta_2_0": 2528.66586,
-    "k_2_0": 319.454016,
-    "delta_1": 1.85614978,
-    "gamma_1": -1.41899524,
-    "beta_2_1": 3888.65189,
-    "k_2_1": 2056.78999,
-    "beta_0_1": 3568.11827,
-    "k_0_1": 174.857312,
-    "delta_2": 0.37376163,
-    "gamma_2": -4.2744e-06,
-    "beta_0_2": 3900.14532,
-    "k_0_2": 48.1692338,
-    "beta_1_2": 7.2092e-05,
-    "k_1_2": 2479.98758,
-    "delta_3": 0.84871707,
-    "gamma_3": -1.8385e-05,
-    "beta_2_3": 1304.28210,
-    "k_2_3": 149.496149,
-    "beta_1_3": 3981.49013,
-    "k_1_3": 124.317746,
-    "beta_0_3": 3927.17949,
-    "k_0_3": 1.54640211,
-    "non_heat_temp": 0.78914551,
-    "y0": 480.407205,
-    "y1": 1510.77635,
-    "y2": 994.706971,
-    "y3": 448.590875,
-     "heat_end_time": 3,
-     "heat_temp": 0.19436015}
-    # plot_y_and_y_hat(my_data, my_time)
+    plot_y_and_y_hat(my_data, my_time)
     # my_time_series_expressions.get_genes_per_cluster()
 
     # module_network.plot_network()
     my_ode = OdeModel.construct_from_regulatory_network(module_network,
                                                         nonlinear=True)
-    fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=4000)
-    for param_name in fit.params.valuesdict():
-        if param_name != 'heat_temp':
-            # Heat temp is already restrained as 1-non_heat_temp
-            fit.params[param_name].set(value=best_params_so_far[param_name])
-    fit.params["heat_end_time"].set(value=3, vary=False)
-    fit.params["heat_temp"].set(expr='1 - non_heat_temp')
-    fit.fit()
+
+    nr_fits = 5
+    fitters = [OdeFitter(my_ode, my_data, my_time,
+                         heat_end_time=3, param_limit=100)
+               for _ in range(nr_fits)]
+    best_fit = fit_multiple_fitters(fitters)
+    logging.info(f'Best fit parameters {best_fit.params.valuesdict()}')
+    # best_fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=4000)
+    # # for param_name in best_fit.params.valuesdict():
+    # #     if param_name != 'heat_temp':
+    # #         # Heat temp is already restrained as 1-non_heat_temp
+    # #         best_fit.params[param_name].set(value=best_params_so_far[param_name])
+    # # best_fit.params["heat_end_time"].set(value=3, vary=False)
+    # # best_fit.params["heat_temp"].set(expr='1 - non_heat_temp')
+    # best_fit.best_fit()
 
     # more_time = np.linspace(0, 24, 50)
     # Next step: simulate the data with these params
-    simulated_data = fit.calculate_current_best_fit(my_time)
+    simulated_data = best_fit.calculate_current_best_fit(my_time)
 
     plot_y_and_y_hat(y_real=my_data, t_real=my_time,
                      model_fit=simulated_data)
     #
-    # # And try to fit model again
+    # # And try to best_fit model again
     # try_again = OdeFitter(my_ode, simulated_data.y, simulated_data.t)
-    # second_fit = try_again.fit()
+    # second_fit = try_again.best_fit()
     # fit_to_simul = try_again.predict_values(second_fit.params, simulated_data.t)
     #
     # plot_y_and_y_hat(y_real=simulated_data.y, t_real=simulated_data.t,
