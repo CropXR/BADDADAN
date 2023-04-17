@@ -41,6 +41,28 @@ def test_keep_n_most_deviating_genes(my_time_series_expressions: ExpressionMatri
     my_time_series_expressions.plot_clusters_over_time()
     assert True
 
+def test_do_flame_clustering(my_time_series_expressions: ExpressionMatrixTimeSeries):
+    my_time_series_expressions.keep_only_shoot()
+    my_time_series_expressions.merge_biological_samples()
+    my_time_series_expressions.keep_n_most_deviating_genes(150, method='mad')
+    # TODO properly get transcription factors
+    my_time_series_expressions.do_flame_clustering(
+        Path('../bins/flame_clustering'))
+    out_file_path = Path(
+        '../data/garbage/my_clustering_edgelist.csv')
+    my_time_series_expressions.save_tf_produced_by_module_file(
+        out_file_path=out_file_path)
+    my_time_series_expressions.plot_clusters_over_time()
+    my_time_series_expressions.write_tf2_input_file(Path('../data/garbage/flame_test_cluster.txt'))
+
+    my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(
+        Path('../data/garbage/tf2network_output.tsv'))
+    my_grn.plot_network(nx.draw)
+    my_grn.add_tf_module_mappings(
+        Path('../data/garbage/my_clustering_edgelist.csv'))
+    my_grn.clean_up_network()
+    my_grn.plot_network()
+
 
 def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
     """Check if we can extract modules from data, and save data so it can be
