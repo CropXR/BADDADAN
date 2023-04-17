@@ -2,8 +2,10 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import typer
 from lmfit import fit_report
+from sklearn.metrics import adjusted_rand_score
 
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from DynamicModels.OdeFitter import OdeFitter
