@@ -40,7 +40,7 @@ class OdeFitter:
                 min_value = 0.
             if 'gamma' in param_name:
                 min_value = -10
-                max_value = 10
+                max_value = 0
 
             self.params.add(param_name,
                             value=np.random.uniform(min_value,
