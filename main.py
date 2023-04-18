@@ -1,6 +1,8 @@
 import logging
+import pickle
 from pathlib import Path
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 import typer
@@ -61,6 +63,71 @@ def annotate_microarray_expression(
                 'Cannot parse file format that is currently provided')
     expression_matrix.df.to_csv(output_path)
     logging.info(f'Successfullly saved output to {output_path}')
+
+def full_pipeline_with_coefficient_of_variation(total_genes: int = 2000,
+                                                do_log2: bool =True,
+                                                variation_measure: str ='qcd'):
+    """From expressions, do log2 normalisation, get 2000 genes with highest
+     coefficient of variation, infer their connections and fit a nonlinear model.
+
+    Stopped doing the test thing because it was also kind of weird, so now
+    I just put this full thing in a loooong script.
+    """
+    # Annotate genes, log2 transform them
+    out_dir = Path(
+            f'data/time_series_datasets/tf2network_approach'
+            f'/{total_genes}_highest_{variation_measure}{"_log2" if do_log2 else "_no_log2"}/')
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if not (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').exists():
+        my_expression_annotation = ExpressionArrayAnnotation(
+            Path('data/resources/affy_ATH1_array_elements-2010-12-20.txt'))
+        time_series_expressions = Path(
+            'data/time_series_datasets/GSE5628_family.soft')
+        expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
+            time_series_expressions, my_expression_annotation, log2_transform=do_log2)
+        with (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').open('wb') as f:
+            pickle.dump(expr_mat_time, f)
+    else:
+        logging.info('Pickled file exists, using that one')
+        with (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').open('rb') as f:
+            expr_mat_time = pickle.load(f)
+
+    # More preprocessing, keep only most dispersed genes
+    expr_mat_time.keep_only_shoot()
+    expr_mat_time.merge_biological_samples()
+
+    expr_mat_time.keep_n_most_deviating_genes(total_genes, variation_measure)
+    expr_mat_time.do_hierachical_clustering(4, do_plotting=False)
+    # expr_mat_time.plot_clusters_over_time(plot_units=False)
+    # expr_mat_time.plot_clusters_over_time(plot_units=True)
+
+    # Create a file that can be used on
+    # http://bioinformatics.psb.ugent.be/webtools/TF2Network/
+    # to get putative regulators per cluster
+    expr_mat_time.write_tf2_input_file(
+        out_dir / f'01_tf2network_input_{total_genes}_highest_{variation_measure}_genes.txt')
+    expr_mat_time.save_tf_produced_by_module_file(
+        out_dir / f'02_gene_to_module.csv',
+        tf_list_path=Path('data/resources/Ath_TF_list.txt')
+    )
+
+    # expr_mat_time.plot_clusters_over_time()
+
+    # Now it's time to get the network that we need
+    # This file has to be created manually from the TF2 website
+    my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(out_dir / '03_tf2network_output.tsv')
+    my_grn.add_tf_module_mappings(out_dir / '02_gene_to_module.csv')
+    my_grn.clean_up_network()
+    my_grn.plot_network(with_labels=True)
+    my_grn.check_if_tfs_created_by_module(expr_mat_time, do_plotting=True,
+                                          remove_low_corr=True)
+    my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True)
+    # my_tf2_input.get_correlation(2, 'AT1G18330')
+    my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
+    module_module = my_grn.get_module_module_network()
+    module_module.plot_network(with_labels=True)
+
+    fit_ode_to_data(module_module, expr_mat_time)
 
 
 def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
@@ -192,4 +259,6 @@ def compare_clusterings(
     print(agreement_score)
 
 if __name__ == "__main__":
-    typer.run(annotate_microarray_expression)
+    # typer.run(annotate_microarray_expression)
+    # typer.run(full_pipeline_with_coefficient_of_variation)
+    full_pipeline_with_coefficient_of_variation(do_log2=True)
