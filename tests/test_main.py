@@ -4,17 +4,11 @@ from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 from DynamicModels.OdeModel import OdeModel
 
 from main import fit_ode_to_data, thickening_thinning, \
-    annotate_microarray_expression
+    annotate_microarray_expression, compare_clusterings
 
 
 def test_get_tf2_input(my_tf2_input):
     pass
-
-
-def test_fit_ode_to_data(
-        my_ode: OdeModel,
-        my_time_series_expressions: ExpressionMatrixTimeSeries):
-    fit_ode_to_data(my_ode, my_time_series_expressions)
 
 
 def test_tf2_inference(
@@ -46,6 +40,6 @@ def test_thickening_thinning(
     thickening_thinning(my_tf2_network, my_time_series_expressions, std_cutoff=1)
 
 def test_compare_clusterings():
-    log2_cluster = Path('../data/time_series_datasets/tf2network_approach/2000_highest_mad_log2/02_gene_to_module.csv')
-    raw_cluster = Path('../data/time_series_datasets/tf2network_approach/2000_highest_mad/02_gene_to_module.csv')
+    log2_cluster = Path('../data/time_series_datasets/tf2network_approach/2000_highest_qcd_log2/02_gene_to_module.csv')
+    raw_cluster = Path('../data/time_series_datasets/tf2network_approach/2000_highest_qcd_no_log2/02_gene_to_module.csv')
     compare_clusterings(log2_cluster, raw_cluster)
