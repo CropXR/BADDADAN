@@ -127,3 +127,14 @@ def fit_spline(data: np.ndarray, time: list | np.ndarray,
         spline = PchipInterpolator(time, row)
         out_array[i, :] = spline(new_time)
     return new_time, out_array
+
+
+def calculate_coefficient_of_variation(x: np.ndarray):
+    """Calculate coefficient of variation for input array of numbers"""
+    return np.std(x, ddof=1) / np.mean(x)
+
+
+def calculate_qcd(x: np.ndarray):
+    """Calculate quartile coefficient of dispersion for input array of numbers"""
+    q1, q3 = np.quantile(x, [.25, .75])
+    return (q3 - q1) / (q3 + q1)

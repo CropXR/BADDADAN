@@ -19,7 +19,8 @@ from scipy.cluster.hierarchy import linkage, fcluster
 import qnorm
 
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
-from helpers import get_info_from_gse5628, standardize
+from helpers import get_info_from_gse5628, standardize, \
+    calculate_coefficient_of_variation, calculate_qcd
 
 
 class ExpressionMatrix:
@@ -137,33 +138,57 @@ class ExpressionMatrix:
         expr_mat_test = ExpressionMatrixTest(self.df[test_cols])
         return expr_mat_train, expr_mat_test
 
-    def _calculate_gene_variation(self, method=Literal['std', 'mad']) -> pd.Series:
+    def _calculate_gene_variation(self, method: Literal['std', 'mad', 'cv', 'qcd']) -> pd.Series:
         """Calculate for each gene how much it varies over all the samples
 
         :param method: How to determine variation between samples:
                         std: standard deviation
                         mad: mean absolute deviation
+                        qcd: quartile coefficient of dispersion
         :return: Measure of variation for each gene
         """
-        # Select correct method to use for calculation the variation of a gene
+
+        if method in ['qcd', 'cv']:
+            # Cannot take negative values:
+            # Subtract minimum value to all values, so qcd / cv does not
+            # get negative inputs
+            min_value = self.df.min().min()
+            # all_num_df = self.df.apply(pd.to_numeric)
+            translated_df = self.df - min_value
+
+        # # Random snippet to plot compare measures
+        # self.df['qcd'] = translated_df.apply(calculate_qcd, axis=1)
+        # self.df['cv'] = translated_df.apply(calculate_coefficient_of_variation,
+        #                               axis=1)
+        # fig, axs = plt.subplots(2, 1)
+        # sns.stripplot(data=self.df, x='qcd', ax=axs[0], alpha=.5)
+        # sns.stripplot(data=self.df, x='cv', ax=axs[1], alpha=.5)
+        # plt.tight_layout()
+        # plt.show()
+        # logging.info(self.df[['qcd', 'cv']].corr('spearman'))
+
         match method:
             case 'std':
-                variation_method = self.df.std
+                return self.df.std(axis=1)
             case 'mad':
-                variation_method = self.df.mad
+                return self.df.mad(axis=1)
+            case 'qcd':
+                return translated_df.apply(calculate_qcd, axis=1)
+            case 'cv':
+                return translated_df.apply(calculate_coefficient_of_variation, axis=1)
             case _:
                 raise NotImplementedError
-        # Call the method
-        return variation_method(axis=1)
 
     def keep_genes_above_deviation_cutoff(
-            self, cutoff: float = None, method: Literal['std', 'mad'] = 'std'
+            self, cutoff: float = None,
+            method: Literal['std', 'mad', 'qcd'] = 'std'
     ) -> None:
         """Remove non-differentially expressed (de) genes.
 
         :param method: How to determine variation between samples:
                         std: standard deviation
                         mad: mean absolute deviation
+                        qcd: quantile coefficient of dispersion
         :param cutoff: Minimum standard deviation between samples
                            for a gene to be included. Default: 1.0
         """
@@ -172,12 +197,13 @@ class ExpressionMatrix:
         self.df = self.df[variation > cutoff]
 
     def keep_n_most_deviating_genes(self, n_max: int = None,
-                                    method: Literal['std', 'mad'] = 'std') -> None:
+                                    method: Literal['std', 'mad', 'cv', 'qcd'] = 'std') -> None:
         """Remove non-differentially expressed (de) genes.
 
         :param method: How to determine variation between samples:
                         std: standard deviation
                         mad: mean absolute deviation
+                        cv: coefficient of variation
         :param n_max: Number of genes to keep. E.g. 1000 will give you the
             top 1000 genes with highest variation between samples.
         """
