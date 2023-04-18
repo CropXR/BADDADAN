@@ -80,11 +80,18 @@ class OdeFitter:
         return self.odes.calculate_solution(self.params, t,
                                             self.init_condition_names)
 
-    def fit(self) -> MinimizerResult:
+    def fit(self, max_iter=None) -> MinimizerResult:
         """Find optimal parameters for ODE
 
+        :param max_iter: For lbfgs/bfgs, set the maximum number of iterations
         :return: result of minimisation
         """
+        if max_iter and self.method not in ['lbfgs', 'bfgs']:
+            raise NotImplementedError(
+                'Can only enter maxiter for BFGS/LBFGS methods currently.')
+        else:
+            max_iter = 1000
+
         match self.method:
             case 'lbfgs' | 'bfgs':
                 result = minimize(self.loss_function,
@@ -93,7 +100,8 @@ class OdeFitter:
                                   kws={'t': self.time_points,
                                        'y_real': self.measured_data,
                                        'return_scalar': True},
-                                  options=dict(disp=1, maxiter=1000, maxfun=1e99),
+                                  options=dict(disp=1, maxiter=max_iter,
+                                               maxfun=1e99),
                                   )
             case 'differential_evolution':
                 result = minimize(self.loss_function,
