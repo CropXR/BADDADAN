@@ -77,20 +77,57 @@ def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
     my_ode = OdeModel.construct_from_regulatory_network(module_network,
                                                         nonlinear=True)
 
-    nr_fits = 5
-    fitters = [OdeFitter(my_ode, my_data, my_time,
-                         heat_end_time=3, param_limit=100)
-               for _ in range(nr_fits)]
-    best_fit = fit_multiple_fitters(fitters)
-    logging.info(f'Best fit parameters {best_fit.params.valuesdict()}')
-    # best_fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=4000)
-    # # for param_name in best_fit.params.valuesdict():
-    # #     if param_name != 'heat_temp':
-    # #         # Heat temp is already restrained as 1-non_heat_temp
-    # #         best_fit.params[param_name].set(value=best_params_so_far[param_name])
-    # # best_fit.params["heat_end_time"].set(value=3, vary=False)
-    # # best_fit.params["heat_temp"].set(expr='1 - non_heat_temp')
-    # best_fit.best_fit()
+    # nr_fits = 5
+    # fitters = [OdeFitter(my_ode, my_data, my_time,
+    #                      heat_end_time=3, param_limit=100)
+    #            for _ in range(nr_fits)]
+    # best_fit = fit_multiple_fitters(fitters)
+    # logging.info(f'Best fit parameters {best_fit.params.pretty_print()}')
+    # logging.info(f'Best fit parameters {best_fit.params.valuesdict()}')
+
+    best_params_so_far = {
+        "delta_0": 6.96879050,
+        "gamma_0": 4.52378448,
+        "beta_2_0": 6.85200720,
+        "k_2_0": 72.1041216,
+        "beta_3_0": 9.88057244,
+        "k_3_0": 56.8076177,
+        "delta_1": 0.40712237,
+        "gamma_1": -0.14602615,
+        "beta_0_1": 91.5736595,
+        "k_0_1": 5.1010e-05,
+        "beta_2_1": 2.35521423,
+        "k_2_1": 95.7456557,
+        "beta_3_1": 74.0149223,
+        "k_3_1": 0.09908515,
+        "delta_2": 0.03132386,
+        "gamma_2": -2.76555243,
+        "beta_3_2": 11.3435667,
+        "k_3_2": 0.85995851,
+        "beta_0_2": 0.72054543,
+        "k_0_2": 76.6528692,
+        "delta_3": 0.01680434,
+        "gamma_3": -0.49699132,
+        "beta_1_3": 6.3335e-04,
+        "k_1_3": 85.5113151,
+        "beta_0_3": 99.2512088,
+        "k_0_3": 0.02191174,
+        "non_heat_temp": 0.25411295,
+        "y0": 2.74449959,
+        "y1": 2.78200775,
+        "y2": 3.12812166,
+        "y3": 4.94547767,
+        "heat_end_time": 3,
+        "heat_temp": 0.74588705 == '1 - non_heat_temp'}
+
+    best_fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=100)
+    for param_name in best_fit.params.valuesdict():
+        if param_name != 'heat_temp':
+            # Heat temp is already restrained as 1-non_heat_temp
+            best_fit.params[param_name].set(value=best_params_so_far[param_name])
+    best_fit.params["heat_end_time"].set(value=3, vary=False)
+    best_fit.params["heat_temp"].set(expr='1 - non_heat_temp')
+    best_fit.fit()
 
     # more_time = np.linspace(0, 24, 50)
     # Next step: simulate the data with these params
