@@ -17,6 +17,7 @@ import GEOparse
 from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
 import qnorm
+from scipy.spatial.distance import pdist
 
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628, standardize, \
@@ -360,7 +361,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         # Calculate pearson correlation
         subset_corr = np.corrcoef(self.df)
         # Calculate distance
-        dist = 1 - subset_corr
+        dist = pdist(1 - subset_corr)
         # Create linkage matrix and infer clusters
         linkage_matrix = linkage(dist, method='complete')
         clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
@@ -601,11 +602,15 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         module_expressions = new_df.to_numpy()
         return time_points, module_expressions
 
-    def write_tf2_input_file(self, out_path: Path):
+    def write_tf2_input_file(self, out_path: Path,
+                             omit_unannotated_genes: bool = True):
         """Create file that can be pasted into the TF2network website
         (http://bioinformatics.psb.ugent.be/webtools/TF2Network/index.php).
 
         :param out_path: Filename of output txt file
+        :param omit_unannotated_genes: If true, do not save genes that could
+        not be annotated (names like '246771_at') because TF2NETWORK won't know
+        what these genes are.
         """
         genes_with_clusters = self.get_cluster_per_gene()
         lines = []
@@ -613,7 +618,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             if ';' in gene_name:
                 # In case there are multiple gene names, just take the first one
                 gene_name = gene_name.split(';')[0]
-            if not gene_name.startswith('AT'):
+            if omit_unannotated_genes and not gene_name.startswith('AT'):
                 # Gene could not be annotated, so tf2 won't find it
                 continue
             lines.append(f'{cluster_id} {gene_name}\n')
