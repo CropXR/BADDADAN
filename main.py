@@ -1,5 +1,6 @@
 import logging
 import pickle
+from itertools import product
 from pathlib import Path
 
 import networkx as nx
@@ -105,12 +106,13 @@ def full_pipeline_with_coefficient_of_variation(total_genes: int = 2000,
     # http://bioinformatics.psb.ugent.be/webtools/TF2Network/
     # to get putative regulators per cluster
     expr_mat_time.write_tf2_input_file(
-        out_dir / f'01_tf2network_input_{total_genes}_highest_{variation_measure}_genes.txt')
+        out_dir / f'01_tf2network_input_{total_genes}_highest_{variation_measure}_genes.txt',
+        omit_unannotated_genes=False)
     expr_mat_time.save_tf_produced_by_module_file(
         out_dir / f'02_gene_to_module.csv',
         tf_list_path=Path('data/resources/Ath_TF_list.txt')
     )
-
+    return
     # expr_mat_time.plot_clusters_over_time()
 
     # Now it's time to get the network that we need
@@ -251,14 +253,20 @@ def compare_clusterings(
     pipelines to see if they agree. E.g. you can pass it two
     gene_to_module.csv files to compare them
     """
-    df1 = pd.read_csv(cluster_path1, sep=' ', names=['gene', 'module'])
-    df2 = pd.read_csv(cluster_path2, sep=' ', names=['gene', 'module'])
+    df1 = pd.read_csv(cluster_path1, sep=' ', names=['module', 'gene'])
+    df2 = pd.read_csv(cluster_path2, sep=' ', names=['module', 'gene'])
 
     merged_df = df1.merge(df2, on='gene')
     agreement_score = adjusted_rand_score(merged_df.module_x.to_list(), merged_df.module_y.to_list())
+    print()
+    print(f'Nr of overlapping genes {len(merged_df)}')
     print(agreement_score)
 
 if __name__ == "__main__":
     # typer.run(annotate_microarray_expression)
     # typer.run(full_pipeline_with_coefficient_of_variation)
-    full_pipeline_with_coefficient_of_variation(do_log2=True)
+    methods = ['mad', 'cv', 'qcd']
+    for method, do_log2 in product(methods, [True, False]):
+        logging.info(f'Currently: {method} {do_log2}')
+        full_pipeline_with_coefficient_of_variation(variation_measure=method,
+                                                    do_log2=do_log2)
