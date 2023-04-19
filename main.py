@@ -259,8 +259,9 @@ def compare_clusterings(
     merged_df = df1.merge(df2, on='gene')
     agreement_score = adjusted_rand_score(merged_df.module_x.to_list(), merged_df.module_y.to_list())
     print()
-    print(f'Nr of overlapping genes {len(merged_df)}')
-    print(agreement_score)
+    logging.info(f'Nr of overlapping genes {len(merged_df)}')
+    logging.info(agreement_score)
+    print()
 
 if __name__ == "__main__":
     # typer.run(annotate_microarray_expression)
