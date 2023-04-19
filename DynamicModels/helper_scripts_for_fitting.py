@@ -5,7 +5,7 @@ from pathos.multiprocessing import ProcessingPool as Pool
 from DynamicModels.OdeFitter import OdeFitter
 
 
-def fit_multiple_fitters(fitters: list[OdeFitter]) -> OdeFitter:
+def fit_multiple_fitters(fitters: list[OdeFitter], nr_iters: int = None) -> OdeFitter:
     """Fit a list of fitters simultaneously, and return the best fit
 
     :param fitters: list of OdeFitter instances. Length of list determines
@@ -13,7 +13,7 @@ def fit_multiple_fitters(fitters: list[OdeFitter]) -> OdeFitter:
      5 paralllel processes.
     :return: OdeFitter with best parameters
     """
-    caller = operator.methodcaller('fit')
+    caller = operator.methodcaller('fit', nr_iters)
     nr_starts = len(fitters)
     with Pool(nr_starts) as p:
         all_fits = p.map(caller, fitters)
