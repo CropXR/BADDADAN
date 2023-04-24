@@ -65,14 +65,12 @@ def annotate_microarray_expression(
     expression_matrix.df.to_csv(output_path)
     logging.info(f'Successfullly saved output to {output_path}')
 
-def full_pipeline_with_coefficient_of_variation(total_genes: int = 2000,
-                                                do_log2: bool =True,
-                                                variation_measure: str ='qcd'):
-    """From expressions, do log2 normalisation, get 2000 genes with highest
-     coefficient of variation, infer their connections and fit a nonlinear model.
-
-    Stopped doing the test thing because it was also kind of weird, so now
-    I just put this full thing in a loooong script.
+def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
+                                                 do_log2: bool =True,
+                                                 variation_measure: str ='qcd'):
+    """From expressions, do log2 normalisation, get 2000 genes based on custom
+     variation metric, cluster into modules, infer their connections and fit
+      a nonlinear model.
     """
     # Annotate genes, log2 transform them
     out_dir = Path(
@@ -107,15 +105,15 @@ def full_pipeline_with_coefficient_of_variation(total_genes: int = 2000,
     # to get putative regulators per cluster
     expr_mat_time.write_tf2_input_file(
         out_dir / f'01_tf2network_input_{total_genes}_highest_{variation_measure}_genes.txt',
-        omit_unannotated_genes=False)
+        omit_unannotated_genes=True)
     expr_mat_time.save_tf_produced_by_module_file(
         out_dir / f'02_gene_to_module.csv',
         tf_list_path=Path('data/resources/Ath_TF_list.txt')
     )
-    return
+    # return
     # expr_mat_time.plot_clusters_over_time()
 
-    # Now it's time to get the network that we need
+    ## Now it's time to get the network that we need ##
     # This file has to be created manually from the TF2 website
     my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(out_dir / '03_tf2network_output.tsv')
     my_grn.add_tf_module_mappings(out_dir / '02_gene_to_module.csv')
@@ -124,7 +122,6 @@ def full_pipeline_with_coefficient_of_variation(total_genes: int = 2000,
     my_grn.check_if_tfs_created_by_module(expr_mat_time, do_plotting=True,
                                           remove_low_corr=True)
     my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True)
-    # my_tf2_input.get_correlation(2, 'AT1G18330')
     my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
     module_module = my_grn.get_module_module_network()
     module_module.plot_network(with_labels=True)
@@ -145,60 +142,62 @@ def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
     # module_network.plot_network()
     my_ode = OdeModel.construct_from_regulatory_network(module_network,
                                                         nonlinear=True)
+    logging.info(my_ode)
 
-    # nr_fits = 5
-    # fitters = [OdeFitter(my_ode, my_data, my_time,
-    #                      heat_end_time=3, param_limit=100)
-    #            for _ in range(nr_fits)]
-    # best_fit = fit_multiple_fitters(fitters)
-    # logging.info(f'Best fit parameters {best_fit.params.pretty_print()}')
-    # logging.info(f'Best fit parameters {best_fit.params.valuesdict()}')
+    nr_fits = 5
+    fitters = [OdeFitter(my_ode, my_data, my_time,
+                         heat_end_time=3, param_limit=100)
+               for _ in range(nr_fits)]
+    best_fit = fit_multiple_fitters(fitters, nr_iters=3000)
+    best_fit.params.pretty_print()
+    logging.info(f'Best fit parameters {best_fit.params.valuesdict()}')
 
-    best_params_so_far = {
-        "delta_0": 6.96879050,
-        "gamma_0": 4.52378448,
-        "beta_2_0": 6.85200720,
-        "k_2_0": 72.1041216,
-        "beta_3_0": 9.88057244,
-        "k_3_0": 56.8076177,
-        "delta_1": 0.40712237,
-        "gamma_1": -0.14602615,
-        "beta_0_1": 91.5736595,
-        "k_0_1": 5.1010e-05,
-        "beta_2_1": 2.35521423,
-        "k_2_1": 95.7456557,
-        "beta_3_1": 74.0149223,
-        "k_3_1": 0.09908515,
-        "delta_2": 0.03132386,
-        "gamma_2": -2.76555243,
-        "beta_3_2": 11.3435667,
-        "k_3_2": 0.85995851,
-        "beta_0_2": 0.72054543,
-        "k_0_2": 76.6528692,
-        "delta_3": 0.01680434,
-        "gamma_3": -0.49699132,
-        "beta_1_3": 6.3335e-04,
-        "k_1_3": 85.5113151,
-        "beta_0_3": 99.2512088,
-        "k_0_3": 0.02191174,
-        "non_heat_temp": 0.25411295,
-        "y0": 2.74449959,
-        "y1": 2.78200775,
-        "y2": 3.12812166,
-        "y3": 4.94547767,
-        "heat_end_time": 3,
-        "heat_temp": 0.74588705 == '1 - non_heat_temp'}
+    # best_params_so_far = {
+    #     "delta_0": 6.96879050,
+    #     "gamma_0": 4.52378448,
+    #     "beta_2_0": 6.85200720,
+    #     "k_2_0": 72.1041216,
+    #     "beta_3_0": 9.88057244,
+    #     "k_3_0": 56.8076177,
+    #     "delta_1": 0.40712237,
+    #     "gamma_1": -0.14602615,
+    #     "beta_0_1": 91.5736595,
+    #     "k_0_1": 5.1010e-05,
+    #     "beta_2_1": 2.35521423,
+    #     "k_2_1": 95.7456557,
+    #     "beta_3_1": 74.0149223,
+    #     "k_3_1": 0.09908515,
+    #     "delta_2": 0.03132386,
+    #     "gamma_2": -2.76555243,
+    #     "beta_3_2": 11.3435667,
+    #     "k_3_2": 0.85995851,
+    #     "beta_0_2": 0.72054543,
+    #     "k_0_2": 76.6528692,
+    #     "delta_3": 0.01680434,
+    #     "gamma_3": -0.49699132,
+    #     "beta_1_3": 6.3335e-04,
+    #     "k_1_3": 85.5113151,
+    #     "beta_0_3": 99.2512088,
+    #     "k_0_3": 0.02191174,
+    #     "non_heat_temp": 0.25411295,
+    #     "y0": 2.74449959,
+    #     "y1": 2.78200775,
+    #     "y2": 3.12812166,
+    #     "y3": 4.94547767,
+    #     "heat_end_time": 3,
+    #     "heat_temp": 0.74588705 == '1 - non_heat_temp'}
 
-    best_fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=100)
-    for param_name in best_fit.params.valuesdict():
-        if param_name != 'heat_temp':
-            # Heat temp is already restrained as 1-non_heat_temp
-            best_fit.params[param_name].set(value=best_params_so_far[param_name])
-    best_fit.params["heat_end_time"].set(value=3, vary=False)
-    best_fit.params["heat_temp"].set(expr='1 - non_heat_temp')
-    best_fit.fit()
+    # best_fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=100)
+    # for param_name in best_fit.params.valuesdict():
+    #     if param_name != 'heat_temp':
+    #         # Heat temp is already restrained as 1-non_heat_temp
+    #         best_fit.params[param_name].set(value=best_params_so_far[param_name])
+    # best_fit.params["heat_end_time"].set(value=3, vary=False)
+    # best_fit.params["heat_temp"].set(expr='1 - non_heat_temp')
+    # best_fit.fit()
 
     # more_time = np.linspace(0, 24, 50)
+
     # Next step: simulate the data with these params
     simulated_data = best_fit.calculate_current_best_fit(my_time)
 
@@ -263,11 +262,20 @@ def compare_clusterings(
     logging.info(agreement_score)
     print()
 
+def count_flowering_genes(path_to_gene_selection: Path,
+                          path_to_flowering_genes_pkl: Path):
+    selected_gene_df = pd.read_csv(path_to_gene_selection, sep=' ', names=['module', 'gene'])
+    flowering_gene_df = pd.read_pickle(path_to_flowering_genes_pkl)
+    overlap_df = selected_gene_df.merge(flowering_gene_df, left_on='gene', right_on='locustag')
+    return overlap_df
+
 if __name__ == "__main__":
     # typer.run(annotate_microarray_expression)
     # typer.run(full_pipeline_with_coefficient_of_variation)
-    methods = ['mad', 'cv', 'qcd']
-    for method, do_log2 in product(methods, [True, False]):
-        logging.info(f'Currently: {method} {do_log2}')
-        full_pipeline_with_coefficient_of_variation(variation_measure=method,
-                                                    do_log2=do_log2)
+    full_pipeline_with_custom_variation_measures(variation_measure='cv',
+                                                 do_log2=True)
+    # methods = ['mad', 'cv', 'qcd']
+    # for method, do_log2 in product(methods, [True, False]):
+    #     logging.info(f'Currently: {method} {do_log2}')
+    #     full_pipeline_with_coefficient_of_variation(variation_measure=method,
+    #                                                 do_log2=do_log2)

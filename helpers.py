@@ -1,5 +1,6 @@
 import logging
 import re
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -7,7 +8,6 @@ from matplotlib import pyplot as plt
 from scipy.integrate._ivp.ivp import OdeResult
 from sklearn.model_selection import RepeatedStratifiedKFold
 from scipy.interpolate import PchipInterpolator
-
 
 def standardize(df: pd.DataFrame, axis=0) -> pd.DataFrame:
     """Normalize gene expression data
@@ -138,3 +138,17 @@ def calculate_qcd(x: np.ndarray):
     """Calculate quartile coefficient of dispersion for input array of numbers"""
     q1, q3 = np.quantile(x, [.25, .75])
     return (q3 - q1) / (q3 + q1)
+
+
+def extract_flor_id_genes(flor_id_html_path: Path,
+                          out_path: Path):
+    """Take (slightly preprocessed) html of FlorID flowering genes
+    and extract all florid genes from here
+    """
+    html_text = flor_id_html_path.read_text()
+    dfs = pd.read_html(html_text)
+    df = dfs[0]
+    df.columns = ['name', 'short_name', 'keyword', 'effect_on_flowering',
+                  'conditions_for_effect', 'phenotype', 'locustag', 'appears_in',
+                  'key_articles']
+    df.to_pickle(out_path)
