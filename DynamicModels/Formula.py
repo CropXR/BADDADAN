@@ -168,7 +168,7 @@ class NonLinearFormula(FormulaSuperClass):
 
     def get_hill_equation_outcomes(
             self, current_fit: OdeResult, params: Parameters,
-            t: np.ndarray) -> Generator[Tuple[str, float, float, float]]:
+            t: np.ndarray) -> Generator[Tuple[str, float, float, float], None, None]:
         """For a current fit, see if the full dynamics of the hill equations
         are covered.
 
