@@ -1,6 +1,10 @@
 import logging
+from typing import Tuple, Generator
 
+import numpy as np
+from lmfit import Parameters
 from networkx.classes.reportviews import InEdgeDataView
+from scipy.integrate._ivp.ivp import OdeResult
 
 from DynamicModels.ModuleRegulatoryNetwork import EdgeRelation
 
@@ -17,21 +21,27 @@ class FormulaSuperClass:
         self.module_index = int(module_name[-1])
         self.params = []
         self.regulator_names = []
-        self.formula_string = ''
+        # Capture each term of the formula
+        self.formula_parts = []
 
         # Add decay factor, its suffix is always equal to the module it belongs to
         d_param_name = f'delta_{self.module_index}'
         self.params.append(d_param_name)
-        self.formula_string += f' - {d_param_name} * y[{self.module_index}]'
+        self.formula_parts.append(f' - {d_param_name} * y[{self.module_index}]')
 
         # Add factor which expresses the change in expression based on temperature
         gamma_param_name = f'gamma_{self.module_index}'
         self.params.append(gamma_param_name)
-        self.formula_string += f' + {gamma_param_name} * temp * y[{self.module_index}]'
+        self.formula_parts.append(f' + {gamma_param_name} * temp * y[{self.module_index}]')
         # self.formula_string += f' + {gamma_param_name} * temp'
 
         # Register if the module has been compiled (which speeds up its evaluation)
         self.formula_is_compiled = False
+
+    @property
+    def formula_string(self) -> str:
+        """Get string of full formula"""
+        return ''.join(self.formula_parts)
 
     def compile_formula(self):
         # Compile string to speed up evaluation
@@ -121,8 +131,8 @@ class LinearFormula(FormulaSuperClass):
         self.regulator_names.append(regulator)
         self.params.append(b_param_name)
         # Currently assume linear relationship
-        self.formula_string += self.generate_linear_term(
-            b_param_name, f'y[{regulator_index}]')
+        self.formula_parts.append(self.generate_linear_term(
+            b_param_name, f'y[{regulator_index}]'))
         self.formula_is_compiled = False
         return b_param_name
 
@@ -132,6 +142,8 @@ class LinearFormula(FormulaSuperClass):
 
         :param regulator_to_remove: Name of regulator module, e.g. MODULE3
         :return: Name of the new parameter"""
+        raise NotImplementedError('Since rewriting this class, '
+                                  'this method is broken')
         regulator_index = int(regulator_to_remove[-1])
         b_param_name = f'beta_{regulator_index}_{self.module_index}'
         assert regulator_to_remove in self.regulator_names, \
@@ -154,6 +166,36 @@ class NonLinearFormula(FormulaSuperClass):
             self.add_regulator(regulator, direction)
         self.compile_formula()
 
+    def get_hill_equation_outcomes(
+            self, current_fit: OdeResult, params: Parameters,
+            t: np.ndarray) -> Generator[Tuple[str, float, float, float]]:
+        """For a current fit, see if the full dynamics of the hill equations
+        are covered.
+
+        :param current_fit: Result of fitting ODE to experimental data
+        :param params: Parameters for which to investigate the
+        :param t:
+        :return: Generator which yields tuples containing:
+                    - String which describes the interaction that the
+                    hill equation represents (e.g. MODULE1->MODULE2)
+                    - Time point at which the hill equation is evaluated
+                    - The absolute outcome of the hill equation
+                    - The normalized outcome of the hill equation (i.e.
+                    divided by beta, so the value is between 0 and 1)
+        """
+        regulator_count = 0
+        for formula_part in self.formula_parts:
+            if not formula_part.lstrip().startswith('+ (beta'):
+                # Not a hill equation
+                continue
+            for i, time_point in enumerate(t):
+                all_params = params.valuesdict() | {'y': current_fit.y[:, i]}
+                outcome = eval(formula_part, {}, all_params)
+                norm_outcome = outcome / all_params[f'beta_{self.regulator_names[regulator_count][-1]}_{self.module_name[-1]}']
+                yield (f'{self.regulator_names[regulator_count]}->{self.module_name}',
+                       time_point, outcome, norm_outcome)
+            regulator_count += 1
+
     def add_regulator(self, regulator: str, direction: EdgeRelation):
         """Add a regulator (e.g. MODULE2) to the equation. And returns name of
         the new parameter
@@ -175,7 +217,7 @@ class NonLinearFormula(FormulaSuperClass):
                 b_param_name, k_param_name, var_name)
         else:
             raise NotImplementedError('If regulatory interaction is unclear, cannot use that properly yet')
-        self.formula_string += term_to_add
+        self.formula_parts.append(term_to_add)
         self.formula_is_compiled = False
         return b_param_name
 
@@ -185,14 +227,13 @@ class NonLinearFormula(FormulaSuperClass):
 
         :param regulator_to_remove: Name of regulator module, e.g. MODULE3
         :return: Name of the new parameter"""
+        raise NotImplementedError("Currently this functionality is broken")
         regulator_index = int(regulator_to_remove[-1])
         b_param_name = f'beta_{regulator_index}_{self.module_index}'
         assert regulator_to_remove in self.regulator_names, \
             'Regulator cannot be removed, it is not present in the current formula'
         self.params.remove(b_param_name)
         self.regulator_names.remove(regulator_to_remove)
-        # TODO this is broken atm
-        raise NotImplementedError
         string_to_remove_from_formula = self.generate_linear_term(
             b_param_name, f'y[{regulator_index}]')
         self.formula_string = self.formula_string.replace(

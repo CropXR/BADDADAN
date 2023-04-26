@@ -3,10 +3,13 @@ import logging
 from typing import Literal
 
 import numpy as np
+import pandas as pd
 from lmfit import Parameters, minimize, fit_report
 from lmfit.minimizer import MinimizerResult
+from matplotlib import pyplot as plt
 from scipy.integrate import solve_ivp
 from scipy.integrate._ivp.ivp import OdeResult
+import seaborn as sns
 
 from DynamicModels.OdeModel import OdeModel
 
@@ -86,11 +89,11 @@ class OdeFitter:
         :param max_iter: For lbfgs/bfgs, set the maximum number of iterations
         :return: result of minimisation
         """
-        if max_iter and self.method not in ['lbfgs', 'bfgs']:
-            raise NotImplementedError(
-                'Can only enter maxiter for BFGS/LBFGS methods currently.')
-        else:
+        if max_iter is None:
             max_iter = 1000
+        else:
+            assert self.method in ['lbfgs', 'bfgs'], \
+                'Can only enter maxiter for BFGS/LBFGS methods currently.'
 
         match self.method:
             case 'lbfgs' | 'bfgs':
@@ -183,3 +186,36 @@ class OdeFitter:
                                self.measured_data), axis=1)
         best_module_idx = np.argmin(loss_per_module)
         return best_module_idx
+
+    def plot_hill_equation_range(self, t: np.ndarray) -> None:
+        """For current fit, see outcomes of the hill equations.
+
+        Basically, check if they are not just one value, but
+        exhibit dynamic behaviour over time.
+
+        :param t: Time points at which hill equations should be evaluated
+        :return: Plots of raw and normalised outcomes of the hill
+         equations in the fit
+        """
+        current_fit = self.calculate_current_best_fit(t)
+        # Iterate over all formulas
+        out_list = []
+        for formula in self.odes.formula_per_module:
+            if not formula.regulator_names:
+                # Module is not regulated by any other modules
+                continue
+            for outcome in formula.get_hill_equation_outcomes(current_fit,
+                                                              self.params, t):
+                out_list.append(outcome)
+
+        out_df = pd.DataFrame.from_records(out_list,
+                                           columns=['module_w_regulator',
+                                                    't', 'outcome', 'norm_outcome'])
+        sns.relplot(data=out_df, y='outcome', x='t', row='module_w_regulator',
+                    kind='line', facet_kws=dict(sharey=False))
+        plt.show()
+        sns.relplot(data=out_df, y='norm_outcome', x='t', row='module_w_regulator',
+                    kind='line', facet_kws=dict(sharey=True))
+        plt.show()
+
+
