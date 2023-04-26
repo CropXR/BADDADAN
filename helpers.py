@@ -4,6 +4,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.spatial.distance import euclidean
+from lmfit import Parameters
 from matplotlib import pyplot as plt
 from scipy.integrate._ivp.ivp import OdeResult
 from sklearn.model_selection import RepeatedStratifiedKFold
@@ -152,3 +154,15 @@ def extract_flor_id_genes(flor_id_html_path: Path,
                   'conditions_for_effect', 'phenotype', 'locustag', 'appears_in',
                   'key_articles']
     df.to_pickle(out_path)
+
+def calculate_parameter_distance(guessed_params: Parameters,
+                                 true_params: Parameters) -> float:
+    """For two sets of parameters, calculate their euclidean distance
+
+    :param guessed_params: Parameters that the fit found
+    :param true_params: Parameters that are the ground trugh
+    :return: Euclidean distance between the two sets of parameters
+    """
+    param_array1 = [v.value for v in guessed_params.values()]
+    param_array2 = [v.value for v in true_params.values()]
+    return euclidean(param_array1, param_array2)

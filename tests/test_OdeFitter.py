@@ -62,7 +62,7 @@ def test_artificial_data_fit():
                                                    t=time_points,
                                                    init_condition_names=init_condition_names)
 
-    plot_y_and_y_hat(sim_data.y, sim_data.t)
+    # plot_y_and_y_hat(sim_data.y, sim_data.t)
 
     # # Change activation from MODULE3 to MODULE2 to inhibition
     # my_graph.add_edge(module_names[2], module_names[3],
@@ -79,29 +79,37 @@ def test_artificial_data_fit():
                                                              nonlinear=True)
 
     # Fit multiple models simultaneously
-    my_fitter = OdeFitter(wrong_model, sim_data.y, sim_data.t,
-                          heat_end_time=3, param_limit=10)
-    # my_fitter.params = ground_truth_params
-    np.random.seed(420)
-    for param_name in my_fitter.params.valuesdict():
-        if param_name != 'heat_end_time':
-            # Heat temp is already restrained as 1-non_heat_temp
+
+    fav_number = 420
+
+    fitters = []
+    nr_fits = 10
+    for _ in range(nr_fits):
+        np.random.seed(fav_number)
+        fav_number += 1
+        my_fitter = OdeFitter(wrong_model, sim_data.y, sim_data.t,
+                              heat_end_time=3, param_limit=10)
+
+        for param_name in my_fitter.params.valuesdict():
             value = np.random.normal(1, .5)
             my_fitter.params[param_name].set(value=value)
-    # #
-    my_fitter.params['non_heat_temp'].set(value=.3)
-    my_fitter.params['heat_temp'].set(expr='1-non_heat_temp')
-    my_fitter.params['y0'].set(value=2)
-    my_fitter.params['heat_end_time'].set(value=3, vary=False)
-    # # my_fitter.params['k_1_2'].set(value=0)
-    my_fitter.fit()
 
-    # nr_fits = 5
+        my_fitter.params['non_heat_temp'].set(value=.3)
+        my_fitter.params['heat_temp'].set(expr='1-non_heat_temp')
+        my_fitter.params['y0'].set(value=2)
+        my_fitter.params['heat_end_time'].set(value=3, vary=False)
+        fitters.append(my_fitter)
+    # my_fitter.fit()
+
     # fitters = [OdeFitter(wrong_model, sim_data.y, sim_data.t,
     #                      heat_end_time=3, param_limit=10)
     #            for _ in range(nr_fits)]
-    # my_fitter = fit_multiple_fitters(fitters)
+    my_fitter = fit_multiple_fitters(fitters, extra_analysis=True,
+                                     gt_params=ground_truth_params,
+                                     # nr_iters=30  # For debugging
+                                     )
 
     fit_result = my_fitter.calculate_current_best_fit(sim_data.t)
     plot_y_and_y_hat(sim_data.y, sim_data.t, fit_result)
+    my_fitter.plot_hill_equation_range(sim_data.t)
     return
