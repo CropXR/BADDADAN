@@ -90,16 +90,35 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
         logging.info('Pickled file exists, using that one')
         with (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').open('rb') as f:
             expr_mat_time = pickle.load(f)
-
     # More preprocessing, keep only most dispersed genes
     expr_mat_time.keep_only_shoot()
     expr_mat_time.merge_biological_samples()
 
     expr_mat_time.keep_n_most_deviating_genes(total_genes, variation_measure)
     expr_mat_time.do_hierachical_clustering(4, do_plotting=False)
-    # expr_mat_time.plot_clusters_over_time(plot_units=False)
+    expr_mat_time.plot_clusters_over_time(plot_units=True)
     # expr_mat_time.plot_clusters_over_time(plot_units=True)
 
+    control_pickle_path = Path('data/time_series_control_dataset/GSE5620_family_ExpressionMatrixTime.pickle')
+    if not control_pickle_path.exists():
+        my_expression_annotation = ExpressionArrayAnnotation(
+            Path('data/resources/affy_ATH1_array_elements-2010-12-20.txt'))
+        control_time_series_expressions = Path(
+            'data/time_series_control_dataset/GSE5620_family.soft')
+        control_expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
+            control_time_series_expressions, my_expression_annotation,
+            log2_transform=do_log2)
+        control_expr_mat_time.keep_only_shoot()
+        control_expr_mat_time.merge_biological_samples()
+        control_expr_mat_time.assign_clusters_from(expr_mat_time)
+        with control_pickle_path.open('wb') as f:
+            pickle.dump(control_expr_mat_time, f)
+    else:
+        logging.info('Pickled file exists for control, using that one')
+        with control_pickle_path.open('rb') as f:
+            control_expr_mat_time = pickle.load(f)
+
+    control_expr_mat_time.plot_clusters_over_time(plot_units=True)
     # Create a file that can be used on
     # http://bioinformatics.psb.ugent.be/webtools/TF2Network/
     # to get putative regulators per cluster
