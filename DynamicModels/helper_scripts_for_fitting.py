@@ -28,11 +28,14 @@ def fit_multiple_fitters(fitters: list[OdeFitter], nr_iters: int = None,
         chi_squares = [fit.chisqr for fit in all_fits]
         sns.histplot(chi_squares, log_scale=True)
         plt.show()
-        # Calculate parameter distance
-        parameter_distances = [calculate_parameter_distance(fit.params, gt_params)
-                               for fit in all_fits]
-        sns.scatterplot(y=chi_squares, x=parameter_distances)
-        plt.xlabel('parameter_distances')
+        if gt_params:
+            # Calculate parameter distance
+            parameter_distances = [calculate_parameter_distance(fit.params, gt_params)
+                                   for fit in all_fits]
+            sns.scatterplot(y=chi_squares, x=parameter_distances)
+            plt.xlabel('parameter_distances')
+        else:
+            sns.stripplot(y=chi_squares)
         plt.ylabel('chi_square')
         plt.yscale('log')
         plt.show()

@@ -4,10 +4,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from numpy.linalg import svd
 from scipy.spatial.distance import euclidean
 from lmfit import Parameters
 from matplotlib import pyplot as plt
 from scipy.integrate._ivp.ivp import OdeResult
+from sklearn.decomposition import PCA
 from sklearn.model_selection import RepeatedStratifiedKFold
 from scipy.interpolate import PchipInterpolator
 
@@ -155,6 +157,7 @@ def extract_flor_id_genes(flor_id_html_path: Path,
                   'key_articles']
     df.to_pickle(out_path)
 
+
 def calculate_parameter_distance(guessed_params: Parameters,
                                  true_params: Parameters) -> float:
     """For two sets of parameters, calculate their euclidean distance
@@ -166,3 +169,29 @@ def calculate_parameter_distance(guessed_params: Parameters,
     param_array1 = [v.value for v in guessed_params.values()]
     param_array2 = [v.value for v in true_params.values()]
     return euclidean(param_array1, param_array2)
+
+
+def do_pca(df: pd.DataFrame) -> np.ndarray:
+    """Represent a module as the value of its first principal component.
+
+    Instead of a mean value of all genes. The approach we do here is comparable
+    to an eigengene.
+
+    :param df: Input dataframe that contains column 'cluster_id' to indicicate the
+    cluster number.
+    :return: pca value of first principal component for all conditions"""
+    # Is this check really needed? Not sure...
+    if df is not None:
+        cluster_id = df['cluster_id'].iloc[0]
+        df = df.drop('cluster_id', axis=1)
+        pca = PCA(n_components=1)
+        pca_values = pca.fit_transform(df.T)
+        explained_var = pca.explained_variance_ratio_[0]
+        assert explained_var > .4, "First PC does not explain >40% of the variance"
+
+        # assert np.corrcoef(df.mean().to_numpy(), pca_values.T)[0, 1] > .2, 'Correlation between mean and first PC is too low?'
+        plt.plot(df.mean().to_numpy(), pca_values, 'o', label=cluster_id)
+        plt.xlabel('Mean expression')
+        plt.ylabel(f'PC1 ({explained_var*100:.2f}%)')
+        # plt.show()
+        return pca_values
