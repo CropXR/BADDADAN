@@ -268,6 +268,29 @@ class ExpressionMatrix:
                              mode='a')
         return gene_names_with_index.to_dict()
 
+    def assign_clusters_from(
+            self, clustered_expressions: ExpressionMatrixTimeSeries) -> None:
+        """Assign clustering to this expression matrix from another
+        ExpressionMatrix where the genes have already been clustered.
+
+        Also drops all genes from this df that are not mentioned in
+        the clustering.
+
+        :param clustered_expressions: ExpressionMatrix which contains
+        clustering of genes.
+        """
+        assert (not self.has_been_clustered
+                and clustered_expressions.has_been_clustered)
+        assert 'cluster_id' not in self.df.columns
+        # TODO speedups here?
+        assigned_modules = self.df.index.map(
+            lambda x: clustered_expressions.get_cluster_per_gene().get(x))
+        inference_df = self.df.assign(cluster_id=assigned_modules)
+        self.df = inference_df.dropna(subset='cluster_id')
+        self.has_been_clustered = True
+        assert (self.get_gene_names().sort()
+                == clustered_expressions.get_gene_names().sort())
+
 
 class ExpressionMatrixTraining(ExpressionMatrix):
     """Can be created from ExpressionMatrix by command like:
@@ -475,9 +498,14 @@ class ExpressionMatrixTest(ExpressionMatrix):
 
 
 class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
-    def keep_only_shoot(self) -> None:
+    def keep_only_shoot(self, ignore_cluster_id_col=True) -> None:
         """Keep only columns that originate from shoot"""
-        col_mask = [col for col in self.df.columns if 'Shoot' in col]
+        if ignore_cluster_id_col:
+            col_mask = [col for col in self.df.columns
+                        if 'Shoot' in col or col == 'cluster_id']
+        else:
+            col_mask = [col for col in self.df.columns
+                        if 'Shoot' in col]
         self.df = self.df[col_mask]
 
     def plot_clusters_over_time(self, plot_units: bool = False) -> None:

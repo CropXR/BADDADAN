@@ -55,7 +55,7 @@ def split_based_on_temp(expression_matrix,
         yield expression_matrix.extract_train_test(train_set_cols, test_set_cols)
 
 
-def get_info_from_gse5628(sample_names: list[str] | pd.Index) -> dict:
+def get_info_from_gse5628(sample_names: list[str] | pd.Index | pd.DataFrame) -> dict:
     """From sample names that are used in GSE5628, extract time, tissue and replicate number.
     Example sample name: 'AtGen_6-9411_Heatstress(3h)+3hrecovery-Shoots-6.0h_Rep1'
 
@@ -66,8 +66,9 @@ def get_info_from_gse5628(sample_names: list[str] | pd.Index) -> dict:
                 'tissue': [],
                 'rep_nr': []}
     for sample in sample_names:
-        time = re.search(r'\d+\.\d+h', sample).group()
-        time = pd.to_timedelta(time)
+        # time = re.search(r'\d+\.\d+h', sample).group()
+        time = re.search(r'(\d+\.)?\d+h_', sample).group()
+        time = pd.to_timedelta(time[:-1])
         out_dict['time'].append(time)
         tissue = re.search(r'Shoots|Roots', sample).group()
         out_dict['tissue'].append(tissue)
