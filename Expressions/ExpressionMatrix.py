@@ -18,10 +18,11 @@ from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
 import qnorm
 from scipy.spatial.distance import pdist
+from numpy.linalg import svd
 
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628, standardize, \
-    calculate_coefficient_of_variation, calculate_qcd
+    calculate_coefficient_of_variation, calculate_qcd, do_pca
 
 
 class ExpressionMatrix:
@@ -278,11 +279,18 @@ class ExpressionMatrixTraining(ExpressionMatrix):
     def extract_module_expressions(self, n_cluster: int,
                                    for_static_predictions = False,
                                    do_plotting: bool = False,
-                                   random_clustering: bool = False) -> pd.DataFrame:
+                                   random_clustering: bool = False,
+                                   aggregation_method: Literal['mean', 'pca'] = 'mean'
+                                   ) -> pd.DataFrame:
         """Get mean expression per gene module based on
         clustering of expression correlation. And return as dataframe.
 
         :param n_cluster: Number of clusters
+        :param random_clustering: If true, assign each module a random cluster
+        :param do_plotting: If true, plot the clustering
+        :param for_static_predictions: If true, output is formatted so it can
+                                        be used with the static prediction
+                                        pipeline
         """
         # Make sure clustering has been performed
         if not self.has_been_clustered:
@@ -294,14 +302,28 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         else:
             logging.info('Already clustered, will not perform clustering again')
 
-        molten_df = pd.melt(self.df, id_vars='cluster_id',
-                            value_vars=self.df.columns[:-1],
-                            ignore_index=False, var_name='sample',
-                            value_name='expression')
-        summary_df = molten_df.groupby(['sample', 'cluster_id']).mean().reset_index()
-        if for_static_predictions:
-            return summary_df.pivot(index='sample', columns='cluster_id', values='expression')
-        return summary_df
+        if aggregation_method == 'mean':
+            # DO MEAN CLUSTERING
+            molten_df = pd.melt(self.df, id_vars='cluster_id',
+                                value_vars=self.df.columns[:-1],
+                                ignore_index=False, var_name='sample',
+                                value_name='expression')
+            summary_df = molten_df.groupby(
+                ['sample', 'cluster_id']).mean().reset_index()
+            if for_static_predictions:
+                return summary_df.pivot(index='sample', columns='cluster_id',
+                                        values='expression')
+            return summary_df
+        elif aggregation_method == 'pca':
+            # # PCA-based
+            pca_values = self.df.groupby('cluster_id').apply(do_pca)
+            plt.legend()
+            plt.show()
+            raise NotImplementedError("Cannot yet use these pca values"
+                                      " downstream in the pipeline")
+        # PERFORM EIGENGENE clustering at each timepoint(?)
+
+
 
     def save_tf_produced_by_module_file(self, out_file_path: Path,
                                         tf_list_path: Path):
@@ -486,11 +508,13 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         #              hue='cluster_id', style='tissue', palette=sns.color_palette())
         # plt.show()
 
-    def _get_cluster_expression_long_form(self, n_clusters):
+    def _get_cluster_expression_long_form(self, n_clusters: int,
+                                          aggregation_method: Literal['mean', 'pca'] = 'mean'):
         """Get dataframe which shows expression of clusters over time
         in long-form dataframe
         """
-        out_df = self.extract_module_expressions(n_clusters, do_plotting=False)
+        out_df = self.extract_module_expressions(n_clusters, do_plotting=False,
+                                                 aggregation_method=aggregation_method)
         # Get time point info from sample names
         new_cols = get_info_from_gse5628(out_df['sample'].to_list())
         out_df = pd.concat([out_df, pd.DataFrame.from_dict(new_cols)], axis=1)
@@ -585,15 +609,19 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         merged_samples.columns = sample_names
         self.df = merged_samples
 
-    def get_clusters_expressions_with_time(self, n_clusters: int) \
-            -> tuple[np.ndarray, np.ndarray]:
+    def get_clusters_expressions_with_time(
+            self,
+            n_clusters: int,
+            aggregation_method: Literal['mean', 'pca'] = 'mean'
+    ) -> tuple[np.ndarray, np.ndarray]:
         """For fitting ODEs, get expression of clusters over time.
         First array in tuple indicates time_points in minutes, second array
         indicates module expressions.
 
         :return: tuple of time points, module expressions
         """
-        some_df = self._get_cluster_expression_long_form(n_clusters)
+        some_df = self._get_cluster_expression_long_form(
+            n_clusters, aggregation_method=aggregation_method)
         new_df = some_df.pivot(index='cluster_id', columns='elapsed_mins',
                                values='expression')
         time_points = new_df.columns.to_numpy()

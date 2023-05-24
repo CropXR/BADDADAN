@@ -66,7 +66,7 @@ def annotate_microarray_expression(
     logging.info(f'Successfullly saved output to {output_path}')
 
 def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
-                                                 do_log2: bool =True,
+                                                 do_log2: bool = True,
                                                  variation_measure: str ='qcd'):
     """From expressions, do log2 normalisation, get 2000 genes based on custom
      variation metric, cluster into modules, infer their connections and fit
@@ -124,17 +124,18 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
     my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True)
     my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
     module_module = my_grn.get_module_module_network()
+    # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
     module_module.plot_network(with_labels=True)
 
     fit_ode_to_data(module_module, expr_mat_time)
-
 
 def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
                     my_time_series_expressions: ExpressionMatrixTimeSeries):
     # Assume that data has already been clustered
     assert my_time_series_expressions.has_been_clustered
-    my_time, my_data = \
-        my_time_series_expressions.get_clusters_expressions_with_time(0)
+    my_time_series_expressions.plot_clusters_over_time(plot_units=True)
+    my_time, my_data = my_time_series_expressions.get_clusters_expressions_with_time(
+            0, aggregation_method='pca')
 
     plot_y_and_y_hat(my_data, my_time)
     # my_time_series_expressions.get_genes_per_cluster()
@@ -148,7 +149,7 @@ def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
     fitters = [OdeFitter(my_ode, my_data, my_time,
                          heat_end_time=3, param_limit=100)
                for _ in range(nr_fits)]
-    best_fit = fit_multiple_fitters(fitters, nr_iters=3000)
+    best_fit = fit_multiple_fitters(fitters, nr_iters=1000, extra_analysis=True)
     best_fit.params.pretty_print()
     logging.info(f'Best fit parameters {best_fit.params.valuesdict()}')
 
@@ -186,7 +187,7 @@ def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
     #     "y3": 4.94547767,
     #     "heat_end_time": 3,
     #     "heat_temp": 0.74588705 == '1 - non_heat_temp'}
-
+    #
     # best_fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3, param_limit=100)
     # for param_name in best_fit.params.valuesdict():
     #     if param_name != 'heat_temp':
@@ -194,12 +195,13 @@ def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
     #         best_fit.params[param_name].set(value=best_params_so_far[param_name])
     # best_fit.params["heat_end_time"].set(value=3, vary=False)
     # best_fit.params["heat_temp"].set(expr='1 - non_heat_temp')
-    # best_fit.fit()
+    # best_fit.fit(20)
 
     # more_time = np.linspace(0, 24, 50)
 
     # Next step: simulate the data with these params
     simulated_data = best_fit.calculate_current_best_fit(my_time)
+    best_fit.plot_hill_equation_range(my_time)
 
     plot_y_and_y_hat(y_real=my_data, t_real=my_time,
                      model_fit=simulated_data)
@@ -272,7 +274,7 @@ def count_flowering_genes(path_to_gene_selection: Path,
 if __name__ == "__main__":
     # typer.run(annotate_microarray_expression)
     # typer.run(full_pipeline_with_coefficient_of_variation)
-    full_pipeline_with_custom_variation_measures(variation_measure='cv',
+    full_pipeline_with_custom_variation_measures(variation_measure='mad',
                                                  do_log2=True)
     # methods = ['mad', 'cv', 'qcd']
     # for method, do_log2 in product(methods, [True, False]):
