@@ -7,11 +7,11 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import typer
-from lmfit import fit_report
+from lmfit import fit_report, create_params
 from sklearn.metrics import adjusted_rand_score
 
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
-from DynamicModels.OdeFitter import OdeFitter
+from DynamicModels.OdeFitter import OdeFitter, OdeFitterMultipleDatasets
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
@@ -96,7 +96,7 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
 
     expr_mat_time.keep_n_most_deviating_genes(total_genes, variation_measure)
     expr_mat_time.do_hierachical_clustering(4, do_plotting=False)
-    expr_mat_time.plot_clusters_over_time(plot_units=True)
+    # expr_mat_time.plot_clusters_over_time(plot_units=True)
     # expr_mat_time.plot_clusters_over_time(plot_units=True)
 
     control_pickle_path = Path('data/time_series_control_dataset/GSE5620_family_ExpressionMatrixTime.pickle')
@@ -118,7 +118,7 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
         with control_pickle_path.open('rb') as f:
             control_expr_mat_time = pickle.load(f)
 
-    control_expr_mat_time.plot_clusters_over_time(plot_units=True)
+    # control_expr_mat_time.plot_clusters_over_time(plot_units=True)
     # Create a file that can be used on
     # http://bioinformatics.psb.ugent.be/webtools/TF2Network/
     # to get putative regulators per cluster
@@ -137,24 +137,48 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
     my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(out_dir / '03_tf2network_output.tsv')
     my_grn.add_tf_module_mappings(out_dir / '02_gene_to_module.csv')
     my_grn.clean_up_network()
-    my_grn.plot_network(with_labels=True)
+    # my_grn.plot_network(with_labels=True)
     my_grn.check_if_tfs_created_by_module(expr_mat_time, do_plotting=True,
                                           remove_low_corr=True)
     my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True)
-    my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
+    # my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
     module_module = my_grn.get_module_module_network()
     # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
-    module_module.plot_network(with_labels=True)
+    # module_module.plot_network(with_labels=True)
 
-    fit_ode_to_data(module_module, expr_mat_time)
+    # fit_ode_to_data(module_module, expr_mat_time)
+    fit_ode_to_two_datasets(module_module, expr_mat_time, control_expr_mat_time)
+
+def fit_ode_to_two_datasets(
+        module_network: ModuleRegulatoryNetwork,
+        my_time_series_expressions: ExpressionMatrixTimeSeries,
+        control_experiment: ExpressionMatrixTimeSeries = None):
+    # Assume that data has already been clustered
+    assert my_time_series_expressions.has_been_clustered
+    assert control_experiment.has_been_clustered
+    my_ode = OdeModel.construct_from_regulatory_network(module_network,
+                                                        nonlinear=True)
+    logging.info(my_ode)
+    custom_params = {
+        my_time_series_expressions: create_params(heat_end_time=3.),
+        control_experiment: create_params(heat_end_time=-1.)
+        }
+    # Step uno
+    multiple_fitter = OdeFitterMultipleDatasets(
+        my_ode, [my_time_series_expressions, control_experiment], custom_params)
+
+    # Step dos
+    multiple_fitter.fit(100)
+
+
 
 def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
                     my_time_series_expressions: ExpressionMatrixTimeSeries):
     # Assume that data has already been clustered
     assert my_time_series_expressions.has_been_clustered
-    my_time_series_expressions.plot_clusters_over_time(plot_units=True)
+    # my_time_series_expressions.plot_clusters_over_time(plot_units=True)
     my_time, my_data = my_time_series_expressions.get_clusters_expressions_with_time(
-            0, aggregation_method='pca')
+            0, aggregation_method='mean')
 
     plot_y_and_y_hat(my_data, my_time)
     # my_time_series_expressions.get_genes_per_cluster()

@@ -171,52 +171,43 @@ class OdeModel:
         params['temp'] = heat_temp
         t_heat_index = t <= heat_end_time
         t_heat = t[t_heat_index]
-        y_pred_heat = solve_ivp(self.compute_one_step, (t_start, heat_end_time),
-                                y0,
-                                t_eval=t_heat,
-                                args=[params], method='Radau')
-        assert y_pred_heat.success, (
-            f"Integration failed: {y_pred_heat.message}"
-            f"\nParams: {params}")
-        # if not y_pred_heat.success:
-        #     # Generate basically nonsensical predictions
-        #     logging.warning('Invalid params, just returning really high error')
-        #     y_pred_heat.t = t
-        #     y_pred_heat.y = np.asarray([1.e100 for _ in t])
-        #     return y_pred_heat
+        if len(t_heat) > 0:
+            # Some time points belong to heat stress
+            y_pred_heat = solve_ivp(self.compute_one_step, (t_start, heat_end_time),
+                                    y0,
+                                    t_eval=t_heat,
+                                    args=[params], method='Radau')
+            assert y_pred_heat.success, (
+                f"Integration failed: {y_pred_heat.message}"
+                f"\nParams: {params}")
+            # Get new initial conditions
+            end_of_heat_expressions = y_pred_heat.y[:, -1].tolist()
+        else:
+            # No time points belong to heat stress
+            end_of_heat_expressions = y0
 
         # Solve post-heat stress
         t_start = heat_end_time
         params['temp'] = non_heat_temp
         t_non_heat_index = (t > heat_end_time)
         t_non_heat = t[t_non_heat_index]
-        # Get new initial conditions
-        end_of_heat_expressions = y_pred_heat.y[:, -1].tolist()
         y_pred_non_heat = solve_ivp(self.compute_one_step,
                                     (t_start, max(t_non_heat)),
                                     end_of_heat_expressions,
                                     t_eval=t_non_heat,
                                     args=[params], method='Radau')
-        # if not y_pred_non_heat.success:
-        #     # Generate basically nonsensical predictions
-        #     logging.warning('One integration failed')
-        #     y_pred_heat.t = t
-        #     y_pred_heat.y = np.asarray([1.e100 for _ in t])
-        #     return y_pred_heat
         assert y_pred_non_heat.success, (
             f"Integration failed: {y_pred_non_heat.message}"
             f"\nParams: {params}")
-        all_predicted_time = np.concatenate((y_pred_heat.t, y_pred_non_heat.t))
-        all_predicted_y = np.concatenate((y_pred_heat.y, y_pred_non_heat.y),
-                                         axis=1)
-        assert np.all(all_predicted_time == t)
-        y_pred_heat.t = all_predicted_time
-        y_pred_heat.y = all_predicted_y
-        # if not y_pred.success:
-        #     logging.warning('Integration failed, but showing solution nevertheless')
-        #     for row in y_pred.y:
-        #         plt.plot(y_pred.t, row)
-        #     plt.show()
-        # assert y_pred.success, (f"Integration failed: {y_pred.message}"
-        #                         f"\nParams: {params}")
-        return y_pred_heat
+
+        if len(t_heat) > 0:
+            all_predicted_time = np.concatenate((y_pred_heat.t, y_pred_non_heat.t))
+            assert np.all(all_predicted_time == t)
+            all_predicted_y = np.concatenate((y_pred_heat.y, y_pred_non_heat.y),
+                                             axis=1)
+            y_pred_heat.t = all_predicted_time
+            y_pred_heat.y = all_predicted_y
+            return y_pred_heat
+        else:
+            # Heat was never applied
+            return y_pred_non_heat
