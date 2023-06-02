@@ -1,10 +1,10 @@
 import logging
 import re
 from pathlib import Path
+from typing import List
 
 import numpy as np
 import pandas as pd
-from numpy.linalg import svd
 from scipy.spatial.distance import euclidean
 from lmfit import Parameters
 from matplotlib import pyplot as plt
@@ -196,3 +196,21 @@ def do_pca(df: pd.DataFrame) -> np.ndarray:
         plt.ylabel(f'PC1 ({explained_var*100:.2f}%)')
         # plt.show()
         return pca_values
+
+def check_all_identical_lists(lists: List[List]) -> bool:
+    """Check if all sublists in a list of lists are identical.
+
+    :param lists: A list of lists to be checked.
+
+    :return: True if all sublists are identical, False otherwise.
+    """
+    if len(lists) == 0:
+        return False  # Empty list, not all identical
+
+    first_sublst = lists[0]
+    for sublst in lists[1:]:
+        if sublst != first_sublst:
+            # Found a different sublist, not all identical
+            return False
+    # All sublists are identical
+    return True

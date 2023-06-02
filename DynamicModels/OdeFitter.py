@@ -1,6 +1,6 @@
 import logging
 
-from typing import Literal
+from typing import Literal, List, Dict
 
 import numpy as np
 import pandas as pd
@@ -12,6 +12,8 @@ from scipy.integrate._ivp.ivp import OdeResult
 import seaborn as sns
 
 from DynamicModels.OdeModel import OdeModel
+from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
+from helpers import check_all_identical_lists
 
 
 class OdeFitter:
@@ -63,12 +65,29 @@ class OdeFitter:
 
     def loss_function(self, params: Parameters, t: np.ndarray,
                       y_real: np.ndarray,
-                      return_scalar=False) -> np.ndarray | float:
+                      custom_param_names: set[str] = None, return_scalar=False
+                      ) -> np.ndarray | float:
         """Return squared residuals between y_real and predictions
-        at time points t for a given set params.
+        at time points t for a given set of params.
+
+        :param params: The parameters used for prediction.
+        :param t: The time points at which predictions are made.
+        :param y_real: The actual values at the time points.
+        :param custom_param_names: Names of custom parameters to include in
+         the calculations. (optional)
+        :param return_scalar: Whether to return the mean squared loss
+         as a scalar. (default: False)
+
+        :return: The squared residuals between y_real and predictions, or
+        the mean squared loss if return_scalar is True.
         """
         # Get names of 'parameters' that are the initial conditions
         init_condition_names = self.init_condition_names
+        if custom_param_names:
+            # Parameters that should not be taken from 'params' but should use
+            # the value that is in the local 'self.params'.
+            for custom_param in custom_param_names:
+                params.add(self.params[custom_param])
         y_pred = self.odes.calculate_solution(params, t, init_condition_names)
         if return_scalar:
             return float(np.mean(np.square(y_pred.y - y_real)))
@@ -218,4 +237,134 @@ class OdeFitter:
                     kind='line', facet_kws=dict(sharey=True))
         plt.show()
 
+
+class OdeFitterMultipleDatasets:
+    """Class for fitting to multiple datasets"""
+    def __init__(self, ode_model: OdeModel,
+                 datasets: List[ExpressionMatrixTimeSeries],
+                 custom_params_per_dataset: Dict[ExpressionMatrixTimeSeries,
+                                                 Parameters],
+                 param_limit: float = 800.,
+                 method: Literal['lbfgs', 'bfgs',
+                                 'differential_evolution',
+                                 'basinhopping', 'shgo'] = 'lbfgs'):
+        """
+        :param ode_model: The ODE model used for fitting.
+        :param datasets: A list of ExpressionMatrixTimeSeries objects, one for
+         each datasets.
+        :param custom_params_per_dataset: A dictionary mapping each dataset
+         to its custom parameters.
+        :param param_limit: The parameter limit. Default is 800.
+        :param method: The optimization method to be used. Default is 'lbfgs'.
+        """
+
+        self.method = method
+        self.has_been_fitted = False
+
+        # Combine all OdeFitter objects
+        self.all_fitters = []
+        for dataset in datasets:
+            assert dataset.has_been_clustered
+            time, data = dataset.get_clusters_expressions_with_time(
+                0, aggregation_method='mean')
+            # TODO temporary fix because I'm lazy, might have to be changed later
+            heat_end = custom_params_per_dataset[dataset]['heat_end_time']
+            fitter = OdeFitter(ode_model, data, time,
+                               heat_end_time=heat_end,
+                               param_limit=param_limit,
+                               method=method)
+            self.all_fitters.append(fitter)
+        logging.info(f'Created {len(self.all_fitters)} fitters '
+                     f'to be fitted simultaneously.')
+
+        # Master params are the parameters that are the same between all fitters
+        self.master_params = self.all_fitters[0].params.copy()
+
+        # Custom parameters are the parameters that are different between the fitters.
+        self.custom_param_names = self.get_local_parameter_names(
+            custom_params_per_dataset)
+        # The custom parameters shouldn't be in the master parameters
+        for param_name in self.custom_param_names:
+            self.master_params.pop(param_name)
+
+        # Update the intial y0 to the mean of all conditions
+        self.init_condition_names = []
+        starting_values = [fitter.measured_data[:, 0]
+                           for fitter in self.all_fitters]
+        mean_starting_values = np.mean(starting_values, axis=0)
+        for i, init_value in enumerate(mean_starting_values):
+            init_y_name = f'y{i}'
+            self.master_params[init_y_name].set(value=init_value, vary=True,
+                                                min=0,
+                                                max=init_value * 2)
+            self.init_condition_names.append(init_y_name)
+
+        # TODO how to handle the non_heat temp? Atm assumes the same between
+        #  two samples.
+
+    @staticmethod
+    def get_local_parameter_names(
+            custom_params_per_dataset: Dict[ExpressionMatrixTimeSeries, Parameters]
+    ) -> set:
+        """Get all custom parameter names from the given custom_params_per_dataset.
+
+        :param custom_params_per_dataset: A dictionary mapping each dataset
+         to its custom parameters.
+        :return: Set which contains the names of the custom (=local) params.
+        """
+        output = []
+        for custom_parameters in custom_params_per_dataset.values():
+            param_names_one_dict = [k for k in custom_parameters.keys()]
+            output.append(param_names_one_dict)
+        # Assert that all dictionaries contain the same custom parameter names
+        assert check_all_identical_lists(output)
+        return set(output[0])
+
+    def loss_on_multiple_datasets(self, params: Parameters, custom_param_names: set[str] = None) -> float:
+        """Fit multiple time series and return the total loss over all datasets.
+
+        :param params: Parameters for which loss should be calculated.
+        :param custom_param_names: Names of additional local parameters
+        to include in the calculations. (optional)
+
+        :return: Total loss as a float.
+        """
+        all_loss = []
+        for fitter in self.all_fitters:
+            loss = fitter.loss_function(
+                params, fitter.time_points,
+                fitter.measured_data, custom_param_names, return_scalar=True)
+            all_loss.append(loss)
+        return sum(all_loss)
+
+    def fit(self, max_iter=None) -> MinimizerResult:
+        """Find optimal parameters for ODE
+
+        :param max_iter: For lbfgs/bfgs, set the maximum number of iterations
+        :return: Result of the minimization as a MinimizerResult object.
+        """
+        if max_iter is None:
+            max_iter = 1000
+        else:
+            assert self.method in ['lbfgs', 'bfgs'], \
+                'Can only enter maxiter for BFGS/LBFGS methods currently.'
+
+        match self.method:
+            case 'lbfgs' | 'bfgs':
+                result = minimize(self.loss_on_multiple_datasets,
+                                  self.master_params,
+                                  method=self.method,
+                                  kws=dict(custom_param_names=self.custom_param_names),
+                                  options=dict(disp=1, maxiter=max_iter,
+                                               maxfun=1e99,
+                                               )
+                                  )
+            case _:
+                raise NotImplementedError(f'Optimisation method: {self.method} '
+                                          f'is currently not supported')
+
+        self.master_params = result.params
+        self.has_been_fitted = True
+        logging.info(fit_report(result))
+        return result
 
