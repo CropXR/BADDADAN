@@ -323,7 +323,8 @@ class OdeFitterMultipleDatasets:
             loss = fitter.loss_function(
                 params, fitter.time_points,
                 fitter.measured_data, custom_param_names, return_scalar=True)
-            all_loss.append(loss)
+            norm_loss = loss / len(fitter.time_points)
+            all_loss.append(norm_loss)
         return sum(all_loss)
 
     def fit(self, max_iter=None) -> MinimizerResult:

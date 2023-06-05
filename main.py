@@ -96,7 +96,7 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
 
     expr_mat_time.keep_n_most_deviating_genes(total_genes, variation_measure)
     expr_mat_time.do_hierachical_clustering(4, do_plotting=False)
-    # expr_mat_time.plot_clusters_over_time(plot_units=True)
+    # expr_mat_time.plot_clusters_over_time(plot_units=False)
     # expr_mat_time.plot_clusters_over_time(plot_units=True)
 
     control_pickle_path = Path('data/time_series_control_dataset/GSE5620_family_ExpressionMatrixTime.pickle')
@@ -144,7 +144,7 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
     # my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
     module_module = my_grn.get_module_module_network()
     # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
-    # module_module.plot_network(with_labels=True)
+    module_module.plot_network(with_labels=True)
 
     # fit_ode_to_data(module_module, expr_mat_time)
     fit_ode_to_two_datasets(module_module, expr_mat_time, control_expr_mat_time)
@@ -161,22 +161,25 @@ def fit_ode_to_two_datasets(
     logging.info(my_ode)
     custom_params = {
         my_time_series_expressions: create_params(heat_end_time=3.,
-                                                  y0=None,
-                                                  y1=None,
-                                                  y2=None,
-                                                  y3=None),
+                                                  y0=1,
+                                                  y1=1,
+                                                  y2=1,
+                                                  y3=1,
+                                                  non_heat_temp=.1),
         control_experiment: create_params(heat_end_time=-1.,
-                                          y0=None,
-                                          y1=None,
-                                          y2=None,
-                                          y3=None),
+                                          y0=1,
+                                          y1=1,
+                                          y2=1,
+                                          y3=1,
+                                          non_heat_temp=.1),
         }
     # Step uno
     multiple_fitter = OdeFitterMultipleDatasets(
-        my_ode, [my_time_series_expressions, control_experiment], custom_params)
+        my_ode, [my_time_series_expressions, control_experiment], custom_params,
+        param_limit=100)
 
     # Step dos
-    multiple_fitter.fit(300)
+    multiple_fitter.fit(800)
     best_fits = multiple_fitter.calculate_current_best_fits()
 
 
