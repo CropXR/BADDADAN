@@ -168,7 +168,8 @@ def fit_ode_to_two_datasets(
         my_ode, [my_time_series_expressions, control_experiment], custom_params)
 
     # Step dos
-    multiple_fitter.fit(100)
+    multiple_fitter.fit(10)
+    best_fits = multiple_fitter.calculate_current_best_fits()
 
 
 
