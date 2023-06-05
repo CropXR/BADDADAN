@@ -287,18 +287,6 @@ class OdeFitterMultipleDatasets:
         for param_name in self.custom_param_names:
             self.master_params.pop(param_name)
 
-        # Update the intial y0 to the mean of all conditions
-        self.init_condition_names = []
-        starting_values = [fitter.measured_data[:, 0]
-                           for fitter in self.all_fitters]
-        mean_starting_values = np.mean(starting_values, axis=0)
-        for i, init_value in enumerate(mean_starting_values):
-            init_y_name = f'y{i}'
-            self.master_params[init_y_name].set(value=init_value, vary=True,
-                                                min=0,
-                                                max=init_value * 2)
-            self.init_condition_names.append(init_y_name)
-
         # TODO how to handle the non_heat temp? Atm assumes the same between
         #  two samples.
 

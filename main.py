@@ -160,8 +160,16 @@ def fit_ode_to_two_datasets(
                                                         nonlinear=True)
     logging.info(my_ode)
     custom_params = {
-        my_time_series_expressions: create_params(heat_end_time=3.),
-        control_experiment: create_params(heat_end_time=-1.)
+        my_time_series_expressions: create_params(heat_end_time=3.,
+                                                  y0=None,
+                                                  y1=None,
+                                                  y2=None,
+                                                  y3=None),
+        control_experiment: create_params(heat_end_time=-1.,
+                                          y0=None,
+                                          y1=None,
+                                          y2=None,
+                                          y3=None),
         }
     # Step uno
     multiple_fitter = OdeFitterMultipleDatasets(
