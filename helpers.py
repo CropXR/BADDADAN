@@ -86,7 +86,7 @@ def de_print_fun(xk, convergence=None):
 
 
 def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
-                     model_fit: OdeResult = None):
+                     model_fit: OdeResult = None, axs = None):
     """Plot real data y and model prediction y_hat
 
     :param y_real: Numpy array containing measured data. One variable per row
@@ -95,7 +95,10 @@ def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
                both arrays
     :return:
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, sharey='all')
+    if axs is None:
+        _, (ax1, ax2) = plt.subplots(1, 2, sharey='all')
+    else:
+        ax1, ax2 = axs
     # fig.set_size_inches(15, 8)
     # fig.suptitle('Comparison real vs estimated')
     for i, row in enumerate(y_real):
@@ -112,7 +115,7 @@ def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
         ax2.set_ylabel('Gene expression')
         ax2.set_xlabel('Time (h)')
 
-    plt.show()
+    # plt.show()
 
 def fit_spline(data: np.ndarray, time: list | np.ndarray,
                num_timepoints: int = 50) -> tuple[np.ndarray, np.ndarray]:

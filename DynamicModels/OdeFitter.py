@@ -379,9 +379,13 @@ class OdeFitterMultipleDatasets:
         """Calculate the solution of the ODEs for all conditions to which
         they were fitted
          """
-        for fitter in self.all_fitters:
-            # For all fitters, get best fit and plot it
+        fig, axs = plt.subplots(len(self.all_fitters), 2, sharey='all')
+        for i, fitter in enumerate(self.all_fitters):
+            i *= 2
+            ax = axs.flatten()[i:i+2]
             pred = fitter.calculate_current_best_fit(fitter.time_points)
             real = fitter.measured_data
-            plot_y_and_y_hat(real, fitter.time_points, pred)
+            plot_y_and_y_hat(real, fitter.time_points, pred, axs=ax)
+        plt.tight_layout()
+        plt.show()
 
