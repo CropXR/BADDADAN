@@ -1,6 +1,6 @@
 import logging
 
-from typing import Literal, List, Dict
+from typing import Literal, List, Dict, Generator
 
 import numpy as np
 import pandas as pd
@@ -13,7 +13,7 @@ import seaborn as sns
 
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
-from helpers import check_all_identical_lists
+from helpers import check_all_identical_lists, plot_y_and_y_hat
 
 
 class OdeFitter:
@@ -330,6 +330,7 @@ class OdeFitterMultipleDatasets:
         :return: Total loss as a float.
         """
         all_loss = []
+        # all y0 values should be variable, too of course ya knobhead
         for fitter in self.all_fitters:
             loss = fitter.loss_function(
                 params, fitter.time_points,
@@ -363,8 +364,24 @@ class OdeFitterMultipleDatasets:
                 raise NotImplementedError(f'Optimisation method: {self.method} '
                                           f'is currently not supported')
 
+        # For some reason the custom parameters show up again. So remove
+        # them from the final fitting parameters again
+        for name in self.custom_param_names:
+            result.params.pop(name)
         self.master_params = result.params
         self.has_been_fitted = True
+        for fitter in self.all_fitters:
+            fitter.has_been_fitted = True
         logging.info(fit_report(result))
         return result
+
+    def calculate_current_best_fits(self):
+        """Calculate the solution of the ODEs for all conditions to which
+        they were fitted
+         """
+        for fitter in self.all_fitters:
+            # For all fitters, get best fit and plot it
+            pred = fitter.calculate_current_best_fit(fitter.time_points)
+            real = fitter.measured_data
+            plot_y_and_y_hat(real, fitter.time_points, pred)
 
