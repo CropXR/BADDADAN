@@ -526,15 +526,25 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             sns.lineplot(data=some_df, x='time', y='expression',
                          hue='cluster', style='replicate',
                          palette=sns.color_palette(), errorbar='sd')
+
+        # Unused bit of code to show the indivudual genes with
+        # the mean per module overlay
+        # my_thingy = True
+        # if my_thingy:
+        #     nr_genes = 100
+        #     # sub df contains only a few entries
+        #     subset_genes = some_df.groupby('cluster').sample(nr_genes)['ID_REF'].to_list()
+        #
+        #     fig, ax = plt.subplots()
+        #     sns.lineplot(data=some_df[some_df['ID_REF'].isin(subset_genes)],
+        #                  x='time', y='expression',
+        #                  hue='cluster', palette=sns.color_palette(),
+        #                  units='ID_REF', estimator=None, lw=1, alpha=.2, ax=ax)
+        #     sns.lineplot(data=some_df, x='time', y='expression',
+        #                  hue='cluster', style='replicate',
+        #                  palette=sns.color_palette(), errorbar=None, ax=ax)
+
         plt.show()
-        # sns.stripplot(data=some_df, x='time', y='expression',
-        #                hue='cluster', palette=sns.color_palette())
-        # ax = sns.violinplot(data=some_df, x='time', y='expression',
-        #                hue='cluster', palette=sns.color_palette()) #, dodge=False, inner=None)
-        # plt.setp(ax.collections, alpha=.5)
-        # sns.lineplot(data=some_df, x='elapsed_mins', y='expression',
-        #              hue='cluster_id', style='tissue', palette=sns.color_palette())
-        # plt.show()
 
     def _get_cluster_expression_long_form(self, n_clusters: int,
                                           aggregation_method: Literal['mean', 'pca'] = 'mean'):
