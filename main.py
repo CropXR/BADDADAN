@@ -95,11 +95,6 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
     expr_mat_time.keep_only_shoot()
     expr_mat_time.merge_biological_samples()
 
-    expr_mat_time.keep_n_most_deviating_genes(total_genes, variation_measure)
-    expr_mat_time.do_hierachical_clustering(4, do_plotting=False)
-    # expr_mat_time.plot_clusters_over_time(plot_units=False)
-    # expr_mat_time.plot_clusters_over_time(plot_units=True)
-
     control_pickle_path = Path('data/time_series_control_dataset/GSE5620_family_ExpressionMatrixTime.pickle')
     if not control_pickle_path.exists():
         my_expression_annotation = ExpressionArrayAnnotation(
@@ -111,7 +106,7 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
             log2_transform=do_log2)
         control_expr_mat_time.keep_only_shoot()
         control_expr_mat_time.merge_biological_samples()
-        control_expr_mat_time.assign_clusters_from(expr_mat_time)
+        # control_expr_mat_time.assign_clusters_from(expr_mat_time)
         with control_pickle_path.open('wb') as f:
             pickle.dump(control_expr_mat_time, f)
     else:
@@ -119,8 +114,13 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
         with control_pickle_path.open('rb') as f:
             control_expr_mat_time = pickle.load(f)
 
-    # control_expr_mat_time.plot_clusters_over_time(plot_units=True)
-    # Create a file that can be used on
+    expr_mat_time.concat_to_expression_matrix(control_expr_mat_time, keys=['Heat', 'Control'])
+    expr_mat_time.keep_n_most_deviating_genes(total_genes, variation_measure)
+    expr_mat_time.do_hierachical_clustering(4, do_plotting=False)
+    expr_mat_time.remove_condition_from_expression_matrix('Control')
+    # expr_mat_time.plot_clusters_over_time(plot_units=False)
+
+    ## Create a file that can be used on ##
     # http://bioinformatics.psb.ugent.be/webtools/TF2Network/
     # to get putative regulators per cluster
     expr_mat_time.write_tf2_input_file(
