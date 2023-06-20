@@ -101,6 +101,45 @@ class ExpressionMatrix:
             df = np.log2(df)
         return df
 
+    def concat_to_expression_matrix(
+            self, new_expression_matrix: ExpressionMatrix,
+            keys: list[str]):
+        """Concatenates a second expression matrix to this expression matrix
+         to enable clustering on multiple experiments.
+
+        :param new_expression_matrix: The expression matrix to be concatenated.
+        :param keys: The names to be used for the columns in the
+            concatenated expression matrix. I.e. shorthand names for
+            the experiments.
+        """
+        both_dfs = pd.concat([self.df, new_expression_matrix.df], axis=1, keys=keys)
+        self.df = both_dfs
+
+    def remove_condition_from_expression_matrix(self, key: str):
+        """Removes a specified condition from the expression matrix.
+
+        :param key: The condition to be removed.
+        :raises AssertionError: If the expression matrix does not have
+                                multiple levels in the columns.
+        """
+        assert self.df.columns.nlevels > 1, """Seems there are not multiple 
+            levels in the columns. I.e. not multiple conditions"""
+
+        # Columns where top index matches
+        columns_to_drop = self.df.columns[self.df.columns.get_level_values(0) == key]
+        self.df = self.df.drop(columns=columns_to_drop, axis=1)
+
+        # Temporarily remove cluster_id
+        cluster_id = self.df.cluster_id
+        self.df = self.df.drop(columns='cluster_id', axis=1)
+
+        # If only one top level is left, just go to normal index again
+        if len(set(self.df.columns.get_level_values(0))) == 1:
+            self.df = self.df.droplevel(0, axis=1)
+        # Re-add cluster_id
+        self.df['cluster_id'] = cluster_id
+
+
     def get_sample_names(self) -> np.array:
         """Returns all names of samples"""
         return self.df.columns.to_numpy()
