@@ -135,7 +135,8 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
 
     ## Now it's time to get the network that we need ##
     # This file has to be created manually from the TF2 website
-    my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(out_dir / '03_tf2network_output.tsv')
+    my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(
+        out_dir / '03_tf2network_output.tsv', nr_top_hits=100)
     my_grn.add_tf_module_mappings(out_dir / '02_gene_to_module.csv')
     my_grn.clean_up_network()
     # my_grn.plot_network(with_labels=True)

@@ -81,21 +81,28 @@ class ModuleRegulatoryNetwork:
         return cls(a_graph)
 
     @classmethod
-    def from_tf2_tsv(cls, in_path: Path) -> ModuleRegulatoryNetwork:
+    def from_tf2_tsv(cls, in_path: Path, nr_top_hits: int | None = None) -> ModuleRegulatoryNetwork:
         """Create object from output of TF2Network file
 
+        :param nr_top_hits: Keep certain number of top-scoring PWMs (position
+                             weight matrices). Can be used as a quality cutoff.
         :param in_path: Path to .tsv output file of tf2network
         :return: Moduleregulatory network that contains TFs and modules
         """
-        # TODO implement top ranks here?
         df = pd.read_csv(in_path, sep='\t')
         df['target'] = cls.module_prefix + df['GeneSet'].astype(str)
         df['regulator_with_prefix'] = cls.tf_prefix + df['Regulator'].astype(str)
         df['origin'] = EdgeRelation.BINDS_TO
-        my_graph = nx.from_pandas_edgelist(df, source='regulator_with_prefix',
-                                          target='target',
-                                          edge_attr='origin',
-                                          create_using=nx.DiGraph)
+
+        if nr_top_hits is not None:
+            # Get only a certain number of top PWM hits for each module
+            filtered_df = df.sort_values('rank').groupby('GeneSet').head(nr_top_hits)
+        else:
+            filtered_df = df
+        my_graph = nx.from_pandas_edgelist(filtered_df, source='regulator_with_prefix',
+                                           target='target',
+                                           edge_attr='origin',
+                                           create_using=nx.DiGraph)
         return cls(my_graph)
 
     def add_tf_module_mappings(self, path_to_orignal_cluster: Path) -> None:
