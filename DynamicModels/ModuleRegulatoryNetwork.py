@@ -171,8 +171,7 @@ class ModuleRegulatoryNetwork:
         candidate_edges = {}
         for tf in self.get_tfs():
             original_module = list(self.graph.predecessors(tf))
-            assert len(
-                original_module) == 1, f'TF ({tf}) can only be transcribed by one module'
+            assert len(original_module) == 1, f'TF ({tf}) can only be transcribed by one module'
             # List contains only one item, extract it.
             original_module = original_module[0]
             target_modules = list(self.graph.successors(tf))
@@ -274,11 +273,10 @@ class ModuleRegulatoryNetwork:
                 assert corr > .3, f'HUH?! Module {module_name} is not positively correlated ' \
                                   f'with the TF ({tf_name}) it produces. Can be fixed by running this function with remove_low_corr=True'
             elif corr < .3:
-
                 tfs_to_remove.add(tf_name)
             else:
                 continue
-        if remove_low_corr:
+        if remove_low_corr and tfs_to_remove:
             logging.info(
                 f'Removing {tfs_to_remove} because correlation between their '
                 f'expression and the module that produces them is too low'

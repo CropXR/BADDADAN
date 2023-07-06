@@ -251,7 +251,7 @@ class OdeFitterMultipleDatasets:
         """
         :param ode_model: The ODE model used for fitting.
         :param datasets: A list of ExpressionMatrixTimeSeries objects, one for
-         each datasets.
+         each dataset.
         :param custom_params_per_dataset: A dictionary mapping each dataset
          to its custom parameters.
         :param param_limit: The parameter limit. Default is 800.
