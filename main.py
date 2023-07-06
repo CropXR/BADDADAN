@@ -217,31 +217,38 @@ def fit_ode_to_two_simulated_data(module_network: ModuleRegulatoryNetwork):
     plot_y_and_y_hat(sim_control_data.y, my_time)
     plt.show()
 
+    # These are parameters that are different between the two fitters,
+    # some are fixed (e.g. the heat_end_time) and some are changed
+    # during training (e.g. y0, non_heat_temp)
+
     custom_params = {sim_exp_matrix: create_params(heat_end_time=3.,
                                                    y0=1,
                                                    y1=1,
                                                    y2=1,
                                                    y3=1,
-                                                   non_heat_temp=.1),
+                                                   non_heat_temp=.1,
+                                                   heat_temp=.9),
                      sim_control_matrix: create_params(heat_end_time=-1.,
                                                        y0=1,
                                                        y1=1,
                                                        y2=1,
                                                        y3=1,
-                                                       non_heat_temp=.1),
+                                                       non_heat_temp=.1,
+                                                       heat_temp=.9),
                      }
 
+    # Create the fitter here, which contains this collection of custom parameters
     multiple_fitter = OdeFitterMultipleDatasets(
-        my_ode, [sim_exp_matrix, sim_exp_matrix], custom_params,
+        my_ode, [sim_control_matrix, sim_exp_matrix], custom_params,
         param_limit=150)
 
-    for param_name in multiple_fitter.master_params.valuesdict():
-        if param_name not in ['heat_temp', 'heat_end_time']:
-            # Heat temp is already restrained as 1-non_heat_temp
-            multiple_fitter.master_params[param_name].set(
-                value=param_dict[param_name])
-    multiple_fitter.fit(5)
-    best_fits = multiple_fitter.calculate_current_best_fits()
+    # # Provide with prior knowledge on ground truth parameters
+    multiple_fitter.master_params = my_params
+
+    # multiple_fitter.calculate_current_best_fits()
+
+    multiple_fitter.fit(50)
+    multiple_fitter.calculate_current_best_fits()
 
 
 def fit_ode_to_two_datasets(
@@ -307,10 +314,10 @@ def fit_ode_to_two_datasets(
         "y3": 4.94547767,
     }
 
-    for param_name in multiple_fitter.master_params.valuesdict():
+    for param_name in multiple_fitter._master_params.valuesdict():
         if param_name not in ['heat_temp', 'heat_end_time']:
             # Heat temp is already restrained as 1-non_heat_temp
-            multiple_fitter.master_params[param_name].set(
+            multiple_fitter._master_params[param_name].set(
                 value=best_params_so_far[param_name])
 
     multiple_fitter.fit(150)

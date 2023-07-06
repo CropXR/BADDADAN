@@ -546,7 +546,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """
         df = pd.DataFrame.from_records(sim_data.y)
         # Dummy column names
-        df.columns = [f'AtGen_6-9711_Heatstress-Shoots-{t}h_Rep1'
+        df.columns = [f'AtGen_6-9711_Simulated-Shoots-{t}h_Rep1'
                       for t in sim_data.t]
         created_object = cls(df)
         created_object.df['cluster_id'] = df.index.to_list()
