@@ -268,7 +268,7 @@ class OdeFitterMultipleDatasets:
             time, data = dataset.get_clusters_expressions_with_time(
                 0, aggregation_method='mean')
             # TODO temporary fix because I'm lazy, might have to be changed later
-            heat_end = custom_params_per_dataset[dataset]['heat_end_time']
+            heat_end = custom_params_per_dataset[dataset]['heat_end_time'].value
             fitter = OdeFitter(ode_model, data, time,
                                heat_end_time=heat_end,
                                param_limit=param_limit,
@@ -278,14 +278,14 @@ class OdeFitterMultipleDatasets:
                      f'to be fitted simultaneously.')
 
         # Master params are the parameters that are the same between all fitters
-        self.master_params = self.all_fitters[0].params.copy()
+        self._master_params = self.all_fitters[0].params.copy()
 
         # Custom parameters are the parameters that are different between the fitters.
-        self.custom_param_names = self.get_local_parameter_names(
+        self.local_param_names = self.get_local_parameter_names(
             custom_params_per_dataset)
         # The custom parameters shouldn't be in the master parameters
-        for param_name in self.custom_param_names:
-            self.master_params.pop(param_name)
+        for param_name in self.local_param_names:
+            self._master_params.pop(param_name)
 
         # TODO how to handle the non_heat temp? Atm assumes the same between
         #  two samples.
@@ -342,9 +342,9 @@ class OdeFitterMultipleDatasets:
         match self.method:
             case 'lbfgs' | 'bfgs':
                 result = minimize(self.loss_on_multiple_datasets,
-                                  self.master_params,
+                                  self._master_params,
                                   method=self.method,
-                                  kws=dict(custom_param_names=self.custom_param_names),
+                                  kws=dict(custom_param_names=self.local_param_names),
                                   options=dict(disp=1, maxiter=max_iter,
                                                maxfun=1e99,
                                                )
@@ -353,15 +353,19 @@ class OdeFitterMultipleDatasets:
                 raise NotImplementedError(f'Optimisation method: {self.method} '
                                           f'is currently not supported')
 
-        # For some reason the custom parameters show up again. So remove
+        # For some reason the local parameters show up again. So remove
         # them from the final fitting parameters again
-        for name in self.custom_param_names:
+        for name in self.local_param_names:
             result.params.pop(name)
         self.master_params = result.params
         self.has_been_fitted = True
-        for fitter in self.all_fitters:
-            fitter.has_been_fitted = True
+        logging.info('Global parameters: ')
         logging.info(fit_report(result))
+
+        for fitter in self.all_fitters:
+            logging.info(f'Local parameters of {fitter}')
+            logging.info([fitter.params[p] for p in self.local_param_names])
+
         return result
 
     def calculate_current_best_fits(self):
@@ -369,6 +373,11 @@ class OdeFitterMultipleDatasets:
         they were fitted
          """
         fig, axs = plt.subplots(len(self.all_fitters), 2, sharey='all')
+        logging.debug([(i, j)
+                       for i, j in zip(self.all_fitters[0].params.values(),
+                                       self.all_fitters[1].params.values())
+                       ]
+                      )
         for i, fitter in enumerate(self.all_fitters):
             i *= 2
             ax = axs.flatten()[i:i+2]
@@ -378,3 +387,32 @@ class OdeFitterMultipleDatasets:
         plt.tight_layout()
         plt.show()
 
+    @property
+    def master_params(self) -> Parameters:
+        return self._master_params
+
+    @master_params.setter
+    def master_params(self, new_parameters: Parameters):
+        """Set the master parameters (the ones shared between all fitters)
+
+        Can be done if you have prior knowledge, or if you have finished
+        fitting the ODEs.
+
+        Here, a setter method is used because you need to update all the
+        parameters of the underlying fitters as well.
+        """
+        # Only update the values, not the upper/lower limit
+        for param_name in new_parameters.valuesdict():
+            if param_name in self._master_params:
+                self._master_params[param_name].set(
+                    value=new_parameters[param_name].value)
+            else:
+                logging.warning(f'{param_name} is not a global parameters, so cannot be set here')
+                continue
+        for fitter in self.all_fitters:
+            fitter.params.update(self._master_params)
+            if 'non_heat_temp' in new_parameters:
+                logging.info(
+                    'Setting non_heat_temp as local global parameter')
+                fitter.params['non_heat_temp'].set(value=new_parameters['non_heat_temp'].value)
+            fitter.has_been_fitted = True
