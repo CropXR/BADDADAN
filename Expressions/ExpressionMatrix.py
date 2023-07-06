@@ -17,6 +17,7 @@ import GEOparse
 from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
 import qnorm
+from scipy.integrate._ivp.ivp import OdeResult
 from scipy.spatial.distance import pdist
 from numpy.linalg import svd
 
@@ -537,6 +538,22 @@ class ExpressionMatrixTest(ExpressionMatrix):
 
 
 class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
+    @classmethod
+    def from_simulated_data(cls, sim_data: OdeResult):
+        """Create df where each gene is just representative of one module,
+        so you can feed simulated data into all the algorithms that
+        need ExpressionMatrixTimeSeries as an input.
+        """
+        df = pd.DataFrame.from_records(sim_data.y)
+        # Dummy column names
+        df.columns = [f'AtGen_6-9711_Heatstress-Shoots-{t}h_Rep1'
+                      for t in sim_data.t]
+        created_object = cls(df)
+        created_object.df['cluster_id'] = df.index.to_list()
+        created_object.has_been_clustered = True
+
+        return created_object
+
     def keep_only_shoot(self, ignore_cluster_id_col=True) -> None:
         """Keep only columns that originate from shoot"""
         if ignore_cluster_id_col:
