@@ -92,7 +92,7 @@ class ExpressionMatrix:
 
             logging.info(
                 f'Could not find annotation of {len(unmapped_probes)} probes '
-                f'({(len(unmapped_probes) / len(df.index)) * 100:.2f}%). '
+                f'({len(unmapped_probes) / len(df.index):.2%}). '
                 f'Proceeding with their original names')
             if len(unmapped_probes) < 10:
                 for probe in unmapped_probes:
