@@ -6,6 +6,7 @@ import networkx as nx
 import pandas as pd
 
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
+from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from Expressions.ExpressionMatrix import ExpressionMatrixTraining, \
     ExpressionMatrixTimeSeries, ExpressionMatrix
 from helpers import plot_y_and_y_hat
@@ -97,3 +98,13 @@ def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
         out_file_path=out_file_path, tf_list_path=tfs.df.index.tolist())
 
     assert True
+
+def test_parse_65046_soft_file():
+    soft_path = Path('../data/gse65046/GSE65046_family.soft')
+    annotation_path = Path('../data/resources/96_plates.csv')
+    annotation = ExpressionArrayAnnotation(annotation_path,
+                                           sep=',',
+                                           array_type='catma')
+    assert ExpressionMatrixTimeSeries.from_geo_file(soft_path,
+                                                    annotation,
+                                                    log2_transform=True)
