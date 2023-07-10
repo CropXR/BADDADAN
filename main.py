@@ -251,19 +251,22 @@ def fit_ode_to_two_simulated_data(module_network: ModuleRegulatoryNetwork):
     # multiple_fitter.master_params = my_params
 
     # multiple_fitter.calculate_current_best_fits()
-    nr_fits = 15
-    fitters = [OdeFitterMultipleDatasets(my_ode, [sim_control_matrix, sim_exp_matrix], custom_params,
-                                         param_limit=150)
+    my_ode.remove_regulator_from_module(1, 2)
+    nr_fits = 4
+    fitters = [OdeFitterMultipleDatasets(
+                my_ode, [sim_control_matrix, sim_exp_matrix],
+                custom_params, param_limit=150)
                for _ in range(nr_fits)]
 
-    # for fitter in fitters:
-    #     new_params = Parameters()
-    #     # # Slightly perturb initial parameters
-    #     # for param_name, value in my_params.valuesdict().items():
-    #     #     new_params.add(name=param_name,
-    #     #                    value=np.random.normal(value, 0.1 * abs(value)))
-    #     # # # Provide with prior knowledge on ground truth parameters
-    #     fitter.master_params = my_params
+    for fitter in fitters:
+        new_params = Parameters()
+        # Slightly perturb initial parameters
+        for param_name, value in my_params.valuesdict().items():
+            if param_name in fitter.master_params:
+                new_params.add(name=param_name,
+                               value=np.random.normal(value, 0.1 * abs(value)))
+        # # Provide with prior knowledge on ground truth parameters
+        fitter.master_params = my_params
 
     best_fit = fit_multiple_fitters(fitters, nr_iters=1000) #, extra_analysis=True,gt_params=my_params)
     best_fit.master_params.pretty_print()

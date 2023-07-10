@@ -203,10 +203,8 @@ class NonLinearFormula(FormulaSuperClass):
         :param regulator: Name of regulator module, e.g. MODULE3
         :return: Name of the new parameter
         """
-        regulator_index = int(regulator[-1])
-        b_param_name = f'beta_{regulator_index}_{self.module_index}'
-        k_param_name = f'k_{regulator_index}_{self.module_index}'
-        var_name = f'y[{regulator_index}]'
+        b_param_name, k_param_name, var_name = self.generate_param_and_var_names(
+            regulator)
         self.regulator_names.append(regulator)
         self.params.extend([b_param_name, k_param_name])
         if direction == EdgeRelation.UPREGULATES:
@@ -221,22 +219,40 @@ class NonLinearFormula(FormulaSuperClass):
         self.formula_is_compiled = False
         return b_param_name
 
+    def generate_param_and_var_names(self, regulator: str) -> Tuple[str, str, str]:
+        """For a given regulator, generate what the names of beta, k,
+         and the input variable (e.g. y[1]) should be.
+         """
+        regulator_index = int(regulator[-1])
+        b_param_name = f'beta_{regulator_index}_{self.module_index}'
+        k_param_name = f'k_{regulator_index}_{self.module_index}'
+        var_name = f'y[{regulator_index}]'
+        return b_param_name, k_param_name, var_name
+
     def remove_regulator(self, regulator_to_remove: str):
         """Remove the regulator from the equation. Only works if regulator
         is already present in the formula.
 
         :param regulator_to_remove: Name of regulator module, e.g. MODULE3
         :return: Name of the new parameter"""
-        raise NotImplementedError("Currently this functionality is broken")
-        regulator_index = int(regulator_to_remove[-1])
-        b_param_name = f'beta_{regulator_index}_{self.module_index}'
+        b_param_name, k_param_name, var_name = self.generate_param_and_var_names(
+            regulator_to_remove)
         assert regulator_to_remove in self.regulator_names, \
             'Regulator cannot be removed, it is not present in the current formula'
         self.params.remove(b_param_name)
+        self.params.remove(k_param_name)
         self.regulator_names.remove(regulator_to_remove)
-        string_to_remove_from_formula = self.generate_linear_term(
-            b_param_name, f'y[{regulator_index}]')
-        self.formula_string = self.formula_string.replace(
-            string_to_remove_from_formula, '')
+        activation_string_to_remove = self.generate_hill_activation_term(
+            b_param_name, k_param_name, var_name)
+        inhibition_string_to_remove = self.generate_hill_inhibition_term(
+            b_param_name, k_param_name, var_name)
+        if activation_string_to_remove in self.formula_parts:
+            self.formula_parts.remove(activation_string_to_remove)
+        elif inhibition_string_to_remove in self.formula_parts:
+            self.formula_parts.remove(inhibition_string_to_remove)
+        else:
+            raise KeyError('Trying to remove term from '
+                           'formula that does not exist')
+
         self.formula_is_compiled = False
         return True
