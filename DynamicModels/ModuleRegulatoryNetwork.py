@@ -253,8 +253,6 @@ class ModuleRegulatoryNetwork:
         positively correlated with the transcription factor it produces.
         """
         if remove_low_corr:
-            logging.warning('REMOVING LOW CORRELATION TFS BECAUSE IT '
-                            'WAS SPECIFIED IN THE FUNCTION CALL')
             tfs_to_remove = set()
 
         debug_corrs = []
@@ -277,6 +275,8 @@ class ModuleRegulatoryNetwork:
             else:
                 continue
         if remove_low_corr and tfs_to_remove:
+            logging.warning('REMOVING LOW CORRELATION TFS BECAUSE IT '
+                            'WAS SPECIFIED IN THE FUNCTION CALL')
             logging.info(
                 f'Removing {tfs_to_remove} because correlation between their '
                 f'expression and the module that produces them is too low'
