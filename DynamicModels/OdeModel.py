@@ -143,6 +143,17 @@ class OdeModel:
             regulator_to_remove = self.get_module_names()[origin_module_idx]
         formula_of_interest.remove_regulator(regulator_to_remove)
 
+    def flip_regulatory_sign(self, target_module_idx: int,
+                             origin_module_idx: int) -> None:
+        """Change connection between two modules from inhibition
+        to activation or the other way around.
+        """
+        formula_of_interest = self.formula_per_module[target_module_idx]
+        # Only nonlinear formulas can be flipped
+        assert isinstance(formula_of_interest, NonLinearFormula)
+        origin_module_name = self.get_module_names()[origin_module_idx]
+        formula_of_interest.flip_regulatory_direction(origin_module_name)
+
     def calculate_solution(self, params: Parameters, t: np.ndarray,
                            init_condition_names: list[str]) -> OdeResult:
         """Return values at time points t, given a set of params.

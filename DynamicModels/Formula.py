@@ -256,3 +256,28 @@ class NonLinearFormula(FormulaSuperClass):
 
         self.formula_is_compiled = False
         return True
+
+    def flip_regulatory_direction(self, origin_module_name: str):
+        """Change an activation into inhibition or vice versa.
+
+        Used to check how sensitive the model is to inhibition/activation
+        assumptions."""
+        b_param_name, k_param_name, var_name = self.generate_param_and_var_names(
+            origin_module_name)
+        assert origin_module_name in self.regulator_names, \
+            'Regulator cannot be removed, it is not present in the current formula'
+        activation_string = self.generate_hill_activation_term(
+            b_param_name, k_param_name, var_name)
+        inhibition_string = self.generate_hill_inhibition_term(
+            b_param_name, k_param_name, var_name)
+        if activation_string in self.formula_parts:
+            self.formula_parts.remove(activation_string)
+            self.formula_parts.append(inhibition_string)
+        elif inhibition_string in self.formula_parts:
+            self.formula_parts.remove(inhibition_string)
+            self.formula_parts.append(activation_string)
+        else:
+            raise KeyError('Trying to remove term from '
+                           'formula that does not exist')
+        self.formula_is_compiled = False
+
