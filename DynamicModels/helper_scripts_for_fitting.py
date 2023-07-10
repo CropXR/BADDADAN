@@ -5,13 +5,14 @@ from matplotlib import pyplot as plt
 from pathos.multiprocessing import ProcessingPool as Pool
 import seaborn as sns
 
-from DynamicModels.OdeFitter import OdeFitter
+from DynamicModels.OdeFitter import OdeFitter, OdeFitterMultipleDatasets
 from helpers import calculate_parameter_distance
 
 
-def fit_multiple_fitters(fitters: list[OdeFitter], nr_iters: int = None,
+def fit_multiple_fitters(fitters: list[OdeFitter | OdeFitterMultipleDatasets],
+                         nr_iters: int = None,
                          extra_analysis: bool = False,
-                         gt_params: Parameters = None) -> OdeFitter:
+                         gt_params: Parameters = None) -> OdeFitter | OdeFitterMultipleDatasets:
     """Fit a list of fitters simultaneously, and return the best fit
 
     :param fitters: list of OdeFitter instances. Length of list determines
@@ -53,6 +54,9 @@ def fit_multiple_fitters(fitters: list[OdeFitter], nr_iters: int = None,
     # Set the correct parameters based on the best fit; OdeFitter instances
     # are not changed inplace.
     best_fit = fitters[best_index]
-    best_fit.params = all_fits[best_index].params
+    if hasattr(best_fit, 'params'):
+        best_fit.params = all_fits[best_index].params
+    elif hasattr(best_fit, 'master_params'):
+        best_fit.master_params = all_fits[best_index].params
     best_fit.has_been_fitted = True
-    return fitters[best_index]
+    return best_fit

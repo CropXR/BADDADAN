@@ -153,7 +153,7 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
     # my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
     module_module = my_grn.get_module_module_network()
     # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
-    # module_module.plot_network(with_labels=True)
+    module_module.plot_network(with_labels=True)
 
     fit_ode_to_two_simulated_data(module_module)
     # fit_ode_to_data(module_module, expr_mat_time)
@@ -161,7 +161,9 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
 
 
 def fit_ode_to_two_simulated_data(module_network: ModuleRegulatoryNetwork):
-    """Trying this with parameters from the 500 highest MAD log2 genes, with own connection added."""
+    """Trying this with parameters from the 500 highest MAD log2 genes,
+    with own connection added in the 03_tf2network_output.
+    """
     my_ode = OdeModel.construct_from_regulatory_network(module_network,
                                                         nonlinear=True)
 
@@ -238,17 +240,38 @@ def fit_ode_to_two_simulated_data(module_network: ModuleRegulatoryNetwork):
                      }
 
     # Create the fitter here, which contains this collection of custom parameters
-    multiple_fitter = OdeFitterMultipleDatasets(
-        my_ode, [sim_control_matrix, sim_exp_matrix], custom_params,
-        param_limit=150)
+    # multiple_fitter = OdeFitterMultipleDatasets(
+    #     my_ode, [sim_control_matrix, sim_exp_matrix], custom_params,
+    #     param_limit=150)
 
-    # # Provide with prior knowledge on ground truth parameters
-    multiple_fitter.master_params = my_params
+    # # Slightly perturb initial parameters
+    # for param_name, value in my_params.valuesdict().items():
+    #     my_params[param_name].set(value=np.random.normal(value, 0.5 * abs(value)))
+    # # # Provide with prior knowledge on ground truth parameters
+    # multiple_fitter.master_params = my_params
 
     # multiple_fitter.calculate_current_best_fits()
+    nr_fits = 15
+    fitters = [OdeFitterMultipleDatasets(my_ode, [sim_control_matrix, sim_exp_matrix], custom_params,
+                                         param_limit=150)
+               for _ in range(nr_fits)]
 
-    multiple_fitter.fit(50)
-    multiple_fitter.calculate_current_best_fits()
+    # for fitter in fitters:
+    #     new_params = Parameters()
+    #     # # Slightly perturb initial parameters
+    #     # for param_name, value in my_params.valuesdict().items():
+    #     #     new_params.add(name=param_name,
+    #     #                    value=np.random.normal(value, 0.1 * abs(value)))
+    #     # # # Provide with prior knowledge on ground truth parameters
+    #     fitter.master_params = my_params
+
+    best_fit = fit_multiple_fitters(fitters, nr_iters=1000) #, extra_analysis=True,gt_params=my_params)
+    best_fit.master_params.pretty_print()
+    best_fit.calculate_current_best_fits()
+    logging.info(f'Best fit parameters {best_fit.master_params.valuesdict()}')
+
+    # multiple_fitter.fit(50)
+    # multiple_fitter.calculate_current_best_fits()
 
 
 def fit_ode_to_two_datasets(
