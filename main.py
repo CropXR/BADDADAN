@@ -251,7 +251,7 @@ def fit_ode_to_two_simulated_data(module_network: ModuleRegulatoryNetwork):
     # multiple_fitter.master_params = my_params
 
     # multiple_fitter.calculate_current_best_fits()
-    my_ode.remove_regulator_from_module(1, 2)
+    my_ode.flip_regulatory_sign(1, 3)
     nr_fits = 4
     fitters = [OdeFitterMultipleDatasets(
                 my_ode, [sim_control_matrix, sim_exp_matrix],
