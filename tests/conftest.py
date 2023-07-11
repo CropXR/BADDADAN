@@ -11,7 +11,6 @@ import logging
 import GEOparse
 import pytest
 
-from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from Expressions.ExpressionMatrix import ExpressionMatrix, ExpressionMatrixTimeSeries
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork, \
     EdgeRelation
@@ -21,23 +20,6 @@ pd.options.display.width = 0
 # GEOparse.logger.set_verbosity('INFO')
 # logging.basicConfig(level=logging.INFO)
 
-
-@pytest.fixture
-def my_expression_annotation():
-    my_path = Path('../data/resources/affy_ATH1_array_elements-2010-12-20.txt')
-    return ExpressionArrayAnnotation(my_path)
-
-
-@pytest.fixture
-def static_expression_two_temps_arabidopsis_from_file(
-        my_expression_annotation: ExpressionArrayAnnotation):
-    # TODO make this an explicit test?
-    my_expression = Path('../data/static_datasets/GSE15689_family.soft')
-    expr_mat = ExpressionMatrix.from_geo_file(my_expression,
-                                              my_expression_annotation)
-    return expr_mat
-
-
 @pytest.fixture
 def static_expression_two_temps_arabidopsis() -> ExpressionMatrix:
     """Use prepickled expression matrix because that is just way faster"""
@@ -46,22 +28,6 @@ def static_expression_two_temps_arabidopsis() -> ExpressionMatrix:
         expr_mat = pickle.load(f)
     return expr_mat
 
-
-@pytest.fixture
-def my_time_series_expressions_change_back(
-        my_expression_annotation: ExpressionArrayAnnotation) -> ExpressionMatrixTimeSeries:
-    """Run this to generate the expression matrix from the raw original data
-    and save a copy of the preprocessed file as a pickle. This can be used later
-    to speedup the analysis."""
-    time_series_expressions = Path(
-        '../data/time_series_datasets/GSE5628_family.soft')
-    expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
-        time_series_expressions, my_expression_annotation, log2_transform=True)
-    with open('../data/time_series_datasets/GSE5628_family_ExpressionMatrixTime.pickle', 'wb') as f:
-        pickle.dump(expr_mat_time, f)
-    return expr_mat_time
-
-
 @pytest.fixture
 def my_time_series_expressions() -> ExpressionMatrixTimeSeries:
     """Use this to skip the full creation of the object, and simply extract it
@@ -69,17 +35,6 @@ def my_time_series_expressions() -> ExpressionMatrixTimeSeries:
     with open('../data/time_series_datasets/GSE5628_family_ExpressionMatrixTime.pickle', 'rb') as f:
         expr_mat_time = pickle.load(f)
     return expr_mat_time
-
-# @pytest.fixture
-# def my_grn() -> ModuleRegulatoryNetwork:
-#     path_to_network_edges = Path(
-#         '../data/time_series_datasets/aracne_network_edges.csv')
-#     path_to_orignal_cluster = Path(
-#         '../data/time_series_datasets/my_clustering_edgelist.csv')
-#     my_graph = ModuleRegulatoryNetwork.from_lpan_edge_csv(path_to_network_edges,
-#                                                           top_rank=25)
-#     my_graph.add_tf_module_mappings(path_to_orignal_cluster)
-#     return my_graph
 
 @pytest.fixture
 def my_grn() -> ModuleRegulatoryNetwork:
