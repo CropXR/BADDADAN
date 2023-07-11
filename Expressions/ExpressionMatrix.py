@@ -3,7 +3,6 @@ Contains classes that contain matrices of gene expression levels.
 """
 from __future__ import annotations
 import logging
-import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
@@ -21,7 +20,6 @@ from scipy.integrate._ivp.ivp import OdeResult
 from scipy.spatial.distance import pdist
 from numpy.linalg import svd
 
-from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628, standardize, \
     calculate_coefficient_of_variation, calculate_qcd, do_pca
 
@@ -47,25 +45,20 @@ class ExpressionMatrix:
                 f' and columns {self.df.columns.to_list()}')
 
     @classmethod
-    def from_csv(cls, file_path: Path,
-                 array_annotation: ExpressionArrayAnnotation = None,
-                 log2_transform: bool = False,
+    def from_csv(cls, file_path: Path, log2_transform: bool = False,
                  sep: str = '\t'):
         df = pd.read_csv(file_path, sep=sep, index_col=0)
-        df = cls._df_preprocessing(array_annotation, df, log2_transform)
+        if log2_transform:
+            df = np.log2(df)
         return cls(df)
 
     @classmethod
-    def from_geo_file(cls, file_path: Path,
-                      array_annotation: ExpressionArrayAnnotation = None,
-                      log2_transform: bool = False):
+    def from_geo_file(cls, file_path: Path, log2_transform: bool = False):
         """From a file path, correctly parse GEO expression file and
         return ExpressionMatrix object.
 
         :param file_path: path to GEO expression file. Works on .soft format,
                       others have not been tested.
-        :param array_annotation: Object which maps probe names of AGI names.
-                                 Should have probe_to_agi() method.
         :param log2_transform: Log2 transform the expression data.
         """
         gse = GEOparse.get_GEO(filepath=str(file_path), silent=True)
@@ -73,34 +66,25 @@ class ExpressionMatrix:
         df = gse.pivot_samples("VALUE")
         logging.info('Dropping AFFX probes, because they are control')
         df = df.loc[df.index.map(lambda x: 'AFFX' not in x), :]
-        df = cls._df_preprocessing(array_annotation, df, log2_transform)
+        # Get platform annotation
+        assert len(gse.gpls.keys()) == 1
+        gpl_name = list(gse.gpls.keys())[0]
+        platform_df = gse.gpls[gpl_name].table
+        if {'ID', 'ORF'}.issubset(platform_df.columns):
+            # Dictionary that maps probe_id to TAIR ID
+            result_dict = platform_df.set_index('ID')['ORF'].dropna().to_dict()
+            logging.info(f'Found {len(result_dict) / len(platform_df):.2%}')
+            df.index = df.index.map(lambda x: result_dict.get(x, x))
+        else:
+            raise NotImplementedError("Could not find annotation in GPL "
+                                      "that the .soft file provided")
+
+        if log2_transform:
+            df = np.log2(df)
         # Convert sample names to titles that humans can understand
         better_name_dict = gse.phenotype_data.title.to_dict()
         df.columns = [better_name_dict[old_col] for old_col in df.columns]
         return cls(df)
-
-    @classmethod
-    def _df_preprocessing(cls, array_annotation: ExpressionArrayAnnotation,
-                          df: pd.DataFrame, log2_transform: bool):
-        if array_annotation:
-            # Get gene names based on ExpressionAnnotation object
-            logging.info('Converting probe names to genes...')
-            new_indices = df.index.map(array_annotation.probe_to_agi)
-            # Count how many probe names were not mapped to a gene by the
-            # annotation file, i.e. their name did not change.
-            unmapped_probes = new_indices.intersection(df.index)
-
-            logging.info(
-                f'Could not find annotation of {len(unmapped_probes)} probes '
-                f'({len(unmapped_probes) / len(df.index):.2%}). '
-                f'Proceeding with their original names')
-            if len(unmapped_probes) < 10:
-                for probe in unmapped_probes:
-                    logging.info(probe)
-            df.index = new_indices
-        if log2_transform:
-            df = np.log2(df)
-        return df
 
     def concat_to_expression_matrix(
             self, new_expression_matrix: ExpressionMatrix,
@@ -139,7 +123,6 @@ class ExpressionMatrix:
             self.df = self.df.droplevel(0, axis=1)
         # Re-add cluster_id
         self.df['cluster_id'] = cluster_id
-
 
     def get_sample_names(self) -> np.array:
         """Returns all names of samples"""
@@ -385,8 +368,6 @@ class ExpressionMatrixTraining(ExpressionMatrix):
             raise NotImplementedError("Cannot yet use these pca values"
                                       " downstream in the pipeline")
         # PERFORM EIGENGENE clustering at each timepoint(?)
-
-
 
     def save_tf_produced_by_module_file(self, out_file_path: Path,
                                         tf_list_path: Path):
@@ -772,6 +753,3 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             ax.set_ylabel(f'{tf_name} expression')
             plt.show()
         return tf_expressions.corr(selected_module_expression, method=method)
-
-
-

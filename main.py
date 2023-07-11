@@ -14,7 +14,6 @@ from sklearn.metrics import adjusted_rand_score
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from DynamicModels.OdeFitter import OdeFitter, OdeFitterMultipleDatasets
 from DynamicModels.OdeModel import OdeModel
-from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
 from helpers import plot_y_and_y_hat, fit_spline
@@ -47,17 +46,14 @@ def annotate_microarray_expression(
     where microarray expressions use gene labels (e.g. AT1G65110) instead of
     the default affymetrix probe_ids (e.g. 263139_at)
     """
-    expression_annotation = ExpressionArrayAnnotation(annotation_path)
     match expression_path.suffix:
         case '.soft':
             logging.info('Detected .soft file')
             expression_matrix = ExpressionMatrix.from_geo_file(expression_path,
-                                                               expression_annotation,
                                                                log2_transform=log2_transform)
         case '.csv':
             logging.info('Detected .csv file')
             expression_matrix = ExpressionMatrix.from_csv(expression_path,
-                                                          expression_annotation,
                                                           log2_transform,
                                                           csv_separator)
         case _:
@@ -80,13 +76,12 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
         f'/{total_genes}_highest_{variation_measure}{"_log2" if do_log2 else "_no_log2"}/')
     out_dir.mkdir(parents=True, exist_ok=True)
     if not (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').exists():
-        my_expression_annotation = ExpressionArrayAnnotation(
-            Path('data/resources/affy_ATH1_array_elements-2010-12-20.txt'))
+        # my_expression_annotation = ExpressionArrayAnnotation(
+        #     Path('data/resources/affy_ATH1_array_elements-2010-12-20.txt'))
         time_series_expressions = Path(
             'data/time_series_datasets/GSE5628_family.soft')
         expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
-            time_series_expressions, my_expression_annotation,
-            log2_transform=do_log2)
+            time_series_expressions, log2_transform=do_log2)
         with (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').open(
                 'wb') as f:
             pickle.dump(expr_mat_time, f)
@@ -102,13 +97,10 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
     control_pickle_path = Path(
         'data/time_series_control_dataset/GSE5620_family_ExpressionMatrixTime.pickle')
     if not control_pickle_path.exists():
-        my_expression_annotation = ExpressionArrayAnnotation(
-            Path('data/resources/affy_ATH1_array_elements-2010-12-20.txt'))
         control_time_series_expressions = Path(
             'data/time_series_control_dataset/GSE5620_family.soft')
         control_expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
-            control_time_series_expressions, my_expression_annotation,
-            log2_transform=do_log2)
+            control_time_series_expressions, log2_transform=do_log2)
         control_expr_mat_time.keep_only_shoot()
         control_expr_mat_time.merge_biological_samples()
         with control_pickle_path.open('wb') as f:
