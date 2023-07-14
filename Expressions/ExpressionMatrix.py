@@ -73,7 +73,10 @@ class ExpressionMatrix:
         if {'ID', 'ORF'}.issubset(platform_df.columns):
             # Dictionary that maps probe_id to TAIR ID
             result_dict = platform_df.set_index('ID')['ORF'].dropna().to_dict()
-            logging.info(f'Found {len(result_dict) / len(platform_df):.2%}')
+            logging.info(
+                f'Found gene ID for {len(result_dict) / len(platform_df):.2%}'
+                f' of probe IDs'
+            )
             df.index = df.index.map(lambda x: result_dict.get(x, x))
         else:
             raise NotImplementedError("Could not find annotation in GPL "
