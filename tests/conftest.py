@@ -36,16 +36,6 @@ def my_time_series_expressions() -> ExpressionMatrixTimeSeries:
         expr_mat_time = pickle.load(f)
     return expr_mat_time
 
-@pytest.fixture
-def my_grn() -> ModuleRegulatoryNetwork:
-    path_to_network_edges = Path(
-        '../Explanatory_tutorial/aracne_network_edges.csv')
-    path_to_orignal_cluster = Path(
-        '../Explanatory_tutorial/my_clustering_edgelist.csv')
-    my_graph = ModuleRegulatoryNetwork.from_lpan_edge_csv(path_to_network_edges,
-                                                          top_rank=25)
-    my_graph.add_tf_module_mappings(path_to_orignal_cluster)
-    return my_graph
 
 @pytest.fixture
 def my_tf2_input(my_time_series_expressions):

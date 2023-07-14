@@ -10,7 +10,8 @@ from scipy.integrate._ivp.ivp import OdeResult, solve_ivp
 
 from DynamicModels.ModuleRegulatoryNetwork import (ModuleRegulatoryNetwork,
                                                    EdgeRelation)
-from DynamicModels.Formula import LinearFormula, NonLinearFormula
+from DynamicModels.NonLinearFormula import NonLinearFormula
+from DynamicModels.LinearFormula import LinearFormula
 
 
 class OdeModel:
