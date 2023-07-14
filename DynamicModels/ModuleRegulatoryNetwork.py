@@ -245,6 +245,7 @@ class ModuleRegulatoryNetwork:
 
     def check_if_tfs_created_by_module(self,
                                        expressions: ExpressionMatrixTimeSeries,
+                                       corr_cutoff: float = 0.3,
                                        do_plotting: bool = False,
                                        remove_low_corr: bool = False):
         """Check if TFs are 'created' by their module.
@@ -268,9 +269,9 @@ class ModuleRegulatoryNetwork:
                                                plot=False, method='pearson')
             debug_corrs.append(corr)
             if not remove_low_corr:
-                assert corr > .3, f'HUH?! Module {module_name} is not positively correlated ' \
+                assert corr > corr_cutoff, f'HUH?! Module {module_name} is not positively correlated ' \
                                   f'with the TF ({tf_name}) it produces. Can be fixed by running this function with remove_low_corr=True'
-            elif corr < .3:
+            elif corr < corr_cutoff:
                 tfs_to_remove.add(tf_name)
             else:
                 continue
