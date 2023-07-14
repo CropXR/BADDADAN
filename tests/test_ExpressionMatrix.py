@@ -104,5 +104,7 @@ def test_parse_65046_soft_file():
     # annotation = ExpressionArrayAnnotation(annotation_path,
     #                                        sep=',',
     #                                        array_type='catma')
-    assert ExpressionMatrixTimeSeries.from_geo_file(soft_path,
+    expressions = ExpressionMatrixTimeSeries.from_geo_file(soft_path,
                                                     log2_transform=True)
+    print()
+    assert expressions
