@@ -152,20 +152,6 @@ class ExpressionMatrix:
                        yticklabels=False)
         plt.show()
 
-    def extract_train_test(self, train_cols: np.array_str,
-                           test_cols: np.array_str) -> tuple[ExpressionMatrixTraining, ExpressionMatrixTest]:
-        """Given a list of columns to use as train and test,
-        return a ExpressionMatrixTrain, and ExpressionMatrixTest which
-        are subsets of the ExpressionMatrix
-
-        :param train_cols: Columns to use as training data
-        :param test_cols: Columns to use as test data
-        """
-        assert not np.isin(test_cols, train_cols).any(), "Train and test columns overlap"
-        expr_mat_train = ExpressionMatrixTraining(self.df[train_cols])
-        expr_mat_test = ExpressionMatrixTest(self.df[test_cols])
-        return expr_mat_train, expr_mat_test
-
     def _calculate_gene_variation(self, method: Literal['std', 'mad', 'cv', 'qcd']) -> pd.Series:
         """Calculate for each gene how much it varies over all the samples
 
@@ -262,10 +248,6 @@ class ExpressionMatrix:
     def to_expressionmatrix_training(self):
         assert type(self) != ExpressionMatrixTraining, 'Is already an ExpressionMatrixTraining object. Conversion is pointless.'
         return ExpressionMatrixTraining(self.df)
-
-    def to_expressionmatrix_test(self):
-        assert type(self) != ExpressionMatrixTest, 'Is already an ExpressionMatrixTest object. Conversion is pointless.'
-        return ExpressionMatrixTest(self.df)
 
     def save_expression_to_txt(self, file_name: Path, do_standardize=True):
         """Save the expression values to txt.
@@ -370,6 +352,8 @@ class ExpressionMatrixTraining(ExpressionMatrix):
             plt.show()
             raise NotImplementedError("Cannot yet use these pca values"
                                       " downstream in the pipeline")
+        else:
+            raise NotImplementedError(f'{aggregation_method=} is not implemented')
         # PERFORM EIGENGENE clustering at each timepoint(?)
 
     def save_tf_produced_by_module_file(self, out_file_path: Path,
@@ -380,11 +364,15 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         :param tf_list_path: Path to list of transcription factors. Must contain
         a column called 'Gene_ID'.
         """
+        if not tf_list_path.exists():
+            # Search one directory higher (I know this is ugly btw)
+            tf_list_path = '..' / tf_list_path
         # Get transcription factors
         tf_df = pd.read_csv(tf_list_path, sep='\t')
         tf_list = tf_df['Gene_ID'].to_list()
         # Find which transcription factors are in the expressionmatrix
-        out_df = self.df[self.df.index.isin(tf_list)].copy()
+        out_df = self.df[self.df.index.str.upper().isin(tf_list)].copy()
+        assert len(out_df) > 1, 'Got an empty selection of transcription factors'
         # Add prefixes to modules and transcription factors
         out_df.index = self.tf_prefix + out_df.index.astype(str)
         out_df['cluster_id'] = self.module_prefix + out_df.cluster_id.astype(str)
@@ -453,72 +441,6 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         self.df['cluster_id'] = np.random.randint(1, n_cluster+1,
                                                   len(self.df))
         self.has_been_clustered = True
-
-    def do_flame_clustering(self, flame_bin_path: Path, do_standardize=True):
-        """
-        Parts taken from https://github.com/saeyslab/moduledetection-evaluation/blob/master/lib/methods/clustering.py
-        :param flame_bin_path: Path to flame binary
-        """
-        assert not self.has_been_clustered
-        with TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            temp_expression_path = tmpdir / 'expression.txt'
-            gene_dict = self.save_expression_to_txt(temp_expression_path,
-                                                    do_standardize)
-            process = subprocess.run([str(flame_bin_path), str(temp_expression_path)],
-                                     shell=False, check=True,
-                                     capture_output=True, text=True)
-            output = process.stdout
-
-        gene_to_cluster = {}
-        for row in output.split("\n\n"):
-            if row.startswith("Cluster") and "outliers" not in row:
-                all_numbers_in_string = [int(i) for i in re.findall(r'\d+', row)]
-                module_id = all_numbers_in_string.pop(0)
-                module_size = all_numbers_in_string.pop(0)
-                logging.info(f"{module_id}: size {module_size}")
-                for gene_idx in all_numbers_in_string:
-                    gene_name = gene_dict[gene_idx]
-                    gene_to_cluster[gene_name] = module_id
-                    # TODO handle fuzzy membership here
-                assert list(gene_to_cluster.values()).count(module_id) == module_size
-
-        cluster_labels = self.df.index.map(gene_to_cluster)
-        self.df['cluster_id'] = cluster_labels
-        self.has_been_clustered = True
-
-
-class ExpressionMatrixTest(ExpressionMatrix):
-    def expressions_of_predefined_clusters(self,
-                                           gene_to_cluster: dict) -> pd.DataFrame:
-        """From dict that maps genes to cluster, get mean expression per
-        cluster.
-
-        :param gene_to_cluster: Dictionary that maps gene names to cluster ids
-        :return: Mean expression per cluster
-        """
-        assigned_modules = self.df.index.map(lambda x: gene_to_cluster.get(x))
-        inference_df = self.df.assign(cluster_id=assigned_modules)
-        molten_df = pd.melt(inference_df, id_vars='cluster_id',
-                            value_vars=inference_df.columns[:-1],
-                            ignore_index=False, var_name='sample',
-                            value_name='expression')
-        summary_df = molten_df.groupby(
-            ['sample', 'cluster_id']).mean().reset_index()
-        return summary_df.pivot(index='sample', columns='cluster_id')
-
-    def expressions_of_predefined_clusters_seed_data(self,
-                                           gene_to_cluster: dict) -> pd.DataFrame:
-        """From dict that maps genes to cluster, get mean expression per
-        cluster. Use this implementation when dealing with the seed dataset
-
-        :param gene_to_cluster: Dictionary that maps gene names to cluster ids
-        :return: Mean expression per cluster
-        """
-        assigned_modules = self.df.index.map(lambda x: gene_to_cluster.get(x))
-        inference_df = self.df.assign(cluster_id=assigned_modules)
-        logging.info(f'Cluster info size: {inference_df["cluster_id"].value_counts()}')
-        return inference_df.groupby('cluster_id').mean().T
 
 
 class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
@@ -724,7 +646,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             if ';' in gene_name:
                 # In case there are multiple gene names, just take the first one
                 gene_name = gene_name.split(';')[0]
-            if omit_unannotated_genes and not gene_name.startswith('AT'):
+            if omit_unannotated_genes and not gene_name.upper().startswith('AT'):
                 # Gene could not be annotated, so tf2 won't find it
                 continue
             lines.append(f'{cluster_id} {gene_name}\n')

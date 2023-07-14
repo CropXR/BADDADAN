@@ -41,63 +41,6 @@ def test_keep_n_most_deviating_genes(my_time_series_expressions: ExpressionMatri
     my_time_series_expressions.plot_clusters_over_time()
     assert True
 
-def test_do_flame_clustering(my_time_series_expressions: ExpressionMatrixTimeSeries):
-    my_time_series_expressions.keep_only_shoot()
-    my_time_series_expressions.merge_biological_samples()
-    my_time_series_expressions.keep_n_most_deviating_genes(150, method='mad')
-    # TODO properly get transcription factors
-    my_time_series_expressions.do_flame_clustering(
-        Path('../bins/flame_clustering'))
-    out_file_path = Path(
-        '../data/garbage/my_clustering_edgelist.csv')
-    my_time_series_expressions.save_tf_produced_by_module_file(
-        out_file_path=out_file_path)
-    my_time_series_expressions.plot_clusters_over_time()
-    my_time_series_expressions.write_tf2_input_file(Path('../data/garbage/flame_test_cluster.txt'))
-
-    my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(
-        Path('../data/garbage/tf2network_output.tsv'))
-    my_grn.plot_network(nx.draw)
-    my_grn.add_tf_module_mappings(
-        Path('../data/garbage/my_clustering_edgelist.csv'))
-    my_grn.clean_up_network()
-    my_grn.plot_network()
-
-
-def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
-    """Check if we can extract modules from data, and save data so it can be
-    used by LPAN and other pipelines downstream. Creates a file with expressions
-    that LPAN uses directly, also creates file which contains edges between
-    TFs and the module they belong to."""
-    raise NotImplementedError("Don't use this anymore")
-    nr_clusters = 4
-    some_cutoff = 1.5
-    path_to_tfdb_file = Path(
-        '../data/resources/Ath_TF_list.txt')
-    my_time_series_expressions.keep_only_shoot()
-    my_time_series_expressions.merge_biological_samples()
-    _, tfs = my_time_series_expressions.split_off_tfs(path_to_tfdb_file)
-    # Only get DE genes
-    my_time_series_expressions.keep_genes_above_deviation_cutoff(cutoff=some_cutoff)
-    tfs.keep_genes_above_deviation_cutoff(cutoff=some_cutoff)
-
-    # For all genes, convert into lpan format
-    lpan_input_non_tf = my_time_series_expressions.get_lpan_input_modules(
-        n_clusters=nr_clusters)
-    # For TFs, convert into lpan format
-    lpan_input_tf = tfs.get_lpan_input_tfs()
-    # Merge and save to file
-    lpan_input_everything = pd.concat([lpan_input_tf, lpan_input_non_tf])
-    lpan_input_everything.to_csv(Path('../data/sample_file_for_lpan.csv'),
-                                 quoting=csv.QUOTE_NONNUMERIC)
-
-    out_file_path = Path(
-        '../data/time_series_datasets/my_clustering_edgelist.csv')
-    my_time_series_expressions.save_tf_produced_by_module_file(
-        out_file_path=out_file_path, tf_list_path=tfs.df.index.tolist())
-
-    assert True
-
 def test_parse_65046_soft_file():
     soft_path = Path('../data/gse65046/GSE65046_family.soft')
     annotation_path = Path('../data/resources/96_plates.csv')

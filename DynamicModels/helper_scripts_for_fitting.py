@@ -5,7 +5,8 @@ from matplotlib import pyplot as plt
 from pathos.multiprocessing import ProcessingPool as Pool
 import seaborn as sns
 
-from DynamicModels.OdeFitter import OdeFitter, OdeFitterMultipleDatasets
+from DynamicModels.OdeFitter import OdeFitter
+from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
 from helpers import calculate_parameter_distance
 
 
