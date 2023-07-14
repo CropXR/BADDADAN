@@ -17,7 +17,7 @@ from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
-from helpers import plot_y_and_y_hat, fit_spline
+from helpers import plot_y_and_y_hat, fit_spline, get_info_from_emexp1304
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
 # pd.options.display.width = 0
@@ -58,8 +58,9 @@ def camila_red_panda(soft_file_in_path: Path,
     Currently I'm exposing quite a bit of code to you, but I think that
     will help you fix things if you ever run into issues ;)
     """
-    expression_matrix = ExpressionMatrixTimeSeries.from_geo_file(
-        soft_file_in_path, log2_transform=do_log2)
+    expression_matrix = ExpressionMatrixTimeSeries.from_csv(
+        soft_file_in_path, log2_transform=do_log2, sep=',',
+        column_decode_function=get_info_from_emexp1304)
 
     # # Uncomment if you want to use a second expressionmatrix
     # # during clustering as well
@@ -91,13 +92,13 @@ def camila_red_panda(soft_file_in_path: Path,
     assert (out_dir / '03_tf2network_output.tsv').exists(), 'Save TF2Network output first'
     # From TF2 output, create gene regulatory network
     my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(
-        out_dir / '03_tf2network_output.tsv')
+        out_dir / '03_tf2network_output.tsv', nr_top_hits=10)
     my_grn.add_tf_module_mappings(out_dir / '02_gene_to_module.csv')
     my_grn.clean_up_network()
-    # my_grn.plot_network(with_labels=True)
-    my_grn.check_if_tfs_created_by_module(expression_matrix, do_plotting=False,
+    my_grn.plot_network(with_labels=True)
+    my_grn.check_if_tfs_created_by_module(expression_matrix, do_plotting=True,
                                           remove_low_corr=True)
-    my_grn.set_up_or_downregulation(expression_matrix, do_plotting=False)
+    my_grn.set_up_or_downregulation(expression_matrix, do_plotting=True)
     module_module = my_grn.get_module_module_network()
     module_module.plot_network(with_labels=True)
 
@@ -105,8 +106,8 @@ def camila_red_panda(soft_file_in_path: Path,
     assert expression_matrix.has_been_clustered
     my_time, my_data = expression_matrix.get_clusters_expressions_with_time(
         0, aggregation_method='mean')
-    # my_time_series_expressions.plot_clusters_over_time(plot_units=True)
-
+    # plot_y_and_y_hat(y_real=my_data, t_real=my_time)
+    # plt.show()
     # Create system of ordinary differential equations
     my_ode = OdeModel.construct_from_regulatory_network(module_module,
                                                         nonlinear=True)
@@ -115,7 +116,7 @@ def camila_red_panda(soft_file_in_path: Path,
     # Fit using gradient descent with multiple starting
     nr_fits = 5
     fitters = [OdeFitter(my_ode, my_data, my_time,
-                         heat_end_time=3, param_limit=100)
+                         heat_end_time=-1, param_limit=10)
                for _ in range(nr_fits)]
     best_fit = fit_multiple_fitters(fitters, nr_iters=1000, extra_analysis=False)
     best_fit.params.pretty_print()

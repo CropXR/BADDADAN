@@ -11,8 +11,8 @@ def test_get_tf2_input(my_tf2_input):
     pass
 
 def test_camila_red_panda():
-    in_path = Path('../data/time_series_datasets/GSE5628_family.soft')
-    out_dir = Path('../data/time_series_datasets/tf2network_approach/test_output/')
+    in_path = Path('../data/emexp1304/E-MEXP-1304-LL-locustag.csv')
+    out_dir = Path('../data/emexp1304/test_output/')
 
     camila_red_panda(in_path, out_dir, True, 'mad', 2000, 4)
 

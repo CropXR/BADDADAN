@@ -76,6 +76,26 @@ def get_info_from_gse5628(sample_names: list[str] | pd.Index | pd.DataFrame) -> 
         out_dict['rep_nr'].append(rep_nr)
     return out_dict
 
+def get_info_from_emexp1304(sample_names: list[str] | pd.Index | pd.DataFrame) -> dict:
+    """From sample names that are used in emexp1304, extract time, tissue and replicate number.
+
+    :param sample_names: List of sample names
+    :return: out dict with keys: time, tissue, and rep_nr.
+    """
+    out_dict = {'time': [],
+                'tissue': [],
+                'rep_nr': []}
+    for sample in sample_names:
+        # time = re.search(r'\d+\.\d+h', sample).group()
+        time = re.search(r'_\d+_', sample).group()
+        time = pd.to_timedelta(time[1:-1]+'h')
+        out_dict['time'].append(time)
+        out_dict['tissue'].append(None)
+        out_dict['rep_nr'].append(None)
+    return out_dict
+
+
+
 def de_print_fun(xk, convergence=None):
     """Logs the convergence value during differential evolution.
 

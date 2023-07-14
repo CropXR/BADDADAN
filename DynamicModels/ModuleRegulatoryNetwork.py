@@ -189,8 +189,8 @@ class ModuleRegulatoryNetwork:
                                   f'direction of {original_module} -> {target_module}')
                     continue
                 else:
-                    raise ValueError('Disagreement between regulatory directions'
-                                     ' of {original_module} -> {target_module}')
+                    raise ValueError(f'Disagreement between regulatory directions'
+                                     f' of {original_module} -> {target_module}')
 
         edge_list = []
         for (origin, target), data_dict in candidate_edges.items():
@@ -214,8 +214,8 @@ class ModuleRegulatoryNetwork:
         """
         non_binding_tfs = []
         for tf_name in self.get_tfs():
-            out_degree = self.graph.in_degree(tf_name)
-            if out_degree == 0:
+            in_degree = self.graph.in_degree(tf_name)
+            if in_degree == 0:
                 non_binding_tfs.append(tf_name)
         # Remove them
         self.graph.remove_nodes_from(non_binding_tfs)

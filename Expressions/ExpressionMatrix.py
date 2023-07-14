@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal
+from typing import Literal, Callable
 import re
 import subprocess
 
@@ -29,16 +29,19 @@ class ExpressionMatrix:
     tf_prefix = 'TF_'
     module_prefix = 'MODULE'
 
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame,
+                 column_decode_function: Callable[[list[str] | pd.Index | pd.DataFrame], dict] = get_info_from_gse5628):
         """Create expression matrix directly from Pandas dataframe
 
         :param df: Dataframe which contains gene expressions for various
                    biological samples
         """
         self.df = df
+        self.drop_affx_probes()
         # Drop duplicates
         self.df = self.df[~self.df.index.duplicated(keep='first')]
         self.has_been_clustered = False
+        self.column_decoder = column_decode_function
 
     def __repr__(self):
         return (f'ExpressionMatrix with {len(self.df)} genes'
@@ -46,11 +49,11 @@ class ExpressionMatrix:
 
     @classmethod
     def from_csv(cls, file_path: Path, log2_transform: bool = False,
-                 sep: str = '\t'):
+                 sep: str = '\t', column_decode_function = None):
         df = pd.read_csv(file_path, sep=sep, index_col=0)
         if log2_transform:
             df = np.log2(df)
-        return cls(df)
+        return cls(df, column_decode_function)
 
     @classmethod
     def from_geo_file(cls, file_path: Path, log2_transform: bool = False):
@@ -64,8 +67,6 @@ class ExpressionMatrix:
         gse = GEOparse.get_GEO(filepath=str(file_path), silent=True)
         # Merge all samples into one dataframe
         df = gse.pivot_samples("VALUE")
-        logging.info('Dropping AFFX probes, because they are control')
-        df = df.loc[df.index.map(lambda x: 'AFFX' not in x), :]
         # Get platform annotation
         assert len(gse.gpls.keys()) == 1
         gpl_name = list(gse.gpls.keys())[0]
@@ -88,6 +89,10 @@ class ExpressionMatrix:
         better_name_dict = gse.phenotype_data.title.to_dict()
         df.columns = [better_name_dict[old_col] for old_col in df.columns]
         return cls(df)
+
+    def drop_affx_probes(self):
+        logging.info('Dropping AFFX probes, because they are control')
+        self.df = self.df.loc[self.df.index.map(lambda x: 'AFFX' not in x), :]
 
     def concat_to_expression_matrix(
             self, new_expression_matrix: ExpressionMatrix,
@@ -516,7 +521,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         out_df = self.extract_module_expressions(n_clusters, do_plotting=False,
                                                  aggregation_method=aggregation_method)
         # Get time point info from sample names
-        new_cols = get_info_from_gse5628(out_df['sample'].to_list())
+        new_cols = self.column_decoder(out_df['sample'].to_list())
         out_df = pd.concat([out_df, pd.DataFrame.from_dict(new_cols)], axis=1)
         out_df['elapsed_mins'] = out_df['time'].astype('timedelta64[m]')
         return out_df
@@ -531,7 +536,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
         # First extract meaningful information from column names,
         # so we can group by time and merge biological samples
-        column_info = get_info_from_gse5628(df_no_cluster_column)
+        column_info = self.column_decoder(df_no_cluster_column)
         column_tuples = list(zip(df_no_cluster_column, *column_info.values()))
         # Ensure we do not accidentally modify the original dataframe
         df_no_cluster_column.columns = pd.MultiIndex.from_tuples(
@@ -594,7 +599,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """Calculate average of two biological samples"""
         # First extract meaningful information from column names,
         # so we can group by time and merge biological samples
-        column_info = get_info_from_gse5628(self.df.columns)
+        column_info = self.column_decoder(self.df.columns)
         column_tuples = list(zip(self.df.columns, *column_info.values()))
         # Ensure we do not accidentally modify the original dataframe
         temp_df = self.df.copy()
