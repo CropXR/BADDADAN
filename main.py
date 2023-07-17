@@ -119,10 +119,11 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
     expr_mat_time.keep_n_most_deviating_genes(total_genes, variation_measure)
 
     expr_mat_time.plot_corr_distribution()
-    cutoff_corr = .75
+    cutoff_corr = .8
     expr_mat_time.save_edgelist_for_cytoscape(
         out_path=out_dir / f'cytoscape_edgelist_cutoff{cutoff_corr}.tsv',
-        correlation_cutoff=cutoff_corr
+        correlation_cutoff=cutoff_corr,
+        abs_correlation=False
     )
     expr_mat_time.do_hierachical_clustering(4, do_plotting=False)
     expr_mat_time.remove_condition_from_expression_matrix('Control')
