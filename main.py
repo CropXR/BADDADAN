@@ -14,6 +14,7 @@ from sklearn.metrics import adjusted_rand_score
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from DynamicModels.OdeFitter import OdeFitter, OdeFitterMultipleDatasets
 from DynamicModels.OdeModel import OdeModel
+from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
 from helpers import plot_y_and_y_hat, fit_spline
@@ -75,13 +76,15 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
         f'data/time_series_datasets/tf2network_approach'
         f'/{total_genes}_highest_{variation_measure}{"_log2" if do_log2 else "_no_log2"}/')
     out_dir.mkdir(parents=True, exist_ok=True)
+    my_expression_annotation = ExpressionArrayAnnotation(
+        Path('data/resources/affy_ATH1_array_elements-2010-12-20.txt'))
+
     if not (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').exists():
-        # my_expression_annotation = ExpressionArrayAnnotation(
-        #     Path('data/resources/affy_ATH1_array_elements-2010-12-20.txt'))
         time_series_expressions = Path(
             'data/time_series_datasets/GSE5628_family.soft')
         expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
-            time_series_expressions, log2_transform=do_log2)
+            time_series_expressions, my_expression_annotation,
+            log2_transform=do_log2)
         with (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').open(
                 'wb') as f:
             pickle.dump(expr_mat_time, f)
@@ -100,7 +103,8 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
         control_time_series_expressions = Path(
             'data/time_series_control_dataset/GSE5620_family.soft')
         control_expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
-            control_time_series_expressions, log2_transform=do_log2)
+            control_time_series_expressions, my_expression_annotation,
+            log2_transform=do_log2)
         control_expr_mat_time.keep_only_shoot()
         control_expr_mat_time.merge_biological_samples()
         with control_pickle_path.open('wb') as f:
