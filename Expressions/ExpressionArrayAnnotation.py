@@ -49,4 +49,3 @@ class ExpressionArrayAnnotation:
             logging.warning(f'Did not find {probe_name}. Returning original probe name')
             return probe_name
         return self.conversion_dict[probe_name]
-
