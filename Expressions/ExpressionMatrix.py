@@ -100,7 +100,6 @@ class ExpressionMatrix:
             df = np.log2(df)
         return df
 
-
     def concat_to_expression_matrix(
             self, new_expression_matrix: ExpressionMatrix,
             keys: list[str]):
@@ -114,6 +113,44 @@ class ExpressionMatrix:
         """
         both_dfs = pd.concat([self.df, new_expression_matrix.df], axis=1, keys=keys)
         self.df = both_dfs
+
+    def plot_corr_distribution(self):
+        """Plot the distribution of correlations between all genes,
+        can be used to select a proper cutoff
+        """
+        correlation_matrix = np.corrcoef(self.df)
+        upper_tri = np.triu(correlation_matrix, k=1)
+        flat_values = upper_tri[np.nonzero(upper_tri)]
+        sns.histplot(flat_values)
+
+    def save_edgelist_for_cytoscape(self,
+                                    out_path: Path,
+                                    correlation_cutoff: float,
+                                    abs_correlation: bool = True):
+        """Save edgelist file that can be visualised with cytoscape
+
+        :param out_path: path to save output file (.tsv file format)
+        :param correlation_cutoff at this cutoff, genes are assigned an edge
+        :param abs_correlation: If true, compare absolute correlation to
+        cutoff instead of value between -1 and 1
+        """
+        correlation_matrix = np.corrcoef(self.df)
+        # Find the correlations to check
+        corr_to_check = np.triu(correlation_matrix, k=1)
+        if abs_correlation:
+            corr_to_check = abs(corr_to_check)
+        # Select pairs above cutoff
+        mask = corr_to_check > correlation_cutoff
+        indices = np.where(mask)
+        # Convert to edgelist
+        gene_names = self.df.index
+        pairs = [(gene_names[i], gene_names[j], correlation_matrix[i, j]) for
+                 i, j in zip(*indices)]
+        # Save gene pairs to a file
+        with out_path.open('w+') as f:
+            f.write("Gene1\tGene2\tCorr_strength\n")
+            for pair in pairs:
+                f.write(f"{pair[0]}\t{pair[1]}\t{pair[2]}\n")
 
     def remove_condition_from_expression_matrix(self, key: str):
         """Removes a specified condition from the expression matrix.
