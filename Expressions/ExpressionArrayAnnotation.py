@@ -21,8 +21,6 @@ class ExpressionArrayAnnotation:
             raise NotImplementedError(f'Annotation from array type {array_type}'
                                       f' cannot be used at the moment.')
 
-        # TODO make this just a dict for speedups
-
     def affymetrix_conversion(self, probe_name: str, verbose: bool = False) -> str:
         """Takes affymetrix probe name, and returns name of locus name for TAIR
 
