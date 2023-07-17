@@ -371,6 +371,8 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         """
         if not tf_list_path.exists():
             # Search one directory higher (I know this is ugly btw)
+            logging.info(f'Could not find {tf_list_path}. Now looking'
+                         f' one directory higher ({".." / tf_list_path})')
             tf_list_path = '..' / tf_list_path
         # Get transcription factors
         tf_df = pd.read_csv(tf_list_path, sep='\t')
