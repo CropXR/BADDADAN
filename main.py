@@ -17,6 +17,7 @@ from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
+from afbn_analysis import generate_tf2network_input_per_clustering, afbn_wrapper
 from helpers import plot_y_and_y_hat, fit_spline
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 from predict_from_static_expressions import plot_pred_vs_real
@@ -66,10 +67,11 @@ def annotate_microarray_expression(
 
 def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
                                                  do_log2: bool = True,
-                                                 variation_measure: str = 'qcd'):
+                                                 variation_measure: str = 'qcd'
+                                                 ):
     """From expressions, do log2 normalisation, get 2000 genes based on custom
-     variation metric, cluster into modules, infer their connections and fit
-      a nonlinear model.
+    variation metric, cluster into modules, infer their connections and fit
+    a nonlinear model.
     """
     # Annotate genes, log2 transform them
     out_dir = Path(
@@ -118,8 +120,9 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
                                               keys=['Heat', 'Control'])
     expr_mat_time.keep_n_most_deviating_genes(total_genes, variation_measure)
 
-    expr_mat_time.plot_corr_distribution()
-    cutoff_corr = .8
+    expr_mat_time.plot_corr_distribution(
+        Path('data/afbn_exercise/correlation_distribution.svg'))
+    cutoff_corr = .75
     expr_mat_time.save_edgelist_for_cytoscape(
         out_path=out_dir / f'cytoscape_edgelist_cutoff{cutoff_corr}.tsv',
         correlation_cutoff=cutoff_corr,
@@ -127,7 +130,7 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
     )
     expr_mat_time.do_hierachical_clustering(4, do_plotting=False)
     expr_mat_time.remove_condition_from_expression_matrix('Control')
-    control_expr_mat_time.assign_clusters_from(expr_mat_time)
+    control_expr_mat_time.assign_clusters_based_on_already_clustered_expr_mat(expr_mat_time)
 
     # control_expr_mat_time.plot_clusters_over_time(plot_units=False)
     # expr_mat_time.plot_clusters_over_time(plot_units=False)
@@ -136,8 +139,8 @@ def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
     # http://bioinformatics.psb.ugent.be/webtools/TF2Network/
     # to get putative regulators per cluster
     expr_mat_time.write_tf2_input_file(
-        out_dir / f'01_tf2network_input_{total_genes}_highest_{variation_measure}_genes.txt',
-        omit_unannotated_genes=True)
+        out_dir / f'01_tf2network_input_{total_genes}_highest_{variation_measure}_all_probes.txt',
+        omit_unannotated_genes=False)
     expr_mat_time.save_tf_produced_by_module_file(
         out_dir / f'02_gene_to_module.csv',
         tf_list_path=Path('data/resources/Ath_TF_list.txt')
@@ -591,9 +594,10 @@ def camila_red_panda(soft_file_in_path: Path,
 if __name__ == "__main__":
     # typer.run(annotate_microarray_expression)
     # typer.run(full_pipeline_with_coefficient_of_variation)
-    full_pipeline_with_custom_variation_measures(total_genes=500,
-                                                 variation_measure='mad',
-                                                 do_log2=True)
+    # full_pipeline_with_custom_variation_measures(total_genes=2000,
+    #                                              variation_measure='mad',
+    #                                              do_log2=True)
+    afbn_wrapper()
     # methods = ['mad', 'cv', 'qcd']
     # for method, do_log2 in product(methods, [True, False]):
     #     logging.info(f'Currently: {method} {do_log2}')

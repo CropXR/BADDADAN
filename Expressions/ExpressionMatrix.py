@@ -114,14 +114,21 @@ class ExpressionMatrix:
         both_dfs = pd.concat([self.df, new_expression_matrix.df], axis=1, keys=keys)
         self.df = both_dfs
 
-    def plot_corr_distribution(self):
+    def plot_corr_distribution(self, out_path: Path = None):
         """Plot the distribution of correlations between all genes,
         can be used to select a proper cutoff
         """
         correlation_matrix = np.corrcoef(self.df)
         upper_tri = np.triu(correlation_matrix, k=1)
         flat_values = upper_tri[np.nonzero(upper_tri)]
-        sns.histplot(flat_values)
+        sns.set_style('ticks')
+        sns.histplot(flat_values, element='step')
+        plt.xlabel('Pairwise pearson correlation')
+        sns.despine()
+        if out_path:
+            plt.savefig(out_path)
+        else:
+            plt.show()
 
     def save_edgelist_for_cytoscape(self,
                                     out_path: Path,
@@ -144,7 +151,10 @@ class ExpressionMatrix:
         indices = np.where(mask)
         # Convert to edgelist
         gene_names = self.df.index
-        pairs = [(gene_names[i], gene_names[j], correlation_matrix[i, j]) for
+        # In case there are multiple gene names, just take the first one
+        clean_gene_names = [name.split(';')[0] if ';' in name else name
+                            for name in gene_names]
+        pairs = [(clean_gene_names[i], clean_gene_names[j], correlation_matrix[i, j]) for
                  i, j in zip(*indices)]
         # Save gene pairs to a file
         with out_path.open('w+') as f:
@@ -325,7 +335,7 @@ class ExpressionMatrix:
                              mode='a')
         return gene_names_with_index.to_dict()
 
-    def assign_clusters_from(
+    def assign_clusters_based_on_already_clustered_expr_mat(
             self, clustered_expressions: ExpressionMatrixTimeSeries) -> None:
         """Assign clustering to this expression matrix from another
         ExpressionMatrix where the genes have already been clustered.
@@ -347,6 +357,25 @@ class ExpressionMatrix:
         self.has_been_clustered = True
         assert (self.get_gene_names().sort()
                 == clustered_expressions.get_gene_names().sort())
+
+    def assign_clusters_from_tf2_input(self, tf2_input_path: Path):
+        """Find which genes belong to which cluster, based
+        on the TF2Network input file.
+
+        :param tf2_input_path: Path to tf2network input file, should
+                                contain lines with cluster_id and gene
+                                name separated by space.
+        """
+        print()
+        mapping_df = pd.read_csv(tf2_input_path, sep=' ', names=['cluster_id','gene_name'], index_col='gene_name')
+        # TODO is this proper way to handle mismatch?
+        self.df.index = [i.split(';')[0] for i in self.df.index]
+        # Drop duplicates based on index
+        self.df = self.df.reset_index().drop_duplicates(subset='index').set_index('index')
+        new_df = pd.concat([self.df, mapping_df], join='inner', axis=1)
+        # logging.info(f'Lost {len(mapping_df)-len(new_df)} genes here due to me being lazy')
+        self.df = new_df
+        self.has_been_clustered = True
 
 
 class ExpressionMatrixTraining(ExpressionMatrix):
@@ -680,7 +709,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         return time_points, module_expressions
 
     def write_tf2_input_file(self, out_path: Path,
-                             omit_unannotated_genes: bool = True):
+                             omit_unannotated_genes: bool = True,
+                             cut_gene_names: bool = True):
         """Create file that can be pasted into the TF2network website
         (http://bioinformatics.psb.ugent.be/webtools/TF2Network/index.php).
 
@@ -692,7 +722,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         genes_with_clusters = self.get_cluster_per_gene()
         lines = []
         for gene_name, cluster_id in genes_with_clusters.items():
-            if ';' in gene_name:
+            if cut_gene_names and ';' in gene_name:
                 # In case there are multiple gene names, just take the first one
                 gene_name = gene_name.split(';')[0]
             if omit_unannotated_genes and not gene_name.upper().startswith('AT'):
@@ -714,6 +744,9 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """
         # TODO eventually check if this can be moved higher up in the hierarchy
         assert self.has_been_clustered, 'Cluster object first'
+        if tf_name not in self.df.index:
+            logging.warning(f'TF ({tf_name}) not present in dataframe')
+            return np.nan
         module_expressions = self.df.groupby('cluster_id').mean()
         selected_module_expression = module_expressions.loc[module_index]
 
@@ -727,3 +760,4 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             ax.set_ylabel(f'{tf_name} expression')
             plt.show()
         return tf_expressions.corr(selected_module_expression, method=method)
+
