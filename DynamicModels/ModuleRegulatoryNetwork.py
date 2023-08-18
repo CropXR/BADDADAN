@@ -90,28 +90,44 @@ class ModuleRegulatoryNetwork:
         :return: Moduleregulatory network that contains TFs and modules
         """
         df = pd.read_csv(in_path, sep='\t')
+        df = df[df['GeneSet'] != 'unnamed_set']
         df['target'] = cls.module_prefix + df['GeneSet'].astype(str)
         df['regulator_with_prefix'] = cls.tf_prefix + df['Regulator'].astype(str)
         df['origin'] = EdgeRelation.BINDS_TO
 
         if nr_top_hits is not None:
             # Get only a certain number of top PWM hits for each module
-            filtered_df = df.sort_values('rank').groupby('GeneSet').head(nr_top_hits)
-        else:
-            filtered_df = df
-        my_graph = nx.from_pandas_edgelist(filtered_df, source='regulator_with_prefix',
+            df = df.sort_values('rank').groupby('GeneSet').head(nr_top_hits)
+
+        my_graph = nx.from_pandas_edgelist(df, source='regulator_with_prefix',
                                            target='target',
                                            edge_attr='origin',
                                            create_using=nx.DiGraph)
         return cls(my_graph)
 
-    def add_tf_module_mappings(self, path_to_orignal_cluster: Path) -> None:
+    def add_tf_module_mappings(self, path_to_orignal_cluster: Path,
+                               from_tf2_input: bool = False) -> None:
         """Include what TFs are transcribed by which cluster.
         Add these edges with this method, input file is created from
         ExpressionMatrix object.
         """
-        original_connections = nx.read_edgelist(path_to_orignal_cluster,
-                                                create_using=nx.DiGraph)
+        if from_tf2_input:
+            # Needs some preprocessing to match up with original import format
+            edges = []
+            for line in path_to_orignal_cluster.open('r').readlines():
+                try:
+                    module, gene = line.strip().split()
+                except ValueError as e:
+                    logging.debug(f'Skipping {line} because {e}')
+                    continue
+                module = self.module_prefix + module
+                gene = self.tf_prefix + gene
+                edges.append((gene, module))
+            original_connections = nx.DiGraph()
+            original_connections.add_edges_from(edges)
+        else:
+            original_connections = nx.read_edgelist(path_to_orignal_cluster,
+                                                    create_using=nx.DiGraph)
         # Invert connections, because <TF:is transcribed by:Module>
         original_connections = original_connections.reverse()
         self.graph.add_edges_from(original_connections.edges,
@@ -262,7 +278,7 @@ class ModuleRegulatoryNetwork:
         for module_name, tf_name in all_module_tf_pairs:
             # Remove the prefixes from module and tf
             module_without_prefix = module_name.removeprefix(self.module_prefix)
-            module_without_prefix = int(module_without_prefix)
+            module_without_prefix = int(float(module_without_prefix))
             tf_name_without_prefix = tf_name.removeprefix(self.tf_prefix)
             corr = expressions.get_correlation(module_without_prefix,
                                                tf_name_without_prefix,
@@ -314,11 +330,15 @@ class ModuleRegulatoryNetwork:
             # Remove the module and tf prefix
             module_without_prefix = module_name.removeprefix(
                 self.module_prefix)
-            module_without_prefix = int(module_without_prefix)
+            if module_without_prefix == 'unnamed_set':
+                logging.warning(f'Skipping {module_name} because it is not a number')
+                continue
+            module_without_prefix = int(float(module_without_prefix))
             tf_name_without_prefix = tf_name.removeprefix(self.tf_prefix)
             # See how the tf and module correlate
             corr = expressions.get_correlation(module_without_prefix,
-                                               tf_name_without_prefix, plot=False)
+                                               tf_name_without_prefix,
+                                               plot=False)
             debug_corrs.append(corr)
             if corr < -threshold:
                 direction = EdgeRelation.DOWNREGULATES
@@ -332,3 +352,14 @@ class ModuleRegulatoryNetwork:
             sns.set_style()
             sns.swarmplot(debug_corrs)
             plt.show()
+
+    def annotate_module_members(
+            self, expression_matrix: ExpressionMatrixTimeSeries):
+        """For each module, assign an attribute that describes all
+        the genes that the module contains"""
+        cluster_to_gene_dict = expression_matrix.get_genes_per_cluster()
+        module_name_as_key = {f'{self.module_prefix}{key}': value
+                              for key, value in cluster_to_gene_dict.items()}
+        nx.set_node_attributes(self.graph, module_name_as_key, name='gene_names')
+
+
