@@ -19,9 +19,12 @@ class OdeModel:
 
     def __init__(self,
                  formula_per_module: list[LinearFormula | NonLinearFormula],
-                 is_nonlinear: bool):
+                 is_nonlinear: bool,
+                 starts_with_heat: bool = True):
         self.formula_per_module = formula_per_module
         self.is_nonlinear = is_nonlinear
+        # If True, the first interval will be treated as the higher temp (but not sure if relevant)
+        self.starts_with_heat = starts_with_heat
 
     def __repr__(self):
         return ('OdeModel:\n'
@@ -161,6 +164,10 @@ class OdeModel:
         I.e. this calculates the full solution over time of the system of ODEs.
 
         :param params: Parameters to use when solving the system of ODEs
+                        Here, the parameter heat_end_time controls after
+                        how many hours heat switches from warm to cold
+                        and back. This is implemented for experiments
+                        where the heat cycles between two temperatures.
         :param t: time points at which to save the solution
         :param init_condition_names: List of strings that are the names of
         the initial conditions. E.g ['y0', 'y1']. These are needed to
@@ -176,50 +183,55 @@ class OdeModel:
         # Split off temp related parameters
         heat_temp = params.pop('heat_temp')
         non_heat_temp = params.pop('non_heat_temp')
-        heat_end_time = params.pop('heat_end_time')
 
-        # Solve up until point of heat stress
+        # TODO change parameter name here
+        heat_cycle_time = params.pop('heat_end_time')
+
+        #Is the intial value warm or cold
+        in_heat = True if self.starts_with_heat else False
+
+        # Split into solving with and without high temp
         t_start = min(t)
-        params['temp'] = heat_temp
-        t_heat_index = t <= heat_end_time
-        t_heat = t[t_heat_index]
-        if len(t_heat) > 0:
-            # Some time points belong to heat stress
-            y_pred_heat = solve_ivp(self.compute_one_step, (t_start, heat_end_time),
-                                    y0,
-                                    t_eval=t_heat,
-                                    args=[params], method='Radau')
-            assert y_pred_heat.success, (
-                f"Integration failed: {y_pred_heat.message}"
-                f"\nParams: {params}")
-            # Get new initial conditions
-            end_of_heat_expressions = y_pred_heat.y[:, -1].tolist()
-        else:
-            # No time points belong to heat stress
-            end_of_heat_expressions = y0
+        t_end = 0
+        all_predictions = []
+        first_iteration = True
+        while t_end < max(t):
+            # Solve the ODE for alternating heat and non_heat temperatures
+            # Until the end of the time series has been reached
+            t_end = min(t_start + heat_cycle_time, max(t))
+            logging.debug(t_start, t_end)
+            params['temp'] = heat_temp if in_heat else non_heat_temp
 
-        # Solve post-heat stress
-        t_start = heat_end_time
-        params['temp'] = non_heat_temp
-        t_non_heat_index = (t > heat_end_time)
-        t_non_heat = t[t_non_heat_index]
-        y_pred_non_heat = solve_ivp(self.compute_one_step,
-                                    (t_start, max(t_non_heat)),
-                                    end_of_heat_expressions,
-                                    t_eval=t_non_heat,
-                                    args=[params], method='Radau')
-        assert y_pred_non_heat.success, (
-            f"Integration failed: {y_pred_non_heat.message}"
-            f"\nParams: {params}")
+            if first_iteration:
+                # Ensure that first time point is included
+                time_points_to_solve = t[(t_start <= t) & (t <= t_end)]
+                first_iteration = False
+            else:
+                time_points_to_solve = t[(t_start < t) & (t <= t_end)]
 
-        if len(t_heat) > 0:
-            all_predicted_time = np.concatenate((y_pred_heat.t, y_pred_non_heat.t))
-            assert np.all(all_predicted_time == t)
-            all_predicted_y = np.concatenate((y_pred_heat.y, y_pred_non_heat.y),
-                                             axis=1)
-            y_pred_heat.t = all_predicted_time
-            y_pred_heat.y = all_predicted_y
-            return y_pred_heat
-        else:
-            # Heat was never applied
-            return y_pred_non_heat
+            if len(time_points_to_solve) > 0:
+                # Some time points belong to heat stress
+                prediction = solve_ivp(self.compute_one_step, (t_start, t_end),
+                                        y0,
+                                        t_eval=time_points_to_solve,
+                                        args=[params], method='Radau')
+                assert prediction.success, (
+                    f"Integration failed: {prediction.message}"
+                    f"\nParams: {params}")
+                # Get new initial conditions and new starting point
+                t_start = t_end
+                y0 = prediction.y[:, -1].tolist()
+                # Switch from heat to non_heat and vice versa
+                in_heat = not in_heat
+                all_predictions.append(prediction)
+            else:
+                raise IndexError('No time points to solve?!')
+
+        all_predicted_time = np.concatenate([p.t for p in all_predictions])
+        assert np.all(all_predicted_time == t)
+        all_predicted_y = np.concatenate([p.y for p in all_predictions],
+                                         axis=1)
+        prediction.t = all_predicted_time
+        prediction.y = all_predicted_y
+        return prediction
+

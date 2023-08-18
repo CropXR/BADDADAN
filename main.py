@@ -114,12 +114,16 @@ def camila_red_panda(soft_file_in_path: Path,
                                                         nonlinear=True)
     logging.info(my_ode)
 
-    # Fit using gradient descent with multiple starting
+    # best_fit = OdeFitter(my_ode, my_data, my_time,
+    #                      heat_end_time=12, param_limit=50)
+    # best_fit.fit()
+
+    # # Fit using gradient descent with multiple starting
     nr_fits = 5
     fitters = [OdeFitter(my_ode, my_data, my_time,
-                         heat_end_time=-1, param_limit=10)
+                         heat_end_time=12, param_limit=100)
                for _ in range(nr_fits)]
-    best_fit = fit_multiple_fitters(fitters, nr_iters=1000, extra_analysis=False)
+    best_fit = fit_multiple_fitters(fitters, nr_iters=500, extra_analysis=False)
     best_fit.params.pretty_print()
     logging.info(f'Best fit parameters {best_fit.params.valuesdict()}')
 
