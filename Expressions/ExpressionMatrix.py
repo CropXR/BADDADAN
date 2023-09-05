@@ -745,10 +745,13 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         expressions_per_gene = stacked_df.sum(axis=1)
         expression_df = pd.DataFrame(expressions_per_gene, columns=['expression'])
         expression_df.reset_index(inplace=True)
-
+        if expression_df.columns[0] == 'level_0':
+            # Change column name to gene identifier again
+            expression_df = expression_df.rename(
+                columns={expression_df.columns[0]: 'ID_REF'}
+            )
         expression_df = expression_df.merge(self.df['cluster_id'],
                                             left_on='ID_REF', right_index=True)
-        # expression_df['cluster'] = expression_df['level_0'].apply(lambda x: self.get_cluster_per_gene()[x])
         return expression_df
 
     def get_lpan_input_modules(self, n_clusters: int) -> pd.DataFrame:
