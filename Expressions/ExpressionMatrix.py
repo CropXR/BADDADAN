@@ -678,10 +678,10 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         some_df = self._get_gene_expression_long_form()
 
         if plot_units:
-            sns.relplot(data=some_df, x='time', y='expression', kind='line',
-                        hue='cluster', col='cluster',
+            sns.relplot(data=some_df, x='time (days)', y='expression', kind='line',
+                        hue='replicate', col='cluster',
                         palette=sns.color_palette(),
-                        units='ID_REF', estimator=None, lw=1, alpha=.2)
+                        units='level_0', estimator=None, lw=1, alpha=.2)
         else:
             some_df['time (days)'] = some_df['time'].dt.days
             sns.lineplot(data=some_df, x='time (days)', y='expression',
