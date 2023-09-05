@@ -1,5 +1,6 @@
 import logging
 import re
+import string
 from pathlib import Path
 from typing import List
 
@@ -53,6 +54,30 @@ def split_based_on_temp(expression_matrix,
         train_set_cols, test_set_cols = (sample_names[train_idx],
                                          sample_names[test_idx])
         yield expression_matrix.extract_train_test(train_set_cols, test_set_cols)
+
+
+def get_info_from_gse65046(sample_names: list[str] | pd.Index | pd.DataFrame) -> dict:
+    """From sample names that are used in GSE65046, extract time, tissue and replicate number.
+    Example sample name: '3 control b'
+
+    :param sample_names: List of sample names
+    :return: out dict with keys: time, tissue, and rep_nr.
+    """
+    # TODO properly handle condition here
+    out_dict = {'time': [],
+                'tissue': [],
+                'rep_nr': []}
+    for sample in sample_names:
+        # time = re.search(r'\d+\.\d+h', sample).group()
+        time = re.search(r'^\d+', sample).group() + ' days'
+        time = pd.to_timedelta(time)
+        out_dict['time'].append(time)
+        tissue = 'leaf'
+        out_dict['tissue'].append(tissue)
+        rep_letter = re.search(r'\w+$', sample).group()
+        rep_nr = string.ascii_lowercase.index(rep_letter)
+        out_dict['rep_nr'].append(rep_nr)
+    return out_dict
 
 
 def get_info_from_gse5628(sample_names: list[str] | pd.Index | pd.DataFrame) -> dict:

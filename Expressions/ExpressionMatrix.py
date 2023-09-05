@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal
+from typing import Literal, Callable
 import re
 import subprocess
 
@@ -40,6 +40,7 @@ class ExpressionMatrix:
         # Drop duplicates
         self.df = self.df[~self.df.index.duplicated(keep='first')]
         self.has_been_clustered = False
+        self.column_parser: Callable = None
 
     def __repr__(self):
         return (f'ExpressionMatrix with {len(self.df)} genes'
@@ -47,7 +48,7 @@ class ExpressionMatrix:
 
     @classmethod
     def from_csv(cls, file_path: Path, log2_transform: bool = False,
-                 sep: str = '\t'):
+                 sep: str = ','):
         df = pd.read_csv(file_path, sep=sep, index_col=0)
         if log2_transform:
             df = np.log2(df)
@@ -56,7 +57,8 @@ class ExpressionMatrix:
     @classmethod
     def from_geo_file(cls, file_path: Path,
                       array_annotation: ExpressionArrayAnnotation = None,
-                      log2_transform: bool = False):
+                      log2_transform: bool = False,
+                      name_to_drop: str = None):
         """From a file path, correctly parse GEO expression file and
         return ExpressionMatrix object.
 
@@ -64,13 +66,19 @@ class ExpressionMatrix:
                       others have not been tested.
         :param array_annotation: Object which maps probe names of AGI names.
                                  Should have probe_to_agi() method.
-        :param log2_transform: Log2 transform the expression data.
+        :param log2_transform: If true, Log2 transform the expression data.
+        :param name_to_drop: Optional. If provided, drops all probes
+                              that contain this name_to_drop in their name.
+                              E.g. for affymetrix microarrays, one might
+                              provide AFFX as a name to drop,
+                              because all control probes contain this name.
         """
         gse = GEOparse.get_GEO(filepath=str(file_path), silent=True)
         # Merge all samples into one dataframe
         df = gse.pivot_samples("VALUE")
-        logging.info('Dropping AFFX probes, because they are control')
-        df = df.loc[df.index.map(lambda x: 'AFFX' not in x), :]
+        if name_to_drop:
+            logging.info(f'Dropping all probes that contain {name_to_drop}')
+            df = df.loc[df.index.map(lambda x: name_to_drop not in x), :]
         df = cls._df_preprocessing(array_annotation, df, log2_transform)
         # Convert sample names to titles that humans can understand
         better_name_dict = gse.phenotype_data.title.to_dict()
@@ -194,11 +202,11 @@ class ExpressionMatrix:
         """Returns names of all gene names"""
         return self.df.index.to_list()
 
-    def keep_only_wt_samples(self) -> None:
-        """Keep only columns that originate from wild type, i.e. that
-        contain the substring 'WT' in the column name
+    def keep_only_samples_with_substr(self, string_to_select: str) -> None:
+        """Keep only columns that contain a certain substring
         """
-        col_mask = [col for col in self.df.columns if 'WT' in col]
+        col_mask = [col for col in self.df.columns
+                    if (string_to_select in col or 'cluster_id' in col)]
         self.df = self.df[col_mask]
 
     def plot_per_gene_std(self) -> None:
@@ -386,12 +394,46 @@ class ExpressionMatrix:
         """
         print()
         mapping_df = pd.read_csv(tf2_input_path, sep=' ', names=['cluster_id','gene_name'], index_col='gene_name')
+        self._apply_cluster_mapping_from_df(mapping_df)
+
+    def assign_clusters_from_jordi_input(self, input_file_jordi, drop_duplicates=False):
+        """
+
+        :param input_file_jordi:
+        :return:
+        """
+        df = pd.read_csv(input_file_jordi)
+        sub_df_list = []
+        # Take every second column from the dataframe
+        for i in range(0, df.shape[1], 2):
+            series = df.iloc[:, i]
+            module_id = int(re.search(r'_\d_', series.name).group()[1])
+            sub_df = series.to_frame(name='gene_name')
+            # Make all gene names capitalized
+            sub_df['gene_name'] = sub_df['gene_name'].str.capitalize()
+            sub_df['cluster_id'] = module_id
+            sub_df_list.append(sub_df)
+
+        mapping_df = pd.concat(sub_df_list, axis=0)
+        mapping_df = mapping_df.set_index('gene_name')
+        if drop_duplicates:
+            mapping_df = mapping_df[~mapping_df.index.duplicated(keep='first')]
+        self._apply_cluster_mapping_from_df(mapping_df)
+
+    def _apply_cluster_mapping_from_df(self, mapping_df):
+        """
+
+        :param mapping_df:
+        :return:
+        """
+        assert not mapping_df.index.has_duplicates, 'Mapping dataframe contains duplicate indices'
         # TODO is this proper way to handle mismatch?
         self.df.index = [i.split(';')[0] for i in self.df.index]
         # Drop duplicates based on index
-        self.df = self.df.reset_index().drop_duplicates(subset='index').set_index('index')
+        self.df = self.df.reset_index().drop_duplicates(
+            subset='index').set_index('index')
         new_df = pd.concat([self.df, mapping_df], join='inner', axis=1)
-        # logging.info(f'Lost {len(mapping_df)-len(new_df)} genes here due to me being lazy')
+        logging.info(f'Lost {len(mapping_df)-len(new_df)} genes during annotation')
         self.df = new_df
         self.has_been_clustered = True
 
@@ -641,9 +683,13 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                         palette=sns.color_palette(),
                         units='ID_REF', estimator=None, lw=1, alpha=.2)
         else:
-            sns.lineplot(data=some_df, x='time', y='expression',
-                         hue='cluster', style='replicate',
-                         palette=sns.color_palette(), errorbar='sd')
+            some_df['time (days)'] = some_df['time'].dt.days
+            sns.lineplot(data=some_df, x='time (days)', y='expression',
+                         hue='cluster',
+                         palette=sns.color_palette())
+            # sns.lineplot(data=some_df, x='time', y='expression',
+            #              hue='cluster', style='replicate',
+            #              palette=sns.color_palette(), errorbar='sd')
 
         # Unused bit of code to show the indivudual genes with
         # the mean per module overlay
@@ -687,7 +733,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
         # First extract meaningful information from column names,
         # so we can group by time and merge biological samples
-        column_info = get_info_from_gse5628(df_no_cluster_column)
+
+        column_info = self.column_parser(df_no_cluster_column)
         column_tuples = list(zip(df_no_cluster_column, *column_info.values()))
         # Ensure we do not accidentally modify the original dataframe
         df_no_cluster_column.columns = pd.MultiIndex.from_tuples(
@@ -698,10 +745,9 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         expressions_per_gene = stacked_df.sum(axis=1)
         expression_df = pd.DataFrame(expressions_per_gene, columns=['expression'])
         expression_df.reset_index(inplace=True)
-        # TODO convert time to minutes
+
         # TODO currently this step is really slow, can definitely be sped up
-        expression_df['cluster'] = expression_df.ID_REF.apply(lambda x: self.get_cluster_per_gene()[x])
-        expression_df['time'] = expression_df['time'] / np.timedelta64(1, 'h')
+        expression_df['cluster'] = expression_df['level_0'].apply(lambda x: self.get_cluster_per_gene()[x])
         return expression_df
 
     def get_lpan_input_modules(self, n_clusters: int) -> pd.DataFrame:
@@ -838,4 +884,5 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             ax.set_ylabel(f'{tf_name} expression')
             plt.show()
         return tf_expressions.corr(selected_module_expression, method=method)
+
 
