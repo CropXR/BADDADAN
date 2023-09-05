@@ -17,8 +17,7 @@ from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
-from afbn_analysis import generate_tf2network_input_per_clustering, afbn_wrapper
-from helpers import plot_y_and_y_hat, fit_spline
+from helpers import plot_y_and_y_hat, fit_spline, get_info_from_gse65046
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 from predict_from_static_expressions import plot_pred_vs_real
 
@@ -65,106 +64,78 @@ def annotate_microarray_expression(
     logging.info(f'Successfullly saved output to {output_path}')
 
 
-def full_pipeline_with_custom_variation_measures(total_genes: int = 2000,
-                                                 do_log2: bool = True,
-                                                 variation_measure: str = 'qcd'
-                                                 ):
-    """From expressions, do log2 normalisation, get 2000 genes based on custom
-    variation metric, cluster into modules, infer their connections and fit
-    a nonlinear model.
+def full_pipeline_prototype(out_base_path: Path,
+                            input_expression_file: Path,
+                            input_file_jordi: Path,
+                            do_log2: bool = True,
+                            ):
+    """Get raw data, apply clustering from Jordi, and try to fit ODE model from that
     """
     # Annotate genes, log2 transform them
-    out_dir = Path(
-        f'data/time_series_datasets/tf2network_approach'
-        f'/{total_genes}_highest_{variation_measure}{"_log2" if do_log2 else "_no_log2"}/')
+    out_dir = out_base_path / (f'first_try/')
     out_dir.mkdir(parents=True, exist_ok=True)
-    my_expression_annotation = ExpressionArrayAnnotation(
-        Path('data/resources/affy_ATH1_array_elements-2010-12-20.txt'))
 
-    if not (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').exists():
-        time_series_expressions = Path(
-            'data/time_series_datasets/GSE5628_family.soft')
-        expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
-            time_series_expressions, my_expression_annotation,
-            log2_transform=do_log2)
-        with (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').open(
-                'wb') as f:
-            pickle.dump(expr_mat_time, f)
-    else:
-        logging.info('Pickled file exists, using that one')
-        with (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').open(
-                'rb') as f:
-            expr_mat_time = pickle.load(f)
+    expr_mat_time = ExpressionMatrixTimeSeries.from_csv(input_expression_file,
+                                                        log2_transform=True)
+    expr_mat_time.keep_only_samples_with_substr('control')
+
+    expr_mat_time.assign_clusters_from_jordi_input(input_file_jordi, drop_duplicates=True)
+
+    # my_expression_annotation = ExpressionArrayAnnotation(
+    #     Path('data/resources/affy_ATH1_array_elements-2010-12-20.txt'))
+    #
+    # if not (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').exists():
+    #     time_series_expressions = Path(
+    #         'data/time_series_datasets/GSE5628_family.soft')
+    #     expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
+    #         time_series_expressions, my_expression_annotation,
+    #         log2_transform=do_log2)
+    #     with (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').open(
+    #             'wb') as f:
+    #         pickle.dump(expr_mat_time, f)
+    # else:
+    #     logging.info('Pickled file exists, using that one')
+    #     with (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').open(
+    #             'rb') as f:
+    #         expr_mat_time = pickle.load(f)
     # More preprocessing, keep only most dispersed genes
-    expr_mat_time.keep_only_shoot()
-    expr_mat_time.merge_biological_samples()
-
-    control_pickle_path = Path(
-        'data/time_series_control_dataset/GSE5620_family_ExpressionMatrixTime.pickle')
-    if not control_pickle_path.exists():
-        control_time_series_expressions = Path(
-            'data/time_series_control_dataset/GSE5620_family.soft')
-        control_expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
-            control_time_series_expressions, my_expression_annotation,
-            log2_transform=do_log2)
-        control_expr_mat_time.keep_only_shoot()
-        control_expr_mat_time.merge_biological_samples()
-        with control_pickle_path.open('wb') as f:
-            pickle.dump(control_expr_mat_time, f)
-    else:
-        logging.info('Pickled file exists for control, using that one')
-        with control_pickle_path.open('rb') as f:
-            control_expr_mat_time = pickle.load(f)
-
-    expr_mat_time.concat_to_expression_matrix(control_expr_mat_time,
-                                              keys=['Heat', 'Control'])
-    expr_mat_time.keep_n_most_deviating_genes(total_genes, variation_measure)
-
-    expr_mat_time.plot_corr_distribution(
-        Path('data/afbn_exercise/correlation_distribution.svg'))
-    cutoff_corr = .75
-    expr_mat_time.save_edgelist_for_cytoscape(
-        out_path=out_dir / f'cytoscape_edgelist_cutoff{cutoff_corr}.tsv',
-        correlation_cutoff=cutoff_corr,
-        abs_correlation=False
-    )
-    expr_mat_time.do_hierachical_clustering(4, do_plotting=False)
-    expr_mat_time.remove_condition_from_expression_matrix('Control')
-    control_expr_mat_time.assign_clusters_based_on_already_clustered_expr_mat(expr_mat_time)
-
+    expr_mat_time.column_parser = get_info_from_gse65046
+    expr_mat_time.plot_clusters_over_time()
     # control_expr_mat_time.plot_clusters_over_time(plot_units=False)
     # expr_mat_time.plot_clusters_over_time(plot_units=False)
+    #
 
-    ## Create a file that can be used on ##
-    # http://bioinformatics.psb.ugent.be/webtools/TF2Network/
-    # to get putative regulators per cluster
-    expr_mat_time.write_tf2_input_file(
-        out_dir / f'01_tf2network_input_{total_genes}_highest_{variation_measure}_all_probes.txt',
-        omit_unannotated_genes=False)
-    expr_mat_time.save_tf_produced_by_module_file(
-        out_dir / f'02_gene_to_module.csv',
-        tf_list_path=Path('data/resources/Ath_TF_list.txt')
-    )
-    # return
 
-    ## Now it's time to get the network that we need ##
-    # This file has to be created manually from the TF2 website
-    my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(
-        out_dir / '03_tf2network_output.tsv', nr_top_hits=100)
-    my_grn.add_tf_module_mappings(out_dir / '02_gene_to_module.csv')
-    my_grn.clean_up_network()
-    # my_grn.plot_network(with_labels=True)
-    my_grn.check_if_tfs_created_by_module(expr_mat_time, do_plotting=True,
-                                          remove_low_corr=True)
-    my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True)
-    # my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
-    module_module = my_grn.get_module_module_network()
-    # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
-    module_module.plot_network(with_labels=True)
-
-    fit_ode_to_two_simulated_data(module_module)
-    # fit_ode_to_data(module_module, expr_mat_time)
-    # fit_ode_tmodule_module.plot_network(with_labels=True)o_two_datasets(module_module, expr_mat_time, control_expr_mat_time)
+    ## Create a file that can be used on TF2Network##
+    # # http://bioinformatics.psb.ugent.be/webtools/TF2Network/
+    # # to get putative regulators per cluster
+    # expr_mat_time.write_tf2_input_file(
+    #     out_dir / f'01_tf2network_input_{total_genes}_highest_{variation_measure}_all_probes.txt',
+    #     omit_unannotated_genes=False)
+    # expr_mat_time.save_tf_produced_by_module_file(
+    #     out_dir / f'02_gene_to_module.csv',
+    #     tf_list_path=Path('data/resources/Ath_TF_list.txt')
+    # )
+    # # return
+    #
+    # ## Now it's time to get the network that we need ##
+    # # This file has to be created manually from the TF2 website
+    # my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(
+    #     out_dir / '03_tf2network_output.tsv', nr_top_hits=100)
+    # my_grn.add_tf_module_mappings(out_dir / '02_gene_to_module.csv')
+    # my_grn.clean_up_network()
+    # # my_grn.plot_network(with_labels=True)
+    # my_grn.check_if_tfs_created_by_module(expr_mat_time, do_plotting=True,
+    #                                       remove_low_corr=True)
+    # my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True)
+    # # my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
+    # module_module = my_grn.get_module_module_network()
+    # # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
+    # module_module.plot_network(with_labels=True)
+    #
+    # fit_ode_to_two_simulated_data(module_module)
+    # # fit_ode_to_data(module_module, expr_mat_time)
+    # # fit_ode_tmodule_module.plot_network(with_labels=True)o_two_datasets(module_module, expr_mat_time, control_expr_mat_time)
 
 
 def fit_ode_to_two_simulated_data(module_network: ModuleRegulatoryNetwork):
@@ -447,36 +418,6 @@ def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
     # # print(fit_report(second_fit))
 
 
-def thickening_thinning(
-        my_ode: OdeModel,
-        my_time_series_expressions: ExpressionMatrixTimeSeries,
-        std_cutoff=1.5
-):
-    n_clusters = 4
-    my_time_series_expressions.keep_only_shoot()
-    my_time_series_expressions.merge_biological_samples()
-    my_time_series_expressions.keep_genes_above_deviation_cutoff(
-        cutoff=std_cutoff)
-    my_time, my_data = \
-        my_time_series_expressions.get_clusters_expressions_with_time(
-            n_clusters)
-    my_time_series_expressions.get_genes_per_cluster()
-    # Interpolate data
-    interp_time, interp_data = fit_spline(my_data, my_time, num_timepoints=15)
-    my_time, my_data = interp_time, interp_data
-    initial_sim_fit = OdeFitter(my_ode, my_data, my_time)
-    # Note: look into the initial parameter values
-    # optimal_fit = initial_sim_fit.fit(method='differential_evolution')
-    optimal_fit = initial_sim_fit.thickening_thinning(nr_rounds=3)
-
-    predicted_values = initial_sim_fit.calculate_current_best_fit(my_time)
-
-    plot_y_and_y_hat(y_real=my_data, t_real=my_time,
-                     model_fit=predicted_values)
-
-    logging.info(fit_report(optimal_fit))
-
-
 def compare_clusterings(
         cluster_path1: Path,
         cluster_path2: Path,
@@ -592,14 +533,9 @@ def camila_red_panda(soft_file_in_path: Path,
 
 
 if __name__ == "__main__":
-    # typer.run(annotate_microarray_expression)
-    # typer.run(full_pipeline_with_coefficient_of_variation)
-    # full_pipeline_with_custom_variation_measures(total_genes=2000,
-    #                                              variation_measure='mad',
-    #                                              do_log2=True)
-    afbn_wrapper()
-    # methods = ['mad', 'cv', 'qcd']
-    # for method, do_log2 in product(methods, [True, False]):
-    #     logging.info(f'Currently: {method} {do_log2}')
-    #     full_pipeline_with_coefficient_of_variation(variation_measure=method,
-    #                                                 do_log2=do_log2)
+    out_path = Path('data/gse65046/')
+    in_path_soft = Path('data/gse65046/GSE65046_family.soft')
+    in_path_csv = Path('data/gse65046/expressions_annotated.csv')
+    jordi_cluster = Path('data/gse65046/predicted_gene_groups_d/predicted_genes_activation.txt')
+    full_pipeline_prototype(out_base_path=out_path, input_expression_file=in_path_csv,
+                            input_file_jordi=jordi_cluster, do_log2=True)
