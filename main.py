@@ -77,28 +77,11 @@ def full_pipeline_prototype(out_base_path: Path,
 
     expr_mat_time = ExpressionMatrixTimeSeries.from_csv(input_expression_file,
                                                         log2_transform=True)
-    expr_mat_time.keep_only_samples_with_substr('control')
+    expr_mat_time.keep_only_samples_with_substr('drought')
 
     expr_mat_time.assign_clusters_from_jordi_input(input_file_jordi, drop_duplicates=True)
 
-    # my_expression_annotation = ExpressionArrayAnnotation(
-    #     Path('data/resources/affy_ATH1_array_elements-2010-12-20.txt'))
-    #
-    # if not (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').exists():
-    #     time_series_expressions = Path(
-    #         'data/time_series_datasets/GSE5628_family.soft')
-    #     expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
-    #         time_series_expressions, my_expression_annotation,
-    #         log2_transform=do_log2)
-    #     with (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').open(
-    #             'wb') as f:
-    #         pickle.dump(expr_mat_time, f)
-    # else:
-    #     logging.info('Pickled file exists, using that one')
-    #     with (out_dir / 'GSE5628_family_ExpressionMatrixTime.pickle').open(
-    #             'rb') as f:
-    #         expr_mat_time = pickle.load(f)
-    # More preprocessing, keep only most dispersed genes
+
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.plot_clusters_over_time()
     # control_expr_mat_time.plot_clusters_over_time(plot_units=False)
