@@ -601,14 +601,14 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
         if plot_units:
             sns.relplot(data=some_df, x='time (days)', y='expression', kind='line',
-                        hue='replicate', col='cluster',
+                        hue='replicate', col='cluster_id',
                         palette=sns.color_palette(),
                         units='level_0', estimator=None, lw=1, alpha=.2)
         else:
             some_df['time (days)'] = some_df['time'].dt.days
             sns.lineplot(data=some_df, x='time (days)', y='expression',
-                         hue='cluster',
-                         palette=sns.color_palette())
+                         hue='cluster_id',
+                         palette=sns.color_palette(), errorbar='sd')
             # sns.lineplot(data=some_df, x='time', y='expression',
             #              hue='cluster', style='replicate',
             #              palette=sns.color_palette(), errorbar='sd')
@@ -668,8 +668,9 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         expression_df = pd.DataFrame(expressions_per_gene, columns=['expression'])
         expression_df.reset_index(inplace=True)
 
-        # TODO currently this step is really slow, can definitely be sped up
-        expression_df['cluster'] = expression_df['level_0'].apply(lambda x: self.get_cluster_per_gene()[x])
+        expression_df = expression_df.merge(self.df['cluster_id'],
+                                            left_on='ID_REF', right_index=True)
+        # expression_df['cluster'] = expression_df['level_0'].apply(lambda x: self.get_cluster_per_gene()[x])
         return expression_df
 
     def get_lpan_input_modules(self, n_clusters: int) -> pd.DataFrame:
