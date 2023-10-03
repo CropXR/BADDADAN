@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal, Callable
+from typing import Literal, Callable, Dict
 import re
 import subprocess
 
@@ -37,10 +37,13 @@ class ExpressionMatrix:
                    biological samples
         """
         self.df = df
+        self.df.index = self.df.index.str.upper()
         # Drop duplicates
         self.df = self.df[~self.df.index.duplicated(keep='first')]
         self.has_been_clustered = False
         self.column_parser: Callable = None
+        # TODO declare this from the start?
+        self.phenotype_dict = None
 
     def __repr__(self):
         return (f'ExpressionMatrix with {len(self.df)} genes'
@@ -202,11 +205,11 @@ class ExpressionMatrix:
         """Returns names of all gene names"""
         return self.df.index.to_list()
 
-    def keep_only_samples_with_substr(self, string_to_select: str) -> None:
+    def keep_only_samples_with_string(self, string_to_select: str) -> None:
         """Keep only columns that contain a certain substring
         """
         col_mask = [col for col in self.df.columns
-                    if (string_to_select in col or 'cluster_id' in col)]
+                    if (string_to_select in col or 'cluster_id' in col or 'zero' in col)]
         self.df = self.df[col_mask]
 
     def plot_per_gene_std(self) -> None:
@@ -590,7 +593,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                         if 'Shoot' in col]
         self.df = self.df[col_mask]
 
-    def plot_clusters_over_time(self, plot_units: bool = False) -> None:
+    def plot_clusters_over_time(self, plot_units: bool = False, title=None) -> None:
         """Plot expression of clusters over time.
 
         :param plot_units: If true, plot line for each gene individually.
@@ -629,9 +632,23 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         #     sns.lineplot(data=some_df, x='time', y='expression',
         #                  hue='cluster', style='replicate',
         #                  palette=sns.color_palette(), errorbar=None, ax=ax)
-
+        if title:
+            plt.title(title)
         plt.show()
+        if self.phenotype_dict:
+            for key in self.phenotype_dict:
+                sns.lineplot(self.phenotype_dict[key])
+                plt.show()
 
+    def corr_to_phenotypes(self):
+        df = self._get_gene_expression_long_form()
+        df = df.groupby(['time', 'cluster']).mean()['expression'].reset_index()
+        for key, values in self.phenotype_dict.items():
+            y = values
+            for i in range(0, max(df['cluster'])+1):
+                sub_df = df[df['cluster'] == i]['expression']
+                p = np.corrcoef(sub_df, y)[0][1]
+                print(f'{i} to {key}: {p}')
     def _get_cluster_expression_long_form(self, n_clusters: int,
                                           aggregation_method: Literal['mean', 'pca'] = 'mean'):
         """Get dataframe which shows expression of clusters over time
@@ -640,7 +657,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         out_df = self.extract_module_expressions(n_clusters, do_plotting=False,
                                                  aggregation_method=aggregation_method)
         # Get time point info from sample names
-        new_cols = get_info_from_gse5628(out_df['sample'].to_list())
+        new_cols = self.column_parser(out_df['sample'].to_list())
         out_df = pd.concat([out_df, pd.DataFrame.from_dict(new_cols)], axis=1)
         out_df['elapsed_mins'] = out_df['time'].astype('timedelta64[m]')
         return out_df
@@ -750,6 +767,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """
         some_df = self._get_cluster_expression_long_form(
             n_clusters, aggregation_method=aggregation_method)
+        # Take mean of all biological replicates
+        some_df = some_df.groupby(['cluster_id', 'elapsed_mins']).mean().reset_index()
         new_df = some_df.pivot(index='cluster_id', columns='elapsed_mins',
                                values='expression')
         time_points = new_df.columns.to_numpy()
@@ -782,6 +801,17 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         out_path.parent.mkdir(exist_ok=True, parents=True)
         with out_path.open('w+') as f:
             f.writelines(lines)
+
+    def add_phenotypes(self, in_dict: Dict[str, list[float]]):
+        """Provide phenotypes for this expressionmatrix, to see if modules are
+        correlated to a phenotype
+
+        :param in_dict: dictionary that maps name of certain phenotype (key)
+                        to its measured value at each time point
+        """
+        self.phenotype_dict = in_dict
+        # for i in self.phenotype_dict.values():
+        #     assert len(i) == len(self.)
 
     def get_correlation(self, module_index: int, tf_name: str,
                         plot: bool = False, method: str = 'pearson') -> float:
