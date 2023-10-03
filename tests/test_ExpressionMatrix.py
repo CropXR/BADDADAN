@@ -56,7 +56,7 @@ def test_do_flame_clustering(my_time_series_expressions: ExpressionMatrixTimeSer
     my_time_series_expressions.write_tf2_input_file(Path('../data/garbage/flame_test_cluster.txt'))
 
     my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(
-        Path('../data/garbage/tf2network_output.tsv'))
+        Path('../data/garbage/02_tf2network_output.tsv'))
     my_grn.plot_network(nx.draw)
     my_grn.add_tf_module_mappings(
         Path('../data/garbage/my_clustering_edgelist.csv'))

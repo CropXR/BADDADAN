@@ -56,7 +56,8 @@ def inference_with_thickened_ode_structure(ode_model: OdeModel):
     simulation_params.add(name=new_param_name, value=.4)
 
     # Fit new ODE (with slightly modified parameters)
-    simulation_fitter = OdeFitter(ode_model_with_extra_link, simulated_data.y, t)
+    simulation_fitter = OdeFitter(ode_model_with_extra_link, simulated_data.y,
+                                  t)
 
     slightly_different_params = simulation_params.copy()
     slightly_different_params['beta_2_3'] = Parameter(name='beta_2_3', value=1)
@@ -115,7 +116,8 @@ def inference_with_thinned_ode_structure(ode_model: OdeModel):
         target_module_idx=2, origin_module_idx=3)
     # print(ode_model_with_removed_link)
     # Fit new ODE (with slightly modified parameters)
-    simulation_fitter = OdeFitter(ode_model_with_removed_link, simulated_data.y, t)
+    simulation_fitter = OdeFitter(ode_model_with_removed_link,
+                                  simulated_data.y, t)
 
     slightly_different_params = simulation_params.copy()
     slightly_different_params.pop('beta_1_2')

@@ -88,7 +88,7 @@ def test_artificial_data_fit():
         np.random.seed(fav_number)
         fav_number += 1
         my_fitter = OdeFitter(wrong_model, sim_data.y, sim_data.t,
-                              heat_end_time=3, param_limit=10)
+                              param_limit=10)
 
         for param_name in my_fitter.params.valuesdict():
             value = np.random.normal(1, .5)

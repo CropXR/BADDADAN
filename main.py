@@ -1,3 +1,4 @@
+import copy
 import logging
 import pickle
 from itertools import product
@@ -12,7 +13,9 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import adjusted_rand_score
 
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
-from DynamicModels.OdeFitter import OdeFitter, OdeFitterMultipleDatasets
+from DynamicModels.OdeFitter import OdeFitter
+from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
+from DynamicModels.OdeLocalParameters import OdeLocalParameters
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
@@ -24,6 +27,7 @@ from predict_from_static_expressions import plot_pred_vs_real
 # pd.options.display.width = 0
 # GEOparse.logger.set_verbosity('INFO')
 logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.DEBUG)
 
 
 def annotate_microarray_expression(
@@ -64,61 +68,62 @@ def annotate_microarray_expression(
     logging.info(f'Successfullly saved output to {output_path}')
 
 
-def full_pipeline_prototype(out_base_path: Path,
+def full_pipeline_prototype(out_dir: Path,
                             input_expression_file: Path,
-                            input_file_jordi: Path,
+                            nr_genes: int = 400,
+                            nr_clusters: int = 4,
                             do_log2: bool = True,
                             ):
     """Get raw data, apply clustering from Jordi, and try to fit ODE model from that
     """
     # Annotate genes, log2 transform them
-    out_dir = out_base_path / (f'first_try/')
     out_dir.mkdir(parents=True, exist_ok=True)
 
     expr_mat_time = ExpressionMatrixTimeSeries.from_csv(input_expression_file,
-                                                        log2_transform=True)
-    expr_mat_time.keep_only_samples_with_substr('drought')
+                                                        log2_transform=do_log2)
 
-    expr_mat_time.assign_clusters_from_jordi_input(input_file_jordi, drop_duplicates=True)
+    # TODO filter out low expression genes
 
-
+    expr_mat_time.keep_n_most_deviating_genes(nr_genes)
+    expr_mat_time.do_hierachical_clustering(nr_clusters)
     expr_mat_time.column_parser = get_info_from_gse65046
-    expr_mat_time.plot_clusters_over_time()
-    # control_expr_mat_time.plot_clusters_over_time(plot_units=False)
-    # expr_mat_time.plot_clusters_over_time(plot_units=False)
-    #
 
+    phenotype_dict = {
+        'drought': {'stomatal_conductance':
+                        [150, 240, 240, 120, 100, 100, 110, 80, 110, 120, 100, 50, 50, 20]
+                    },
+        'control': {'stomatal_conductance':
+                        [160, 250, 210, 120, 120, 140, 140, 150, 180, 230, 200, 110, 160, 170]
+                    }
+    }
 
-    ## Create a file that can be used on TF2Network##
-    # # http://bioinformatics.psb.ugent.be/webtools/TF2Network/
-    # # to get putative regulators per cluster
-    # expr_mat_time.write_tf2_input_file(
-    #     out_dir / f'01_tf2network_input_{total_genes}_highest_{variation_measure}_all_probes.txt',
-    #     omit_unannotated_genes=False)
-    # expr_mat_time.save_tf_produced_by_module_file(
-    #     out_dir / f'02_gene_to_module.csv',
-    #     tf_list_path=Path('data/resources/Ath_TF_list.txt')
-    # )
-    # # return
-    #
-    # ## Now it's time to get the network that we need ##
-    # # This file has to be created manually from the TF2 website
-    # my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(
-    #     out_dir / '03_tf2network_output.tsv', nr_top_hits=100)
-    # my_grn.add_tf_module_mappings(out_dir / '02_gene_to_module.csv')
-    # my_grn.clean_up_network()
-    # # my_grn.plot_network(with_labels=True)
-    # my_grn.check_if_tfs_created_by_module(expr_mat_time, do_plotting=True,
-    #                                       remove_low_corr=True)
-    # my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True)
-    # # my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
-    # module_module = my_grn.get_module_module_network()
+    expr_mat_time.write_tf2_input_file(out_dir / 'tf2input.txt', omit_unannotated_genes=True)
+
+    my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(
+        out_dir / '02_tf2network_output.tsv')
+    my_grn.add_tf_module_mappings(out_dir / 'tf2input.txt', from_tf2_input=True)
+
+    my_grn.clean_up_network()
+    my_grn.check_if_tfs_created_by_module(expr_mat_time, do_plotting=True,
+                                          remove_low_corr=True)
+    my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True)
+    # my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
+    module_module = my_grn.get_module_module_network()
     # # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
-    # module_module.plot_network(with_labels=True)
-    #
-    # fit_ode_to_two_simulated_data(module_module)
-    # # fit_ode_to_data(module_module, expr_mat_time)
-    # # fit_ode_tmodule_module.plot_network(with_labels=True)o_two_datasets(module_module, expr_mat_time, control_expr_mat_time)
+    module_module.plot_network(with_labels=True)
+
+    expr_mat_drought = copy.deepcopy(expr_mat_time)
+    expr_mat_drought.keep_only_samples_with_string('drought')
+
+    expr_mat_control = copy.deepcopy(expr_mat_time)
+    expr_mat_control.keep_only_samples_with_string('control')
+    # expr_mat_time.assign_clusters_from_jordi_input(input_file_jordi, drop_duplicates=True)
+    # expr_mat_subset.add_phenotypes(phenotype_dict[condition])
+    # expr_mat_subset.corr_to_phenotypes()
+    # expr_mat_subset.plot_clusters_over_time(title=condition)
+    # fit_ode_to_data(module_module, expr_mat_drought)
+    fig_path = out_path / 'fitted_model.svg'
+    fit_ode_to_two_datasets(module_module, expr_mat_drought, expr_mat_control, fig_path)
 
 
 def fit_ode_to_two_simulated_data(module_network: ModuleRegulatoryNetwork):
@@ -241,74 +246,35 @@ def fit_ode_to_two_simulated_data(module_network: ModuleRegulatoryNetwork):
 def fit_ode_to_two_datasets(
         module_network: ModuleRegulatoryNetwork,
         my_time_series_expressions: ExpressionMatrixTimeSeries,
-        control_experiment: ExpressionMatrixTimeSeries = None):
+        control_experiment: ExpressionMatrixTimeSeries = None,
+        fig_path: Path = None):
     # Assure that data has already been clustered
     assert my_time_series_expressions.has_been_clustered
     assert control_experiment.has_been_clustered
     my_ode = OdeModel.construct_from_regulatory_network(module_network,
                                                         nonlinear=True)
     logging.info(my_ode)
-    custom_params = {
-        my_time_series_expressions: create_params(heat_end_time=3.,
-                                                  y0=1,
-                                                  y1=1,
-                                                  y2=1,
-                                                  y3=1,
-                                                  non_heat_temp=.1),
-        control_experiment: create_params(heat_end_time=-1.,
-                                          y0=1,
-                                          y1=1,
-                                          y2=1,
-                                          y3=1,
-                                          non_heat_temp=.1),
-    }
+
+    # These are parameters that are different between the two datasets
+    # They are the initial values, and the drought treatment (i.e. u_t function)
+    custom_params = dict()
+    # TODO make these lambda functions more interpretable, e.g. change them into a custom object
+    custom_params[my_time_series_expressions] = OdeLocalParameters(
+         u_t=(lambda t: 100 - t * (100 - 20) / (13 * 24)))
+    custom_params[control_experiment] = OdeLocalParameters(
+         u_t=(lambda t: 90 - t * 0))
+
+    my_time_series_expressions.plot_clusters_over_time()
+    control_experiment.plot_clusters_over_time()
     # Step uno
-    multiple_fitter = OdeFitterMultipleDatasets(
-        my_ode, [my_time_series_expressions, control_experiment], custom_params,
-        param_limit=150)
-
-    best_params_so_far = {
-        "delta_0": 6.96879050,
-        "gamma_0": 4.52378448,
-        "beta_2_0": 6.85200720,
-        "k_2_0": 72.1041216,
-        "beta_3_0": 9.88057244,
-        "k_3_0": 56.8076177,
-        "delta_1": 0.40712237,
-        "gamma_1": -0.14602615,
-        "beta_0_1": 91.5736595,
-        "k_0_1": 5.1010e-05,
-        "beta_2_1": 2.35521423,
-        "k_2_1": 95.7456557,
-        "beta_3_1": 74.0149223,
-        "k_3_1": 0.09908515,
-        "delta_2": 0.03132386,
-        "gamma_2": -2.76555243,
-        "beta_3_2": 11.3435667,
-        "k_3_2": 0.85995851,
-        "beta_0_2": 0.72054543,
-        "k_0_2": 76.6528692,
-        "delta_3": 0.01680434,
-        "gamma_3": -0.49699132,
-        "beta_1_3": 6.3335e-04,
-        "k_1_3": 85.5113151,
-        "beta_0_3": 99.2512088,
-        "k_0_3": 0.02191174,
-        "non_heat_temp": 0.25411295,
-        "y0": 2.74449959,
-        "y1": 2.78200775,
-        "y2": 3.12812166,
-        "y3": 4.94547767,
-    }
-
-    for param_name in multiple_fitter._master_params.valuesdict():
-        if param_name not in ['heat_temp', 'heat_end_time']:
-            # Heat temp is already restrained as 1-non_heat_temp
-            multiple_fitter._master_params[param_name].set(
-                value=best_params_so_far[param_name])
-
-    multiple_fitter.fit(150)
-    best_fits = multiple_fitter.calculate_current_best_fits()
+    multiple_fitters = [OdeFitterMultipleDatasets(
+        my_ode, [my_time_series_expressions, control_experiment],
+        custom_params,
+        param_limit=5) for _ in range(5)]
+    best_fit = fit_multiple_fitters(multiple_fitters, 100)
+    best_fit.calculate_current_best_fits(fig_path)
+    # multiple_fitter.fit(100)
+    # best_fits = multiple_fitter.calculate_current_best_fits()
 
 
 def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
@@ -369,8 +335,7 @@ def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
         "non_heat_temp": 0.25411295,
     }
 
-    best_fit = OdeFitter(my_ode, my_data, my_time, heat_end_time=3,
-                         param_limit=100)
+    best_fit = OdeFitter(my_ode, my_data, my_time, param_limit=100)
     for param_name in best_fit.params.valuesdict():
         if param_name not in ['heat_temp', 'heat_end_time']:
             # Heat temp is already restrained as 1-non_heat_temp
@@ -498,8 +463,7 @@ def camila_red_panda(soft_file_in_path: Path,
 
     # Fit using gradient descent with multiple starting
     nr_fits = 5
-    fitters = [OdeFitter(my_ode, my_data, my_time,
-                         heat_end_time=3, param_limit=100)
+    fitters = [OdeFitter(my_ode, my_data, my_time, param_limit=100)
                for _ in range(nr_fits)]
     best_fit = fit_multiple_fitters(fitters, nr_iters=1000, extra_analysis=False)
     best_fit.params.pretty_print()
@@ -515,9 +479,12 @@ def camila_red_panda(soft_file_in_path: Path,
 
 
 if __name__ == "__main__":
-    out_path = Path('data/gse65046/')
+    out_path = Path('data/gse65046/400_genes')
     in_path_soft = Path('data/gse65046/GSE65046_family.soft')
     in_path_csv = Path('data/gse65046/expressions_annotated.csv')
-    jordi_cluster = Path('data/gse65046/predicted_gene_groups_d/predicted_genes_activation.txt')
-    full_pipeline_prototype(out_base_path=out_path, input_expression_file=in_path_csv,
-                            input_file_jordi=jordi_cluster, do_log2=True)
+    # jordi_cluster = Path('data/gse65046/predicted_gene_groups_d/predicted_genes_activation.txt')
+    full_pipeline_prototype(out_dir=out_path,
+                            input_expression_file=in_path_csv,
+                            nr_genes=700,
+                            nr_clusters=4,
+                            do_log2=True)

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import random
+from typing import Callable
+
 import networkx as nx
 import numpy as np
 from lmfit import Parameters
@@ -26,6 +28,15 @@ class OdeModel:
         return ('OdeModel:\n'
                 + '\n'.join([f'{formula}'
                              for formula in self.formula_per_module]))
+
+    def set_u_t(self, u_t: Callable):
+        """Set the u(t), i.e. external input function for this ODE model
+
+        :param u_t: A callable that takes the time t as input and returns
+        the value of u at that time point
+        """
+        for formula in self.formula_per_module:
+            formula.specify_u_t(u_t)
 
     @property
     def nr_params(self):
@@ -69,11 +80,17 @@ class OdeModel:
         for all y. Params should be a list which matches the parameter names
         """
         logging.debug(f'Mapped params in the following way: {params}')
-        return [formula(t, y, params) for formula in self.formula_per_module]
+        one_step = [formula(t, y, params) for formula in self.formula_per_module]
+        logging.debug(one_step)
+        return one_step
 
     def get_module_names(self):
         """Get the names of all modules in the model"""
         return [formula.module_name for formula in self.formula_per_module]
+
+    def get_init_condition_names(self):
+        """Get the names of all modules in the model"""
+        return [f'y{formula.module_index}' for formula in self.formula_per_module]
 
     def get_param_names(self):
         """Get names of all parameters"""
@@ -172,53 +189,14 @@ class OdeModel:
         y0 = []
         for name in init_condition_names:
             y0.append(params.pop(name))
-        # Split off temp related parameters
-        heat_temp = params.pop('heat_temp')
-        non_heat_temp = params.pop('non_heat_temp')
-        heat_end_time = params.pop('heat_end_time')
 
-        # Solve up until point of heat stress
         t_start = min(t)
-        params['temp'] = heat_temp
-        t_heat_index = t <= heat_end_time
-        t_heat = t[t_heat_index]
-        if len(t_heat) > 0:
-            # Some time points belong to heat stress
-            y_pred_heat = solve_ivp(self.compute_one_step, (t_start, heat_end_time),
-                                    y0,
-                                    t_eval=t_heat,
-                                    args=[params], method='Radau')
-            assert y_pred_heat.success, (
-                f"Integration failed: {y_pred_heat.message}"
-                f"\nParams: {params}")
-            # Get new initial conditions
-            end_of_heat_expressions = y_pred_heat.y[:, -1].tolist()
-        else:
-            # No time points belong to heat stress
-            end_of_heat_expressions = y0
-
-        # Solve post-heat stress
-        t_start = heat_end_time
-        params['temp'] = non_heat_temp
-        t_non_heat_index = (t > heat_end_time)
-        t_non_heat = t[t_non_heat_index]
-        y_pred_non_heat = solve_ivp(self.compute_one_step,
-                                    (t_start, max(t_non_heat)),
-                                    end_of_heat_expressions,
-                                    t_eval=t_non_heat,
-                                    args=[params], method='Radau')
-        assert y_pred_non_heat.success, (
-            f"Integration failed: {y_pred_non_heat.message}"
+        t_end = max(t)
+        y_pred = solve_ivp(self.compute_one_step, (t_start, t_end),
+                                y0,
+                                t_eval=t,
+                                args=[params], method='RK23')
+        assert y_pred.success, (
+            f"Integration failed: {y_pred.message}"
             f"\nParams: {params}")
-
-        if len(t_heat) > 0:
-            all_predicted_time = np.concatenate((y_pred_heat.t, y_pred_non_heat.t))
-            assert np.all(all_predicted_time == t)
-            all_predicted_y = np.concatenate((y_pred_heat.y, y_pred_non_heat.y),
-                                             axis=1)
-            y_pred_heat.t = all_predicted_time
-            y_pred_heat.y = all_predicted_y
-            return y_pred_heat
-        else:
-            # Heat was never applied
-            return y_pred_non_heat
+        return y_pred

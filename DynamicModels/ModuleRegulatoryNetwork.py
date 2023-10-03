@@ -121,7 +121,7 @@ class ModuleRegulatoryNetwork:
                     logging.debug(f'Skipping {line} because {e}')
                     continue
                 module = self.module_prefix + module
-                gene = self.tf_prefix + gene
+                gene = self.tf_prefix + gene.upper()
                 edges.append((gene, module))
             original_connections = nx.DiGraph()
             original_connections.add_edges_from(edges)
