@@ -98,8 +98,6 @@ class OdeModel:
         all_params = []
         for formula in self.formula_per_module:
             all_params.extend(formula.params)
-        # Add names of parameters that regulate external temperature
-        all_params.extend(['heat_temp', 'non_heat_temp', 'heat_end_time'])
         return all_params
 
     def add_regulator_to_module(self, target_module_idx: int,
@@ -193,10 +191,11 @@ class OdeModel:
 
         t_start = min(t)
         t_end = max(t)
+        # TODO make the solve method more easily configurable as well ;)
         y_pred = solve_ivp(self.compute_one_step, (t_start, t_end),
                                 y0,
                                 t_eval=t,
-                                args=[params], method='RK23')
+                                args=[params], method='RK45')
         assert y_pred.success, (
             f"Integration failed: {y_pred.message}"
             f"\nParams: {params}")

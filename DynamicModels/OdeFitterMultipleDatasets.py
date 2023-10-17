@@ -89,7 +89,7 @@ class OdeFitterMultipleDatasets:
         :return: Total loss as a float.
         """
         all_loss = []
-        # all y0 values should be variable, too of course ya knobhead
+        # all y0 values should be variable too of course ya knobhead
         for fitter in self.all_fitters:
             loss = fitter.loss_function(
                 params, fitter.time_points,
