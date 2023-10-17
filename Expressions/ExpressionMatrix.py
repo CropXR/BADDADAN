@@ -846,7 +846,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         some_df = self._get_cluster_expression_long_form(
             n_clusters, aggregation_method=aggregation_method)
         # Take mean of all biological replicates
-        some_df = some_df.groupby(['cluster_id', 'elapsed_mins']).mean().reset_index()
+        some_df = some_df.groupby(['cluster_id', 'elapsed_mins']).mean(
+            numeric_only=True).reset_index()
         new_df = some_df.pivot(index='cluster_id', columns='elapsed_mins',
                                values='expression')
         time_points = new_df.columns.to_numpy()
