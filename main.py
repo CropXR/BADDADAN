@@ -85,7 +85,7 @@ def full_pipeline_prototype(out_dir: Path,
     # TODO filter out low expression genes
 
     expr_mat_time.keep_n_most_deviating_genes(nr_genes)
-    expr_mat_time.do_hierachical_clustering(nr_clusters)
+    expr_mat_time.do_hierachical_clustering(nr_clusters, do_plotting=True)
     expr_mat_time.column_parser = get_info_from_gse65046
 
     phenotype_dict = {
@@ -114,9 +114,13 @@ def full_pipeline_prototype(out_dir: Path,
 
     expr_mat_drought = copy.deepcopy(expr_mat_time)
     expr_mat_drought.keep_only_samples_with_string('drought')
+    # expr_mat_drought.plot_clusters_over_time(title='Drought')
+    expr_mat_drought.plot_clusters_over_time(title='Drought', plot_units=True)
 
     expr_mat_control = copy.deepcopy(expr_mat_time)
     expr_mat_control.keep_only_samples_with_string('control')
+    # expr_mat_control.plot_clusters_over_time(title='Control')
+    expr_mat_control.plot_clusters_over_time(title='Control', plot_units=True)
     # expr_mat_time.assign_clusters_from_jordi_input(input_file_jordi, drop_duplicates=True)
     # expr_mat_subset.add_phenotypes(phenotype_dict[condition])
     # expr_mat_subset.corr_to_phenotypes()
@@ -479,12 +483,14 @@ def camila_red_panda(soft_file_in_path: Path,
 
 
 if __name__ == "__main__":
-    out_path = Path('data/gse65046/400_genes')
+    nr_genes = 700
+    nr_clusters = 7
+    out_path = Path(f'data/gse65046/{nr_genes}_genes_{nr_clusters}_clusters')
     in_path_soft = Path('data/gse65046/GSE65046_family.soft')
     in_path_csv = Path('data/gse65046/expressions_annotated.csv')
     # jordi_cluster = Path('data/gse65046/predicted_gene_groups_d/predicted_genes_activation.txt')
     full_pipeline_prototype(out_dir=out_path,
                             input_expression_file=in_path_csv,
-                            nr_genes=700,
-                            nr_clusters=4,
+                            nr_genes=nr_genes,
+                            nr_clusters=nr_clusters,
                             do_log2=True)

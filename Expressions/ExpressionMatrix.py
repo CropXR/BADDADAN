@@ -17,7 +17,7 @@ from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
 import qnorm
 from scipy.integrate._ivp.ivp import OdeResult
-from scipy.spatial.distance import pdist
+from scipy.spatial.distance import pdist, squareform
 from numpy.linalg import svd
 
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
@@ -554,18 +554,20 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         subset_corr = np.corrcoef(self.df)
         # Calculate distance
         dist = pdist(1 - subset_corr)
+        square_dist = squareform(dist)
         # Create linkage matrix and infer clusters
         linkage_matrix = linkage(dist, method='complete')
+
         clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
         # Make clustering be 0-based instead of 1-based
         clustering = clustering - 1
         if do_plotting:
             # Create colours to use in clustermap
-            lut = dict(zip([i for i in range(1, n_cluster + 1)],
+            lut = dict(zip([i for i in range(0, n_cluster + 1)],
                            sns.color_palette(n_colors=n_cluster)))
             row_colors = [lut[i] for i in clustering]
-            sns.clustermap(dist, row_linkage=linkage_matrix,
-                           col_linkage=linkage_matrix, row_colors=row_colors)
+            sns.clustermap(square_dist, row_linkage=linkage_matrix,
+                           col_linkage=linkage_matrix , row_colors=row_colors)
             plt.show()
         self.df = self.df.assign(cluster_id=clustering)
         self.has_been_clustered = True
@@ -679,14 +681,20 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """
         sns.set_theme()
         some_df = self._get_gene_expression_long_form()
+        some_df['time (days)'] = some_df['time'].dt.days
 
         if plot_units:
-            sns.relplot(data=some_df, x='time (days)', y='expression', kind='line',
+            # sns.relplot(data=some_df, x='time (days)', y='expression',
+            #             kind='line',
+            #             hue='replicate', col='cluster_id',
+            #             palette=sns.color_palette(),
+            #             units='level_0', estimator=None, lw=1, alpha=.2)
+            sns.relplot(data=some_df, x='time (days)', y='expression',
+                        kind='line',
                         hue='replicate', col='cluster_id',
                         palette=sns.color_palette(),
-                        units='level_0', estimator=None, lw=1, alpha=.2)
+                        units='ID_REF', estimator=None, lw=1, alpha=.2)
         else:
-            some_df['time (days)'] = some_df['time'].dt.days
             sns.lineplot(data=some_df, x='time (days)', y='expression',
                          hue='cluster_id',
                          palette=sns.color_palette(), errorbar='sd')
