@@ -540,12 +540,20 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         """
         # Calculate pearson correlation
         subset_corr = np.corrcoef(self.df)
-        # Calculate distance
-        dist = pdist(1 - subset_corr)
-        square_dist = squareform(dist)
-        # Create linkage matrix and infer clusters
-        linkage_matrix = linkage(dist, method='complete')
+        # subset_corr = np.abs(subset_corr)
+        # subset_corr = subset_corr**2
 
+        # Calculate distance
+        dist = 1 - subset_corr
+        # Squareform diagonality checking can be too strict, so we do it
+        # explicitly here and disable it in the squareform function call
+        assert np.allclose(dist, dist.T), 'Matrix does not appear symmetrical?'
+        assert sum(np.diag(dist)) < 1e-6, 'Sum of diagonal too high'
+        dense_dist = squareform(dist, checks=False)
+
+        # Create linkage matrix and infer clusters
+        linkage_matrix = linkage(dense_dist, method='complete')
+        # linkage_matrix = linkage(dense_dist, method='average')
         clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
         # Make clustering be 0-based instead of 1-based
         clustering = clustering - 1
@@ -554,7 +562,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
             lut = dict(zip([i for i in range(0, n_cluster + 1)],
                            sns.color_palette(n_colors=n_cluster)))
             row_colors = [lut[i] for i in clustering]
-            sns.clustermap(square_dist, row_linkage=linkage_matrix,
+            sns.clustermap(dist, row_linkage=linkage_matrix,
                            col_linkage=linkage_matrix , row_colors=row_colors)
             plt.show()
         self.df = self.df.assign(cluster_id=clustering)
