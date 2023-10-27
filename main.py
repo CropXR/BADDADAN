@@ -97,6 +97,16 @@ def full_pipeline_prototype(out_dir: Path,
                     }
     }
 
+    expr_mat_drought = copy.deepcopy(expr_mat_time)
+    expr_mat_drought.keep_only_samples_with_string('drought')
+    expr_mat_drought.plot_clusters_over_time(title='Drought')
+    # expr_mat_drought.plot_clusters_over_time(title='Drought', plot_units=True)
+
+    expr_mat_control = copy.deepcopy(expr_mat_time)
+    expr_mat_control.keep_only_samples_with_string('control')
+    expr_mat_control.plot_clusters_over_time(title='Control')
+    # expr_mat_control.plot_clusters_over_time(title='Control', plot_units=True)
+
     expr_mat_time.write_tf2_input_file(out_dir / 'tf2input.txt', omit_unannotated_genes=True)
 
     my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(
@@ -112,15 +122,7 @@ def full_pipeline_prototype(out_dir: Path,
     # # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
     module_module.plot_network(with_labels=True)
 
-    expr_mat_drought = copy.deepcopy(expr_mat_time)
-    expr_mat_drought.keep_only_samples_with_string('drought')
-    # expr_mat_drought.plot_clusters_over_time(title='Drought')
-    expr_mat_drought.plot_clusters_over_time(title='Drought', plot_units=True)
 
-    expr_mat_control = copy.deepcopy(expr_mat_time)
-    expr_mat_control.keep_only_samples_with_string('control')
-    # expr_mat_control.plot_clusters_over_time(title='Control')
-    expr_mat_control.plot_clusters_over_time(title='Control', plot_units=True)
     # expr_mat_time.assign_clusters_from_jordi_input(input_file_jordi, drop_duplicates=True)
     # expr_mat_subset.add_phenotypes(phenotype_dict[condition])
     # expr_mat_subset.corr_to_phenotypes()
@@ -484,8 +486,8 @@ def camila_red_panda(soft_file_in_path: Path,
 
 
 if __name__ == "__main__":
-    nr_genes = 700
-    nr_clusters = 7
+    nr_genes = 1000
+    nr_clusters = 5
     out_path = Path(f'data/gse65046/{nr_genes}_genes_{nr_clusters}_clusters')
     in_path_soft = Path('data/gse65046/GSE65046_family.soft')
     in_path_csv = Path('data/gse65046/expressions_annotated.csv')
