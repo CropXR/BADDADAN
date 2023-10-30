@@ -22,7 +22,6 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
 from helpers import plot_y_and_y_hat, fit_spline, get_info_from_gse65046
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
-from predict_from_static_expressions import plot_pred_vs_real
 
 # pd.options.display.width = 0
 # GEOparse.logger.set_verbosity('INFO')
