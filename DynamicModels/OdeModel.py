@@ -4,16 +4,14 @@ import logging
 import random
 from typing import Callable
 
-import networkx as nx
 import numpy as np
 from lmfit import Parameters
-from matplotlib import pyplot as plt
 from scipy.integrate._ivp.ivp import OdeResult, solve_ivp
 
 from DynamicModels.ModuleRegulatoryNetwork import (ModuleRegulatoryNetwork,
                                                    EdgeRelation)
-from DynamicModels.NonLinearFormula import NonLinearFormula
-from DynamicModels.LinearFormula import LinearFormula
+from Formula.NonLinearFormula import NonLinearFormula
+from Formula.LinearFormula import LinearFormula
 
 
 class OdeModel:

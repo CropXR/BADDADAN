@@ -12,6 +12,7 @@ from lmfit import fit_report, create_params, Parameters
 from matplotlib import pyplot as plt
 from sklearn.metrics import adjusted_rand_score
 
+import exploring_questions
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from DynamicModels.OdeFitter import OdeFitter
 from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
@@ -491,6 +492,8 @@ if __name__ == "__main__":
     in_path_soft = Path('data/gse65046/GSE65046_family.soft')
     in_path_csv = Path('data/gse65046/expressions_annotated.csv')
     # jordi_cluster = Path('data/gse65046/predicted_gene_groups_d/predicted_genes_activation.txt')
+    exploring_questions.compare_annotations(in_path_csv, in_path_soft)
+
     full_pipeline_prototype(out_dir=out_path,
                             input_expression_file=in_path_csv,
                             nr_genes=nr_genes,

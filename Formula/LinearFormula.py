@@ -1,4 +1,4 @@
-from DynamicModels.FormulaSuperClass import FormulaSuperClass
+from Formula.FormulaSuperClass import FormulaSuperClass
 
 
 class LinearFormula(FormulaSuperClass):
