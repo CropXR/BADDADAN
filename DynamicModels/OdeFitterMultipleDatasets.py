@@ -1,4 +1,6 @@
+import copy
 import logging
+from pathlib import Path
 from typing import List, Dict, Literal
 
 from lmfit import Parameters, minimize, fit_report
@@ -6,6 +8,7 @@ from lmfit.minimizer import MinimizerResult
 from matplotlib import pyplot as plt
 
 from DynamicModels.OdeFitter import OdeFitter
+from DynamicModels.OdeLocalParameters import OdeLocalParameters
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 from helpers import check_all_identical_lists, plot_y_and_y_hat
@@ -16,7 +19,7 @@ class OdeFitterMultipleDatasets:
     def __init__(self, ode_model: OdeModel,
                  datasets: List[ExpressionMatrixTimeSeries],
                  custom_params_per_dataset: Dict[ExpressionMatrixTimeSeries,
-                                                 Parameters],
+                                                 OdeLocalParameters],
                  param_limit: float = 800.,
                  method: Literal['lbfgs', 'bfgs',
                                  'differential_evolution',
@@ -26,7 +29,7 @@ class OdeFitterMultipleDatasets:
         :param datasets: A list of ExpressionMatrixTimeSeries objects, one for
          each dataset.
         :param custom_params_per_dataset: A dictionary mapping each dataset
-         to its custom parameters.
+         to its custom parameters as OdeLocalParameters object.
         :param param_limit: The parameter limit. Default is 800.
         :param method: The optimization method to be used. Default is 'lbfgs'.
         """
@@ -40,11 +43,9 @@ class OdeFitterMultipleDatasets:
             assert dataset.has_been_clustered
             time, data = dataset.get_clusters_expressions_with_time(
                 0, aggregation_method='mean')
-            # TODO temporary fix because I'm lazy, might have to be changed later
-            heat_end = custom_params_per_dataset[dataset]['heat_end_time'].value
-            fitter = OdeFitter(ode_model, data, time,
-                               heat_end_time=heat_end,
-                               param_limit=param_limit,
+            u_t_for_dataset = custom_params_per_dataset[dataset].u_t
+            fitter = OdeFitter(copy.deepcopy(ode_model), data, time, param_limit=param_limit,
+                               u_t_function=u_t_for_dataset,
                                method=method)
             self.all_fitters.append(fitter)
         logging.info(f'Created {len(self.all_fitters)} fitters '
@@ -53,13 +54,12 @@ class OdeFitterMultipleDatasets:
         # Master params are the parameters that are the same between all fitters
         self._master_params = self.all_fitters[0].params.copy()
 
-        # Custom parameters are the parameters that are different between the fitters.
-        self.local_param_names = self.get_local_parameter_names(
-            custom_params_per_dataset)
+        # Custom (or local) parameters are the parameters that are different between the fitters.
+        # First off; the initial values are different between fits
+        self.local_param_names = ode_model.get_init_condition_names()
         # The custom parameters shouldn't be in the master parameters
-        for param_name in self.local_param_names:
-            self._master_params.pop(param_name)
-
+        # for param_name in ode_model.get_init_condition_names():
+        #     self._master_params.pop(param_name)
 
     @staticmethod
     def get_local_parameter_names(
@@ -89,7 +89,7 @@ class OdeFitterMultipleDatasets:
         :return: Total loss as a float.
         """
         all_loss = []
-        # all y0 values should be variable, too of course ya knobhead
+        # all y0 values should be variable too of course ya knobhead
         for fitter in self.all_fitters:
             loss = fitter.loss_function(
                 params, fitter.time_points,
@@ -139,7 +139,7 @@ class OdeFitterMultipleDatasets:
 
         return result
 
-    def calculate_current_best_fits(self):
+    def calculate_current_best_fits(self, out_path: Path = None):
         """Calculate the solution of the ODEs for all conditions to which
         they were fitted
          """
@@ -156,6 +156,7 @@ class OdeFitterMultipleDatasets:
             real = fitter.measured_data
             plot_y_and_y_hat(real, fitter.time_points, pred, axs=ax)
         plt.tight_layout()
+        plt.savefig(out_path)
         plt.show()
 
     @property

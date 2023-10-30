@@ -1,6 +1,6 @@
 import logging
 
-from typing import Literal
+from typing import Literal, Callable
 
 import numpy as np
 import pandas as pd
@@ -15,13 +15,10 @@ from DynamicModels.OdeModel import OdeModel
 
 class OdeFitter:
     """Class to estimate parameters for ODEs, given real data"""
-
     def __init__(self, ode_model: OdeModel, measured_data: np.ndarray,
-                 time_points: np.ndarray, heat_end_time: float,
-                 param_limit: float = 800.,
-                 method: Literal['lbfgs', 'bfgs',
-                                 'differential_evolution',
-                                 'basinhopping', 'shgo'] = 'lbfgs'):
+                 time_points: np.ndarray, param_limit: float = 800.,
+                 u_t_function: Callable = None,
+                 method: Literal['lbfgs', 'bfgs', 'differential_evolution', 'basinhopping', 'shgo'] = 'lbfgs'):
         self.odes = ode_model
         self.measured_data = measured_data
         self.has_been_fitted = False
@@ -41,8 +38,8 @@ class OdeFitter:
                 # Beta values cannot be negative in nonlinear model
                 min_value = 0.
             if 'gamma' in param_name:
-                min_value = -10
-                max_value = 10
+                min_value = -1e-2
+                max_value = 1e-2
 
             self.params.add(param_name,
                             value=np.random.uniform(min_value,
@@ -54,11 +51,8 @@ class OdeFitter:
             self.params.add(init_y_name, value=init_value, vary=True, min=0,
                             max=max(self.measured_data[:, 0]) * 2)
             self.init_condition_names.append(init_y_name)
-        # Add moment when heatstress ends
-        self.params.add('heat_end_time', value=heat_end_time, vary=False)
-        # Restrain non_heat_temp and heat_temp so they always sum to one
-        self.params.add('non_heat_temp', value=np.random.rand(), min=0.1, max=.9)
-        self.params.add('heat_temp', expr='1 - non_heat_temp')
+        self.odes.set_u_t(u_t_function)
+
 
     def loss_function(self, params: Parameters, t: np.ndarray,
                       y_real: np.ndarray,

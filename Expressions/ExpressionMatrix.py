@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal
+from typing import Literal, Callable, Dict
 import re
 import subprocess
 
@@ -17,9 +17,10 @@ from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
 import qnorm
 from scipy.integrate._ivp.ivp import OdeResult
-from scipy.spatial.distance import pdist
+from scipy.spatial.distance import pdist, squareform
 from numpy.linalg import svd
 
+from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628, standardize, \
     calculate_coefficient_of_variation, calculate_qcd, do_pca
 
@@ -36,9 +37,13 @@ class ExpressionMatrix:
                    biological samples
         """
         self.df = df
+        self.df.index = self.df.index.str.upper()
         # Drop duplicates
         self.df = self.df[~self.df.index.duplicated(keep='first')]
         self.has_been_clustered = False
+        self.column_parser: Callable = None
+        # TODO declare this from the start?
+        self.phenotype_dict = None
 
     def __repr__(self):
         return (f'ExpressionMatrix with {len(self.df)} genes'
@@ -46,48 +51,65 @@ class ExpressionMatrix:
 
     @classmethod
     def from_csv(cls, file_path: Path, log2_transform: bool = False,
-                 sep: str = '\t'):
+                 sep: str = ','):
         df = pd.read_csv(file_path, sep=sep, index_col=0)
         if log2_transform:
             df = np.log2(df)
         return cls(df)
 
     @classmethod
-    def from_geo_file(cls, file_path: Path, log2_transform: bool = False):
+    def from_geo_file(cls, file_path: Path,
+                      array_annotation: ExpressionArrayAnnotation = None,
+                      log2_transform: bool = False,
+                      name_to_drop: str = None):
         """From a file path, correctly parse GEO expression file and
         return ExpressionMatrix object.
 
         :param file_path: path to GEO expression file. Works on .soft format,
                       others have not been tested.
-        :param log2_transform: Log2 transform the expression data.
+        :param array_annotation: Object which maps probe names of AGI names.
+                                 Should have probe_to_agi() method.
+        :param log2_transform: If true, Log2 transform the expression data.
+        :param name_to_drop: Optional. If provided, drops all probes
+                              that contain this name_to_drop in their name.
+                              E.g. for affymetrix microarrays, one might
+                              provide AFFX as a name to drop,
+                              because all control probes contain this name.
         """
         gse = GEOparse.get_GEO(filepath=str(file_path), silent=True)
         # Merge all samples into one dataframe
         df = gse.pivot_samples("VALUE")
-        logging.info('Dropping AFFX probes, because they are control')
-        df = df.loc[df.index.map(lambda x: 'AFFX' not in x), :]
-        # Get platform annotation
-        assert len(gse.gpls.keys()) == 1
-        gpl_name = list(gse.gpls.keys())[0]
-        platform_df = gse.gpls[gpl_name].table
-        if {'ID', 'ORF'}.issubset(platform_df.columns):
-            # Dictionary that maps probe_id to TAIR ID
-            result_dict = platform_df.set_index('ID')['ORF'].dropna().to_dict()
-            logging.info(
-                f'Found gene ID for {len(result_dict) / len(platform_df):.2%}'
-                f' of probe IDs'
-            )
-            df.index = df.index.map(lambda x: result_dict.get(x, x))
-        else:
-            raise NotImplementedError("Could not find annotation in GPL "
-                                      "that the .soft file provided")
-
-        if log2_transform:
-            df = np.log2(df)
+        if name_to_drop:
+            logging.info(f'Dropping all probes that contain {name_to_drop}')
+            df = df.loc[df.index.map(lambda x: name_to_drop not in x), :]
+        df = cls._df_preprocessing(array_annotation, df, log2_transform)
         # Convert sample names to titles that humans can understand
         better_name_dict = gse.phenotype_data.title.to_dict()
         df.columns = [better_name_dict[old_col] for old_col in df.columns]
         return cls(df)
+
+    @classmethod
+    def _df_preprocessing(cls, array_annotation: ExpressionArrayAnnotation,
+                          df: pd.DataFrame, log2_transform: bool):
+        if array_annotation:
+            # Get gene names based on ExpressionAnnotation object
+            logging.info('Converting probe names to genes...')
+            new_indices = df.index.map(array_annotation.probe_to_agi)
+            # Count how many probe names were not mapped to a gene by the
+            # annotation file, i.e. their name did not change.
+            unmapped_probes = new_indices.intersection(df.index)
+
+            logging.info(
+                f'Could not find annotation of {len(unmapped_probes)} probes '
+                f'({len(unmapped_probes) / len(df.index):.2%}). '
+                f'Proceeding with their original names')
+            if len(unmapped_probes) < 10:
+                for probe in unmapped_probes:
+                    logging.info(probe)
+            df.index = new_indices
+        if log2_transform:
+            df = np.log2(df)
+        return df
 
     def concat_to_expression_matrix(
             self, new_expression_matrix: ExpressionMatrix,
@@ -102,6 +124,54 @@ class ExpressionMatrix:
         """
         both_dfs = pd.concat([self.df, new_expression_matrix.df], axis=1, keys=keys)
         self.df = both_dfs
+
+    def plot_corr_distribution(self, out_path: Path = None):
+        """Plot the distribution of correlations between all genes,
+        can be used to select a proper cutoff
+        """
+        correlation_matrix = np.corrcoef(self.df)
+        upper_tri = np.triu(correlation_matrix, k=1)
+        flat_values = upper_tri[np.nonzero(upper_tri)]
+        sns.set_style('ticks')
+        sns.histplot(flat_values, element='step')
+        plt.xlabel('Pairwise pearson correlation')
+        sns.despine()
+        if out_path:
+            plt.savefig(out_path)
+        else:
+            plt.show()
+
+    def save_edgelist_for_cytoscape(self,
+                                    out_path: Path,
+                                    correlation_cutoff: float,
+                                    abs_correlation: bool = True):
+        """Save edgelist file that can be visualised with cytoscape
+
+        :param out_path: path to save output file (.tsv file format)
+        :param correlation_cutoff at this cutoff, genes are assigned an edge
+        :param abs_correlation: If true, compare absolute correlation to
+        cutoff instead of value between -1 and 1
+        """
+        correlation_matrix = np.corrcoef(self.df)
+        # Find the correlations to check
+        corr_to_check = np.triu(correlation_matrix, k=1)
+        if abs_correlation:
+            corr_to_check = abs(corr_to_check)
+        # Select pairs above cutoff
+        mask = corr_to_check > correlation_cutoff
+        indices = np.where(mask)
+        # Convert to edgelist
+        gene_names = self.df.index
+        # In case there are multiple gene names, just take the first one
+        clean_gene_names = [name.split(';')[0] if ';' in name else name
+                            for name in gene_names]
+        pairs = [(clean_gene_names[i], clean_gene_names[j], correlation_matrix[i, j]) for
+                 i, j in zip(*indices)]
+        # Save gene pairs to a file
+        with out_path.open('w+') as f:
+            f.write("Gene1\tGene2\tCorr_strength\n")
+            for pair in pairs:
+                f.write(f"{pair[0]}\t{pair[1]}\t{pair[2]}\n")
 
     def remove_condition_from_expression_matrix(self, key: str):
         """Removes a specified condition from the expression matrix.
@@ -135,11 +205,11 @@ class ExpressionMatrix:
         """Returns names of all gene names"""
         return self.df.index.to_list()
 
-    def keep_only_wt_samples(self) -> None:
-        """Keep only columns that originate from wild type, i.e. that
-        contain the substring 'WT' in the column name
+    def keep_only_samples_with_string(self, string_to_select: str) -> None:
+        """Keep only columns that contain a certain substring
         """
-        col_mask = [col for col in self.df.columns if 'WT' in col]
+        col_mask = [col for col in self.df.columns
+                    if (string_to_select in col or 'cluster_id' in col or 'zero' in col)]
         self.df = self.df[col_mask]
 
     def plot_per_gene_std(self) -> None:
@@ -276,7 +346,7 @@ class ExpressionMatrix:
                              mode='a')
         return gene_names_with_index.to_dict()
 
-    def assign_clusters_from(
+    def assign_clusters_based_on_already_clustered_expr_mat(
             self, clustered_expressions: ExpressionMatrixTimeSeries) -> None:
         """Assign clustering to this expression matrix from another
         ExpressionMatrix where the genes have already been clustered.
@@ -298,6 +368,59 @@ class ExpressionMatrix:
         self.has_been_clustered = True
         assert (self.get_gene_names().sort()
                 == clustered_expressions.get_gene_names().sort())
+
+    def assign_clusters_from_tf2_input(self, tf2_input_path: Path):
+        """Find which genes belong to which cluster, based
+        on the TF2Network input file.
+
+        :param tf2_input_path: Path to tf2network input file, should
+                                contain lines with cluster_id and gene
+                                name separated by space.
+        """
+        print()
+        mapping_df = pd.read_csv(tf2_input_path, sep=' ', names=['cluster_id','gene_name'], index_col='gene_name')
+        self._apply_cluster_mapping_from_df(mapping_df)
+
+    def assign_clusters_from_jordi_input(self, input_file_jordi, drop_duplicates=False):
+        """
+
+        :param input_file_jordi:
+        :return:
+        """
+        df = pd.read_csv(input_file_jordi)
+        sub_df_list = []
+        # Take every second column from the dataframe
+        for i in range(0, df.shape[1], 2):
+            series = df.iloc[:, i]
+            module_id = int(re.search(r'_\d_', series.name).group()[1])
+            sub_df = series.to_frame(name='gene_name')
+            # Make all gene names capitalized
+            sub_df['gene_name'] = sub_df['gene_name'].str.capitalize()
+            sub_df['cluster_id'] = module_id
+            sub_df_list.append(sub_df)
+
+        mapping_df = pd.concat(sub_df_list, axis=0)
+        mapping_df = mapping_df.set_index('gene_name')
+        if drop_duplicates:
+            mapping_df = mapping_df[~mapping_df.index.duplicated(keep='first')]
+        self._apply_cluster_mapping_from_df(mapping_df)
+
+    def _apply_cluster_mapping_from_df(self, mapping_df):
+        """
+
+        :param mapping_df:
+        :return:
+        """
+        assert not mapping_df.index.has_duplicates, 'Mapping dataframe contains duplicate indices'
+        # TODO is this proper way to handle mismatch?
+        self.df.index = [i.split(';')[0] for i in self.df.index]
+        # Drop duplicates based on index
+        self.df = self.df.reset_index().drop_duplicates(
+            subset='index').set_index('index')
+        new_df = pd.concat([self.df, mapping_df], join='inner', axis=1)
+        logging.info(f'Lost {len(mapping_df)-len(new_df)} genes during annotation')
+        self.df = new_df
+        self.has_been_clustered = True
 
 
 class ExpressionMatrixTraining(ExpressionMatrix):
@@ -417,20 +540,30 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         """
         # Calculate pearson correlation
         subset_corr = np.corrcoef(self.df)
+        # subset_corr = np.abs(subset_corr)
+        # subset_corr = subset_corr**2
+
         # Calculate distance
-        dist = pdist(1 - subset_corr)
+        dist = 1 - subset_corr
+        # Squareform diagonality checking can be too strict, so we do it
+        # explicitly here and disable it in the squareform function call
+        assert np.allclose(dist, dist.T), 'Matrix does not appear symmetrical?'
+        assert sum(np.diag(dist)) < 1e-6, 'Sum of diagonal too high'
+        dense_dist = squareform(dist, checks=False)
+
         # Create linkage matrix and infer clusters
-        linkage_matrix = linkage(dist, method='complete')
+        linkage_matrix = linkage(dense_dist, method='complete')
+        # linkage_matrix = linkage(dense_dist, method='average')
         clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
         # Make clustering be 0-based instead of 1-based
         clustering = clustering - 1
         if do_plotting:
             # Create colours to use in clustermap
-            lut = dict(zip([i for i in range(1, n_cluster + 1)],
+            lut = dict(zip([i for i in range(0, n_cluster + 1)],
                            sns.color_palette(n_colors=n_cluster)))
             row_colors = [lut[i] for i in clustering]
             sns.clustermap(dist, row_linkage=linkage_matrix,
-                           col_linkage=linkage_matrix, row_colors=row_colors)
+                           col_linkage=linkage_matrix , row_colors=row_colors)
             plt.show()
         self.df = self.df.assign(cluster_id=clustering)
         self.has_been_clustered = True
@@ -470,7 +603,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                         if 'Shoot' in col]
         self.df = self.df[col_mask]
 
-    def plot_clusters_over_time(self, plot_units: bool = False) -> None:
+    def plot_clusters_over_time(self, plot_units: bool = False, title=None) -> None:
         """Plot expression of clusters over time.
 
         :param plot_units: If true, plot line for each gene individually.
@@ -478,16 +611,26 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """
         sns.set_theme()
         some_df = self._get_gene_expression_long_form()
+        some_df['time (days)'] = some_df['time'].dt.days
 
         if plot_units:
-            sns.relplot(data=some_df, x='time', y='expression', kind='line',
-                        hue='cluster', col='cluster',
+            # sns.relplot(data=some_df, x='time (days)', y='expression',
+            #             kind='line',
+            #             hue='replicate', col='cluster_id',
+            #             palette=sns.color_palette(),
+            #             units='level_0', estimator=None, lw=1, alpha=.2)
+            sns.relplot(data=some_df, x='time (days)', y='expression',
+                        kind='line',
+                        hue='replicate', col='cluster_id',
                         palette=sns.color_palette(),
                         units='ID_REF', estimator=None, lw=1, alpha=.2)
         else:
-            sns.lineplot(data=some_df, x='time', y='expression',
-                         hue='cluster', style='replicate',
+            sns.lineplot(data=some_df, x='time (days)', y='expression',
+                         hue='cluster_id',
                          palette=sns.color_palette(), errorbar='sd')
+            # sns.lineplot(data=some_df, x='time', y='expression',
+            #              hue='cluster', style='replicate',
+            #              palette=sns.color_palette(), errorbar='sd')
 
         # Unused bit of code to show the indivudual genes with
         # the mean per module overlay
@@ -505,9 +648,23 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         #     sns.lineplot(data=some_df, x='time', y='expression',
         #                  hue='cluster', style='replicate',
         #                  palette=sns.color_palette(), errorbar=None, ax=ax)
-
+        if title:
+            plt.title(title)
         plt.show()
+        if self.phenotype_dict:
+            for key in self.phenotype_dict:
+                sns.lineplot(self.phenotype_dict[key])
+                plt.show()
 
+    def corr_to_phenotypes(self):
+        df = self._get_gene_expression_long_form()
+        df = df.groupby(['time', 'cluster']).mean()['expression'].reset_index()
+        for key, values in self.phenotype_dict.items():
+            y = values
+            for i in range(0, max(df['cluster'])+1):
+                sub_df = df[df['cluster'] == i]['expression']
+                p = np.corrcoef(sub_df, y)[0][1]
+                print(f'{i} to {key}: {p}')
     def _get_cluster_expression_long_form(self, n_clusters: int,
                                           aggregation_method: Literal['mean', 'pca'] = 'mean'):
         """Get dataframe which shows expression of clusters over time
@@ -516,7 +673,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         out_df = self.extract_module_expressions(n_clusters, do_plotting=False,
                                                  aggregation_method=aggregation_method)
         # Get time point info from sample names
-        new_cols = get_info_from_gse5628(out_df['sample'].to_list())
+        new_cols = self.column_parser(out_df['sample'].to_list())
         out_df = pd.concat([out_df, pd.DataFrame.from_dict(new_cols)], axis=1)
         out_df['elapsed_mins'] = out_df['time'].astype('timedelta64[m]')
         return out_df
@@ -531,7 +688,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
         # First extract meaningful information from column names,
         # so we can group by time and merge biological samples
-        column_info = get_info_from_gse5628(df_no_cluster_column)
+
+        column_info = self.column_parser(df_no_cluster_column)
         column_tuples = list(zip(df_no_cluster_column, *column_info.values()))
         # Ensure we do not accidentally modify the original dataframe
         df_no_cluster_column.columns = pd.MultiIndex.from_tuples(
@@ -542,10 +700,13 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         expressions_per_gene = stacked_df.sum(axis=1)
         expression_df = pd.DataFrame(expressions_per_gene, columns=['expression'])
         expression_df.reset_index(inplace=True)
-        # TODO convert time to minutes
-        # TODO currently this step is really slow, can definitely be sped up
-        expression_df['cluster'] = expression_df.ID_REF.apply(lambda x: self.get_cluster_per_gene()[x])
-        expression_df['time'] = expression_df['time'] / np.timedelta64(1, 'h')
+        if expression_df.columns[0] == 'level_0':
+            # Change column name to gene identifier again
+            expression_df = expression_df.rename(
+                columns={expression_df.columns[0]: 'ID_REF'}
+            )
+        expression_df = expression_df.merge(self.df['cluster_id'],
+                                            left_on='ID_REF', right_index=True)
         return expression_df
 
     def get_lpan_input_modules(self, n_clusters: int) -> pd.DataFrame:
@@ -622,6 +783,9 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """
         some_df = self._get_cluster_expression_long_form(
             n_clusters, aggregation_method=aggregation_method)
+        # Take mean of all biological replicates
+        some_df = some_df.groupby(['cluster_id', 'elapsed_mins']).mean(
+            numeric_only=True).reset_index()
         new_df = some_df.pivot(index='cluster_id', columns='elapsed_mins',
                                values='expression')
         time_points = new_df.columns.to_numpy()
@@ -631,7 +795,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         return time_points, module_expressions
 
     def write_tf2_input_file(self, out_path: Path,
-                             omit_unannotated_genes: bool = True):
+                             omit_unannotated_genes: bool = True,
+                             cut_gene_names: bool = True):
         """Create file that can be pasted into the TF2network website
         (http://bioinformatics.psb.ugent.be/webtools/TF2Network/index.php).
 
@@ -643,7 +808,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         genes_with_clusters = self.get_cluster_per_gene()
         lines = []
         for gene_name, cluster_id in genes_with_clusters.items():
-            if ';' in gene_name:
+            if cut_gene_names and ';' in gene_name:
                 # In case there are multiple gene names, just take the first one
                 gene_name = gene_name.split(';')[0]
             if omit_unannotated_genes and not gene_name.upper().startswith('AT'):
@@ -653,6 +818,17 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         out_path.parent.mkdir(exist_ok=True, parents=True)
         with out_path.open('w+') as f:
             f.writelines(lines)
+
+    def add_phenotypes(self, in_dict: Dict[str, list[float]]):
+        """Provide phenotypes for this expressionmatrix, to see if modules are
+        correlated to a phenotype
+
+        :param in_dict: dictionary that maps name of certain phenotype (key)
+                        to its measured value at each time point
+        """
+        self.phenotype_dict = in_dict
+        # for i in self.phenotype_dict.values():
+        #     assert len(i) == len(self.)
 
     def get_correlation(self, module_index: int, tf_name: str,
                         plot: bool = False, method: str = 'pearson') -> float:
@@ -665,6 +841,9 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """
         # TODO eventually check if this can be moved higher up in the hierarchy
         assert self.has_been_clustered, 'Cluster object first'
+        if tf_name not in self.df.index:
+            logging.warning(f'TF ({tf_name}) not present in dataframe')
+            return np.nan
         module_expressions = self.df.groupby('cluster_id').mean()
         selected_module_expression = module_expressions.loc[module_index]
 
@@ -678,3 +857,5 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             ax.set_ylabel(f'{tf_name} expression')
             plt.show()
         return tf_expressions.corr(selected_module_expression, method=method)
+
+
