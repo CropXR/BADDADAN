@@ -83,7 +83,8 @@ def full_pipeline_prototype(out_dir: Path,
     #                                                     log2_transform=do_log2)
 
     expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(input_expression_file,
-                                                        log2_transform=do_log2, annotate_from_gpl=True)
+                                                        log2_transform=do_log2,
+                                                             annotate_from_gpl=True)
     # TODO filter out low expression genes
 
     expr_mat_time.keep_n_most_deviating_genes(nr_genes)
