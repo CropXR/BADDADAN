@@ -79,9 +79,11 @@ def full_pipeline_prototype(out_dir: Path,
     # Annotate genes, log2 transform them
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    expr_mat_time = ExpressionMatrixTimeSeries.from_csv(input_expression_file,
-                                                        log2_transform=do_log2)
+    # expr_mat_time = ExpressionMatrixTimeSeries.from_csv(input_expression_file,
+    #                                                     log2_transform=do_log2)
 
+    expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(input_expression_file,
+                                                        log2_transform=do_log2, annotate_from_gpl=True)
     # TODO filter out low expression genes
 
     expr_mat_time.keep_n_most_deviating_genes(nr_genes)
@@ -490,12 +492,13 @@ if __name__ == "__main__":
     nr_clusters = 5
     out_path = Path(f'data/gse65046/{nr_genes}_genes_{nr_clusters}_clusters')
     in_path_soft = Path('data/gse65046/GSE65046_family.soft')
-    in_path_csv = Path('data/gse65046/expressions_annotated.csv')
+    # in_path_csv = Path('data/gse65046/expressions_annotated.csv')
+    in_path_xls = Path('data/resources/catma_annotation_96_plates.csv')
     # jordi_cluster = Path('data/gse65046/predicted_gene_groups_d/predicted_genes_activation.txt')
-    exploring_questions.compare_annotations(in_path_csv, in_path_soft)
+    # exploring_questions.compare_annotations(in_path_soft, in_path_xls)
 
     full_pipeline_prototype(out_dir=out_path,
-                            input_expression_file=in_path_csv,
+                            input_expression_file=in_path_soft,
                             nr_genes=nr_genes,
                             nr_clusters=nr_clusters,
                             do_log2=True)
