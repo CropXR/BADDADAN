@@ -565,7 +565,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         # Calculate distance
         dist = 1 - subset_corr
         # Squareform diagonality checking can be too strict, so we do it
-        # explicitly here and disable it in the squareform function call
+        # explicitly here and disable checks in the squareform function call
         assert np.allclose(dist, dist.T), 'Matrix does not appear symmetrical?'
         assert sum(np.diag(dist)) < 1e-6, 'Sum of diagonal too high'
         dense_dist = squareform(dist, checks=False)
@@ -638,15 +638,17 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             #             hue='replicate', col='cluster_id',
             #             palette=sns.color_palette(),
             #             units='level_0', estimator=None, lw=1, alpha=.2)
+            nr_hues = some_df['replicate'].nunique()
             sns.relplot(data=some_df, x='time (days)', y='expression',
                         kind='line',
                         hue='replicate', col='cluster_id',
-                        palette=sns.color_palette(),
+                        palette=sns.color_palette(n_colors=nr_hues),
                         units='ID_REF', estimator=None, lw=1, alpha=.2)
         else:
+            nr_hues = some_df['cluster_id'].nunique()
             sns.lineplot(data=some_df, x='time (days)', y='expression',
                          hue='cluster_id',
-                         palette=sns.color_palette(), errorbar='sd')
+                         palette=sns.color_palette(n_colors=nr_hues), errorbar='se')
             # sns.lineplot(data=some_df, x='time', y='expression',
             #              hue='cluster', style='replicate',
             #              palette=sns.color_palette(), errorbar='sd')
