@@ -87,7 +87,7 @@ class ExpressionMatrix:
         if name_to_drop:
             logging.info(f'Dropping all probes that contain {name_to_drop}')
             df = df.loc[df.index.map(lambda x: name_to_drop not in x), :]
-        assert not annotate_from_gpl and array_annotation, \
+        assert not (annotate_from_gpl and array_annotation), \
             "Only provide one way of converting from probe ID to gene names"
 
         if annotate_from_gpl:
