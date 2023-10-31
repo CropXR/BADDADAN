@@ -60,11 +60,14 @@ class ExpressionMatrix:
     @classmethod
     def from_geo_file(cls, file_path: Path,
                       array_annotation: ExpressionArrayAnnotation = None,
+                      annotate_from_gpl: bool = False,
                       log2_transform: bool = False,
                       name_to_drop: str = None):
         """From a file path, correctly parse GEO expression file and
         return ExpressionMatrix object.
 
+        :param annotate_from_gpl: If true, use the provided GPL annotation in
+        based on the soft file to convert from probe ID to gene name.
         :param file_path: path to GEO expression file. Works on .soft format,
                       others have not been tested.
         :param array_annotation: Object which maps probe names of AGI names.
@@ -79,19 +82,31 @@ class ExpressionMatrix:
         gse = GEOparse.get_GEO(filepath=str(file_path), silent=True)
         # Merge all samples into one dataframe
         df = gse.pivot_samples("VALUE")
+        # Probe ID must be uppercase
+        df.index = df.index.str.upper()
         if name_to_drop:
             logging.info(f'Dropping all probes that contain {name_to_drop}')
             df = df.loc[df.index.map(lambda x: name_to_drop not in x), :]
-        df = cls._df_preprocessing(array_annotation, df, log2_transform)
-        # Convert sample names to titles that humans can understand
-        better_name_dict = gse.phenotype_data.title.to_dict()
-        df.columns = [better_name_dict[old_col] for old_col in df.columns]
-        return cls(df)
+        assert not annotate_from_gpl and array_annotation, \
+            "Only provide one way of converting from probe ID to gene names"
 
-    @classmethod
-    def _df_preprocessing(cls, array_annotation: ExpressionArrayAnnotation,
-                          df: pd.DataFrame, log2_transform: bool):
-        if array_annotation:
+        if annotate_from_gpl:
+            assert len(gse.gpls) == 1, "GSE contains more than one platform?"
+            # Take first (and only) value from dict
+            gpl_object = sorted(gse.gpls.values())[0]
+            gpl_table = gpl_object.table
+            # Probe ID must be uppercase
+            gpl_table['ID'] = gpl_table['ID'].str.upper()
+            df = df.merge(gpl_table[['ID', 'ORF']], left_index=True, right_on='ID')
+            # Drop NA mappings
+            logging.info(f'{len(df)} Probe IDs at start')
+            df = df.dropna(subset='ORF')
+            logging.info(f'{len(df)} genes mapped to probe IDs')
+            df = df.set_index('ORF')
+            # Remove old probe ID column
+            df = df.drop('ID', axis=1)
+
+        elif array_annotation:
             # Get gene names based on ExpressionAnnotation object
             logging.info('Converting probe names to genes...')
             new_indices = df.index.map(array_annotation.probe_to_agi)
@@ -107,9 +122,13 @@ class ExpressionMatrix:
                 for probe in unmapped_probes:
                     logging.info(probe)
             df.index = new_indices
+
         if log2_transform:
             df = np.log2(df)
-        return df
+        # Convert sample names to titles that humans can understand
+        better_name_dict = gse.phenotype_data.title.to_dict()
+        df.columns = [better_name_dict[old_col] for old_col in df.columns]
+        return cls(df)
 
     def concat_to_expression_matrix(
             self, new_expression_matrix: ExpressionMatrix,
@@ -700,7 +719,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         expressions_per_gene = stacked_df.sum(axis=1)
         expression_df = pd.DataFrame(expressions_per_gene, columns=['expression'])
         expression_df.reset_index(inplace=True)
-        if expression_df.columns[0] == 'level_0':
+        if expression_df.columns[0] != 'ID_REF':
             # Change column name to gene identifier again
             expression_df = expression_df.rename(
                 columns={expression_df.columns[0]: 'ID_REF'}
