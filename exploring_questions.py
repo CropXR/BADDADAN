@@ -1,6 +1,12 @@
+import copy
+from pathlib import Path
 
 import pandas as pd
 from GEOparse import get_GEO
+
+from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
+from helpers import get_info_from_gse65046
+
 
 def compare_annotations(soft_path, csv_path):
     """See if gene annotations differ between doing the SOFT-based annotation
@@ -59,3 +65,45 @@ def compare_annotations(soft_path, csv_path):
 
     print('Mappings disagree')
     print(sum(both_map_df['SOFT_MAP'] != both_map_df['CSV_MAP']))
+
+
+def see_expression_genes_of_interest(exp_mat_path: Path):
+    exp_mat = ExpressionMatrixTimeSeries.from_geo_file(exp_mat_path,
+                                                        log2_transform=True,
+                                                             annotate_from_gpl=True)
+    genes_of_interest = ["AT1G30100",
+                        "AT1G31800",
+                        "AT1G52340",
+                        "AT1G78390",
+                        "AT2G27150",
+                        "AT3G14440",
+                        "AT3G24220",
+                        "AT4G18350",
+                        "AT4G19170",
+                        "AT4G25700",
+                        "AT5G52570",
+                        "AT5G67030"]
+
+    #BES1 & HY5
+    genes_of_interest = ['AT1G19350', 'AT5G11260']
+
+    # Some genes from the paper
+    genes_of_interest = ["AT4G22880", "AT1G56650", "AT5G13930" ]
+
+
+    exp_mat.df = exp_mat.df[exp_mat.df.index.isin(genes_of_interest)]
+
+    exp_mat.df['cluster_id']= [i for i, _ in enumerate(genes_of_interest, 1)]
+    exp_mat.has_been_clustered = True
+    exp_mat.column_parser = get_info_from_gse65046
+
+    expr_mat_drought = copy.deepcopy(exp_mat)
+    expr_mat_drought.keep_only_samples_with_string('drought')
+    expr_mat_drought.plot_clusters_over_time(title='Drought')
+    # expr_mat_drought.plot_clusters_over_time(title='Drought', plot_units=True)
+
+    expr_mat_control = copy.deepcopy(exp_mat)
+    expr_mat_control.keep_only_samples_with_string('control')
+    expr_mat_control.plot_clusters_over_time(title='Control')
+    # expr_mat_control.plot_clusters_over_time(title='Control', plot_units=True)
+    print()
