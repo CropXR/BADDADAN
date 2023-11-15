@@ -29,7 +29,7 @@ class EdgeRelation(Enum):
 
 class ModuleRegulatoryNetwork:
     # Standard prefixes
-    tf_prefix = 'TF_'
+    tf_prefix = 'TF_molecule_'
     module_prefix = 'MODULE'
 
     def __init__(self, graph: nx.DiGraph):
@@ -81,12 +81,16 @@ class ModuleRegulatoryNetwork:
         return cls(a_graph)
 
     @classmethod
-    def from_tf2_tsv(cls, in_path: Path, nr_top_hits: int | None = None) -> ModuleRegulatoryNetwork:
+    def from_tf2_tsv(cls, in_path: Path, nr_top_hits: int | None = None,
+                     q_value_cutoff: float | None = None) -> ModuleRegulatoryNetwork:
         """Create object from output of TF2Network file
 
+        :param in_path: Path to .tsv output file of tf2network
         :param nr_top_hits: Keep certain number of top-scoring PWMs (position
                              weight matrices). Can be used as a quality cutoff.
-        :param in_path: Path to .tsv output file of tf2network
+        :param q_value_cutoff: Only keep edges with q-value below this cutoff.
+                               Use either this or nr_top_hits, cannot both
+                               be used at the same time.
         :return: Moduleregulatory network that contains TFs and modules
         """
         df = pd.read_csv(in_path, sep='\t')
@@ -95,9 +99,14 @@ class ModuleRegulatoryNetwork:
         df['regulator_with_prefix'] = cls.tf_prefix + df['Regulator'].astype(str)
         df['origin'] = EdgeRelation.BINDS_TO
 
+        if nr_top_hits and q_value_cutoff:
+            raise ValueError('Cannot do both nr_top_hits and q_value_cutoff.'
+                             ' Pick one or the other.')
         if nr_top_hits is not None:
             # Get only a certain number of top PWM hits for each module
             df = df.sort_values('rank').groupby('GeneSet').head(nr_top_hits)
+        elif q_value_cutoff is not None:
+            df = df[df['q-value'] < q_value_cutoff]
 
         my_graph = nx.from_pandas_edgelist(df, source='regulator_with_prefix',
                                            target='target',
@@ -181,32 +190,39 @@ class ModuleRegulatoryNetwork:
 
         self.graph.remove_edges_from(edges_to_be_removed)
 
-    def get_module_module_network(self) -> ModuleRegulatoryNetwork:
-        """Cut out all TFs and show direct relations between modules"""
+    def get_module_module_network(self,
+                                  tf_can_be_from_multiple_modules: bool = False
+                                  ) -> ModuleRegulatoryNetwork:
+        """Cut out all TFs and show direct relations between modules
+
+        :param tf_can_be_from_multiple_modules: If true, a transcription factor
+            can be transcribed my multiple modules. Default: false.
+        :return: Module regulatory network that connects modules to modules.
+        """
         # Find all potential edges and filter them to make sure they all agree
         candidate_edges = {}
         for tf in self.get_tfs():
-            original_module = list(self.graph.predecessors(tf))
-            assert len(original_module) == 1, f'TF ({tf}) can only be transcribed by one module'
-            # List contains only one item, extract it.
-            original_module = original_module[0]
+            original_modules = list(self.graph.predecessors(tf))
             target_modules = list(self.graph.successors(tf))
-            for target_module in target_modules:
-                regulation_type = self.graph.edges[tf, target_module]['origin']
-                if regulation_type == EdgeRelation.UP_OR_DOWN:
-                    # Unclear regulations can be ignored
-                    continue
-                # If edge not already in candidate edges dict, add it
-                if not (original_module, target_module) in candidate_edges:
-                    candidate_edges[(original_module, target_module)] = dict(origin=regulation_type)
-                # Check if edge agrees with existing edge
-                elif candidate_edges[(original_module, target_module)]['origin'] == regulation_type:
-                    logging.debug(f'Found agreement between regulatory '
-                                  f'direction of {original_module} -> {target_module}')
-                    continue
-                else:
-                    raise ValueError('Disagreement between regulatory directions'
-                                     ' of {original_module} -> {target_module}')
+            if not tf_can_be_from_multiple_modules:
+                assert len(original_modules) == 1, f'TF ({tf}) can only be transcribed by one module'
+            for original_module in original_modules:
+                for target_module in target_modules:
+                    regulation_type = self.graph.edges[tf, target_module]['origin']
+                    if regulation_type == EdgeRelation.UP_OR_DOWN:
+                        # Unclear regulations can be ignored
+                        continue
+                    # If edge not already in candidate edges dict, add it
+                    if not (original_module, target_module) in candidate_edges:
+                        candidate_edges[(original_module, target_module)] = dict(origin=regulation_type)
+                    # Check if edge agrees with existing edge
+                    elif candidate_edges[(original_module, target_module)]['origin'] == regulation_type:
+                        logging.debug(f'Found agreement between regulatory '
+                                      f'direction of {original_module} -> {target_module}')
+                        continue
+                    else:
+                        raise ValueError('Disagreement between regulatory directions'
+                                         ' of {original_module} -> {target_module}')
 
         edge_list = []
         for (origin, target), data_dict in candidate_edges.items():
