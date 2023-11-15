@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 
@@ -39,3 +40,34 @@ def parse_go_enrichment_output(in_file: Path, cutoff: float = 0.05) -> pd.DataFr
     df = df[df['NS'] == 'BP']
     df['module_name'] = in_file.stem
     return df
+
+def create_correlation_matrix_from_atted_ii_raw(corr_file: Path, gene_ids: Path):
+    """From pairwise correlations of atted_ii, create one expressionmatrix as pandas dataframe
+
+    :param corr_file: path to file that contains atted_ii correlations in the form of
+        10723023:818113 7.9030
+        10723023:835497 6.6774
+        10723023:816702 6.3223
+        first item gene 1, second gene 2, third item the correlation value
+    :param gene_ids: list of all gene ids, will be used to construct the
+                     dataframe
+    :return: Dataframe with all values
+    """
+    with gene_ids.open('r') as f:
+        gene_names = f.read().split()
+    corr_matrix = pd.DataFrame(index=gene_names, columns=gene_names)
+    with corr_file.open('r') as f:
+        all_lines = f.readlines()
+        for i, line in enumerate(all_lines):
+            if i % 1_000_000 == 0:
+                print(f'{i/len(all_lines):.2%}')
+            line = line.strip()
+            connection, corr_value = line.split()
+            gene_1, gene_2 = connection.split(':')
+            corr = corr_matrix.at[gene_1, gene_2]
+            if np.isnan(corr):
+                corr_matrix.at[gene_1, gene_2] = corr
+                corr_matrix.at[gene_2, gene_1] = corr
+
+    return corr_matrix
+
