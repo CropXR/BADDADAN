@@ -4,9 +4,49 @@ from pathlib import Path
 import pandas as pd
 from GEOparse import get_GEO
 
+from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
+from data_wrangling import parse_go_enrichment_output
 from helpers import get_info_from_gse65046
 
+
+def how_many_cignet_modules_tfbs_enriched(modules_path: Path, tf2_network_output: Path):
+    """See how many of the input modules have a significant TFBS enrichment"""
+    modules_df = pd.read_csv(modules_path, sep='\t')
+    tfbs_df = pd.read_csv(tf2_network_output, sep='\t')
+    print(f"Modules in original {modules_df['moduleID'].nunique()}")
+    print(f"Modules with >0 tfbs: {tfbs_df['GeneSet'].nunique()}")
+
+
+def see_how_intermodular_network_looks(modules_path: Path, tf2_network_output: Path, cytoscape_output_path: Path):
+    """From tf2network output and module assignments, create intermodular network."""
+    my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(tf2_network_output, q_value_cutoff=0.01)
+    my_grn.add_tf_module_mappings(modules_path, from_tf2_input=True)
+    my_grn.clean_up_network()
+    intermodular_network = my_grn.get_module_module_network(tf_can_be_from_multiple_modules=True)
+    save_path = str(cytoscape_output_path)
+    intermodular_network.save_for_cytoscape(save_path)
+    intermodular_network.plot_network(with_labels=False)
+
+def create_intermodular_network_first_try(modules_path: Path, tf2_network_output: Path, out_path: Path):
+    """Some first try at creating a intermodular network. Not majorly important"""
+    modules_df = pd.read_csv(modules_path, sep='\t')
+    tfbs_df = pd.read_csv(tf2_network_output, sep='\t')
+    print()
+    merged_df = modules_df.merge(tfbs_df, how='left', left_on='moduleID', right_on='GeneSet')
+    # Keep only relevant columns
+    merged_df = merged_df[['moduleID', 'geneID', 'Regulator']]
+    # See if regulator is also present in other module
+    merged_df['has_link'] = merged_df['Regulator'].isin(merged_df['geneID'])
+    merged_df = merged_df[merged_df['has_link'] == True]
+    # Add regulator's module
+    regulator_id = merged_df.merge(merged_df, how='left', left_on='Regulator', right_on='geneID')
+    module_links = regulator_id[['moduleID_x', 'moduleID_y']]
+    no_dupes = module_links.drop_duplicates(ignore_index=True)
+    no_dupes = no_dupes.dropna()
+    print(len(no_dupes))
+    # Save for cytoscape?
+    merged_df.to_csv(out_path, index=False)
 
 def compare_annotations(soft_path, csv_path):
     """See if gene annotations differ between doing the SOFT-based annotation
@@ -107,3 +147,15 @@ def see_expression_genes_of_interest(exp_mat_path: Path):
     expr_mat_control.plot_clusters_over_time(title='Control')
     # expr_mat_control.plot_clusters_over_time(title='Control', plot_units=True)
     print()
+
+def analyse_all_go_enrichments(in_dir: Path):
+    """See how many modules have a signigicant BP go enrichment"""
+    df_list = []
+    total_modules = len(list(in_dir.iterdir()))
+    print(total_modules)
+    for file in in_dir.iterdir():
+        df_list.append(parse_go_enrichment_output(file))
+    master_df = pd.concat(df_list)
+    group_df = master_df.groupby('module_name')
+    print(group_df.ngroups)
+    print(group_df.ngroups / total_modules)
