@@ -236,9 +236,9 @@ class ExpressionMatrix:
         sns.histplot(self.df.std(axis=1))
         plt.show()
 
-    def plot_sample_gene_heatmap(self) -> None:
+    def plot_sample_gene_heatmap(self, standard_scale=0) -> None:
         sns.clustermap(self.df, method='complete', metric='correlation',
-                       yticklabels=False)
+                       yticklabels=False, xticklabels=False, standard_scale=standard_scale)
         plt.show()
 
     def _calculate_gene_variation(self, method: Literal['std', 'mad', 'cv', 'qcd']) -> pd.Series:
