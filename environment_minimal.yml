@@ -1,0 +1,8 @@
+name: go_annotate
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - goatools
+  - python=3.10.6
+  - snakemake
