@@ -12,6 +12,7 @@ from lmfit import fit_report, create_params, Parameters
 from matplotlib import pyplot as plt
 from sklearn.metrics import adjusted_rand_score
 
+import data_wrangling
 import exploring_questions
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from DynamicModels.OdeFitter import OdeFitter
@@ -88,6 +89,7 @@ def full_pipeline_prototype(out_dir: Path,
     # TODO filter out low expression genes
 
     expr_mat_time.keep_n_most_deviating_genes(nr_genes)
+    expr_mat_time.plot_sample_gene_heatmap()
     expr_mat_time.do_hierachical_clustering(nr_clusters, do_plotting=True)
     expr_mat_time.column_parser = get_info_from_gse65046
 
@@ -487,19 +489,28 @@ def camila_red_panda(soft_file_in_path: Path,
                      model_fit=simulated_data)
     plt.show()
 
-
 if __name__ == "__main__":
-    nr_genes = 1000
-    nr_clusters = 5
-    out_path = Path(f'data/gse65046/{nr_genes}_genes_{nr_clusters}_clusters')
-    in_path_soft = Path('data/gse65046/GSE65046_family.soft')
-    # in_path_csv = Path('data/gse65046/expressions_annotated.csv')
-    in_path_xls = Path('data/resources/catma_annotation_96_plates.csv')
-    # jordi_cluster = Path('data/gse65046/predicted_gene_groups_d/predicted_genes_activation.txt')
-    # exploring_questions.compare_annotations(in_path_soft, in_path_xls)
+    # cignet_modules = Path('data/resources/cig_data/ModuleGenes_two_cols.txt')
+    # tf2_output = Path('data/resources/cig_data/tf2network_output/tf2network_output_merged.tsv')
+    # save_path = Path('data/test_output/edgelist_q_001.csv')
+    # # exploring_questions.how_many_cignet_modules_tfbs_enriched(cignet_modules, tf2_output)
+    # exploring_questions.see_how_intermodular_network_looks(cignet_modules, tf2_output,save_path)
+    # # exploring_questions.remove_dupe_genes(cignet_modules, tf2_output, None)
 
-    full_pipeline_prototype(out_dir=out_path,
-                            input_expression_file=in_path_soft,
-                            nr_genes=nr_genes,
-                            nr_clusters=nr_clusters,
-                            do_log2=True)
+    exploring_questions.analyse_all_go_enrichments(Path('data/resources/cig_data/module_go_enrichment_all_genes_background'))
+
+    # data_wrangling.merge_ath_annotation_for_goatools(Path('data/resources/go_annotations/ATH_GO_GOSLIM.txt'),
+    #                                                  Path('data/resources/go_annotations/ATH_GO_GOSLIM_one_gene_per_line.txt'))
+
+    #
+    # nr_genes = 100
+    # nr_clusters = 6
+    # out_path = Path(f'data/gse65046/{nr_genes}_genes_{nr_clusters}_clusters')
+    # in_path_soft = Path('data/gse65046/GSE65046_family.soft')
+    # # in_path_xls = Path('data/resources/catma_annotation_96_plates.csv')
+    # # exploring_questions.compare_annotations(in_path_soft, in_path_xls)
+    # full_pipeline_prototype(out_dir=out_path,
+    #                         input_expression_file=in_path_soft,
+    #                         nr_genes=nr_genes,
+    #                         nr_clusters=nr_clusters,
+    #                         do_log2=True)
