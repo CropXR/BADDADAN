@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -62,12 +63,17 @@ def create_correlation_matrix_from_atted_ii_raw(corr_file: Path, gene_ids: Path)
             if i % 1_000_000 == 0:
                 print(f'{i/len(all_lines):.2%}')
             line = line.strip()
-            connection, corr_value = line.split()
+            connection, new_corr = line.split()
+            new_corr = float(new_corr)
             gene_1, gene_2 = connection.split(':')
-            corr = corr_matrix.at[gene_1, gene_2]
-            if np.isnan(corr):
-                corr_matrix.at[gene_1, gene_2] = corr
-                corr_matrix.at[gene_2, gene_1] = corr
+            existing_corr = corr_matrix.at[gene_1, gene_2]
+            if np.isnan(existing_corr):
+                corr_matrix.at[gene_1, gene_2] = new_corr
+                corr_matrix.at[gene_2, gene_1] = new_corr
+    # Return upper triangle only
+    upper_tri_df = corr_matrix.where(
+        np.triu(np.ones(corr_matrix.shape)).astype(np.bool))
+    return upper_tri_df
 
-    return corr_matrix
-
+def entrez_to_tair_id(annotation_path: Path) -> Dict:
+    df = pd.read_csv(annotation_path, sep='\t')
