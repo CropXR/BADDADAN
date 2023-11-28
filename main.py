@@ -496,8 +496,11 @@ if __name__ == "__main__":
     # # exploring_questions.how_many_cignet_modules_tfbs_enriched(cignet_modules, tf2_output)
     # exploring_questions.see_how_intermodular_network_looks(cignet_modules, tf2_output,save_path)
     # # exploring_questions.remove_dupe_genes(cignet_modules, tf2_output, None)
+    df = data_wrangling.create_correlation_matrix_from_atted_ii_raw(Path('data/atted_ii/ath_u_v22-04-G18957-S27427/test_file.txt'),
+                                                               Path('data/atted_ii/ath_u_v22-04-G18957-S27427/test_gene_nrs.txt'))
 
-    exploring_questions.analyse_all_go_enrichments(Path('data/resources/cig_data/module_go_enrichment_all_genes_background'))
+    df.to_csv(Path('data/atted_ii/ath_u_v22-04-G18957-S27427/all_cor_one_matrix.csv'))
+    # exploring_questions.analyse_all_go_enrichments(Path('data/resources/cig_data/module_go_enrichment_all_genes_background'))
 
     # data_wrangling.merge_ath_annotation_for_goatools(Path('data/resources/go_annotations/ATH_GO_GOSLIM.txt'),
     #                                                  Path('data/resources/go_annotations/ATH_GO_GOSLIM_one_gene_per_line.txt'))
