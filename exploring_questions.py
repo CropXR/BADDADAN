@@ -159,3 +159,14 @@ def analyse_all_go_enrichments(in_dir: Path):
     group_df = master_df.groupby('module_name')
     print(group_df.ngroups)
     print(group_df.ngroups / total_modules)
+
+def exploratory_module_selection(input_file, modules_file):
+    """Get an idea of the characteristics of the gene modules"""
+    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
+        input_file,
+        log2_transform=True,
+        annotate_from_gpl=True)
+    cignet_modules = Path('data/resources/cig_data/ModuleGenes_two_cols.txt')
+    expr_mat_time.assign_clusters_from_cignet_file(cignet_modules, remove_dupes=True)
+    expr_mat_time.show_characteristics_of_clusters()
+

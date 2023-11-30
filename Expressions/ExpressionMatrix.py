@@ -18,7 +18,7 @@ from scipy.cluster.hierarchy import linkage, fcluster
 import qnorm
 from scipy.integrate._ivp.ivp import OdeResult
 from scipy.spatial.distance import pdist, squareform
-from numpy.linalg import svd
+from sklearn.decomposition import PCA
 
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628, standardize, \
@@ -424,10 +424,18 @@ class ExpressionMatrix:
             mapping_df = mapping_df[~mapping_df.index.duplicated(keep='first')]
         self._apply_cluster_mapping_from_df(mapping_df)
 
+    def assign_clusters_from_cignet_file(self, cignet_mapping: Path, remove_dupes=True):
+        df = pd.read_csv(cignet_mapping, sep='\t', names=['cluster_id','gene_name'], skiprows=1)
+        if remove_dupes:
+            # TODO handle double mappings properly
+            df = df.drop_duplicates(subset='gene_name')
+        df = df.set_index('gene_name')
+        self._apply_cluster_mapping_from_df(df)
+
     def _apply_cluster_mapping_from_df(self, mapping_df):
         """
 
-        :param mapping_df:
+        :param mapping_df: Index should be gene name, column should be 'cluster_id'
         :return:
         """
         assert not mapping_df.index.has_duplicates, 'Mapping dataframe contains duplicate indices'
@@ -879,4 +887,119 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             plt.show()
         return tf_expressions.corr(selected_module_expression, method=method)
 
+    def show_characteristics_of_clusters(self):
+        """Plot how the clusters behave in the dataset
 
+        Shows:
+            - the percentage of explained variance of the first PC to measure
+              expression coherence
+            - Size of the cluster
+            - How much its expression changes over time
+            - Median expression of genes in module to see if it is switched on
+        """
+        grouped_df = self.df.groupby('cluster_id')
+
+        size = grouped_df.apply(len)
+        explained_var = grouped_df.apply(self._get_eigengene_explained_var,
+                                         transform=True)
+        mean_pairwise_abs_cor = grouped_df.apply(self._mean_pairwise_abs_cor)
+        var_through_time = grouped_df.apply(
+            self._get_eigengene_variation_over_time, transform=True)
+        var_through_time = np.log(var_through_time)
+        median_expression = grouped_df.median().T.median()
+
+        summary_df = pd.concat([explained_var, size,
+                                var_through_time, median_expression,
+                                mean_pairwise_abs_cor], axis=1)
+        summary_df.columns = ['explained_var',
+                              'size',
+                              'var_through_time',
+                              'median_expression',
+                              'mean_pairwise_abs_cor']
+
+        sns.scatterplot(summary_df,
+                        x='explained_var',
+                        hue='size',
+                        y='mean_pairwise_abs_cor')
+        plt.show()
+        sns.scatterplot(summary_df, y='mean_pairwise_abs_cor',
+                        size='median_expression',
+                        x='size',
+                        hue='var_through_time',
+                        hue_norm=(0, 1))
+        # plt.xscale('log')
+        plt.show()
+        # plt.savefig('test_output.svg')
+
+    @staticmethod
+    def _mean_pairwise_abs_cor(one_group_df: pd.Dataframe) -> float:
+        """Get the mean pairwise absolute correlation between all variable.
+
+        Method typically called in a grouped_df.apply()
+
+        :param one_group_df: Dataframe that should come from one cluster.
+        :return: mean correlation value
+        """
+        one_group_df = one_group_df.drop('cluster_id', axis=1)
+        corr_matrix = np.corrcoef(one_group_df)
+        corr_matrix = np.abs(corr_matrix)
+        dense_corr = squareform(corr_matrix, checks=False)
+        return np.mean(dense_corr)
+
+    @classmethod
+    def _get_eigengene_explained_var(cls, one_group_df: pd.DataFrame,
+                                     transform: bool) -> float:
+        """
+        Get how much variance the first principal component explains.
+        (Used to get an idea how much expression coherence
+        is within the cluster)
+
+        :param one_group_df: Dataframe that should come from one cluster.
+        :param transform: If true, apply mean centering and scale normalising
+                          before doing PCA
+        :return:
+        """
+        # Calculate PCA
+        one_group_df = one_group_df.drop('cluster_id', axis=1)
+        pca = cls._do_pca_of_group(one_group_df, transform)
+        return pca.explained_variance_ratio_[0]
+
+    @classmethod
+    def _get_eigengene_variation_over_time(cls, one_group_df: pd.DataFrame,
+                                           transform: bool) -> float:
+        """Get quartile coefficient of dispersion of eigengene
+
+        Used to see if a gene module changes expression throughout
+        the different samples.
+
+        :param one_group_df: Dataframe that should come from one cluster.
+        :param transform: If true, apply mean centering and scale normalising
+                          before doing PCA
+        :return:
+        """
+        one_group_df = one_group_df.drop('cluster_id', axis=1)
+        # Calculate PCA
+        pca = cls._do_pca_of_group(one_group_df, transform)
+        eigen_values_through_time = pca.transform(one_group_df.T)
+        q3, q1 = np.percentile(eigen_values_through_time, [75, 25])
+        iqr = q3 - q1
+        cod = iqr / (q3 + q1)
+        return cod
+
+    @classmethod
+    def _do_pca_of_group(cls, one_group_df: pd.DataFrame, transform: bool) -> PCA:
+        """For one gene module, do PCA with one component to get idea of
+        eigengene values and how much variance it explains
+
+        :param one_group_df: Dataframe that should come from one cluster.
+        :param transform: If true, apply mean centering and scale normalising
+                          before doing PCA
+        :return: PCA object that was fitted to input dataframe
+        """
+        pca = PCA(n_components=1)
+        transposed_df = one_group_df.T
+        if transform:
+            transposed_df = transposed_df - transposed_df.mean()
+            transposed_df = transposed_df / transposed_df.std()
+        pca.fit(transposed_df)
+        return pca
