@@ -490,32 +490,6 @@ def camila_red_panda(soft_file_in_path: Path,
     plt.show()
 
 if __name__ == "__main__":
-    nr_genes = 100
-    nr_clusters = 6
-    out_path = Path(f'data/gse65046/{nr_genes}_genes_{nr_clusters}_clusters')
-
-    cignet_modules = Path('data/resources/cig_data/ModuleGenes_two_cols.txt')
-    in_path_soft = Path('data/gse65046/GSE65046_family.soft')
-    exploring_questions.exploratory_module_selection(in_path_soft, cignet_modules)
-
-
-
-    # tf2_output = Path('data/resources/cig_data/tf2network_output/tf2network_output_merged.tsv')
-    # save_path = Path('data/test_output/edgelist_q_001.csv')
-    # # exploring_questions.how_many_cignet_modules_tfbs_enriched(cignet_modules, tf2_output)
-    # exploring_questions.see_how_intermodular_network_looks(cignet_modules, tf2_output,save_path)
-    # # exploring_questions.remove_dupe_genes(cignet_modules, tf2_output, None)
-    # exploring_questions.analyse_all_go_enrichments(Path('data/resources/cig_data/module_go_enrichment_all_genes_background'))
-
-    # data_wrangling.merge_ath_annotation_for_goatools(Path('data/resources/go_annotations/ATH_GO_GOSLIM.txt'),
-    #                                                  Path('data/resources/go_annotations/ATH_GO_GOSLIM_one_gene_per_line.txt'))
-
-
-    # in_path_soft = Path('data/gse65046/GSE65046_family.soft')
-    # # in_path_xls = Path('data/resources/catma_annotation_96_plates.csv')
-    # # exploring_questions.compare_annotations(in_path_soft, in_path_xls)
-    # full_pipeline_prototype(out_dir=out_path,
-    #                         input_expression_file=in_path_soft,
-    #                         nr_genes=nr_genes,
-    #                         nr_clusters=nr_clusters,
-    #                         do_log2=True)
+    annot_file = Path('data/atted_ii/Arabidopsis_thaliana.gene_info')
+    testfile = Path('data/atted_ii/ath_u_v22-04-G18957-S27427/all_cor_one_matrix.csv')
+    data_wrangling.entrez_to_tair_id(annot_file, testfile)

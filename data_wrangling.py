@@ -75,5 +75,21 @@ def create_correlation_matrix_from_atted_ii_raw(corr_file: Path, gene_ids: Path)
         np.triu(np.ones(corr_matrix.shape)).astype(np.bool))
     return upper_tri_df
 
-def entrez_to_tair_id(annotation_path: Path) -> Dict:
-    df = pd.read_csv(annotation_path, sep='\t')
+def entrez_to_tair_id(annotation_path: Path, coexpression_matrix_path: Path):
+    """Convert entrez gene ID columns and rows in dataframe to locus tag IDs
+
+    :param annotation_path: Path to dataframe that maps GeneID to LocusTag
+    (and contains these column names)
+    :param coexpression_matrix_path: Matrix for which row and column names
+    should be relabeled
+    :return: Saves renamed csv as {coexpresssion_matrix_path}_renamed.csv
+    """
+    out_path = coexpression_matrix_path.with_stem(coexpression_matrix_path.stem + '_renamed')
+    logging.info(f'{annotation_path} + {coexpression_matrix_path} -> {out_path}')
+    df_annot = pd.read_csv(annotation_path, sep='\t')
+    translation_dict = df_annot.set_index('GeneID')['LocusTag'].to_dict()
+    df_coexp = pd.read_csv(coexpression_matrix_path, sep=',', index_col=0)
+    df_coexp.columns = df_coexp.columns.astype(int)
+    df_coexp_rename = df_coexp.rename(index=translation_dict, columns=translation_dict)
+    df_coexp_rename.to_csv(out_path)
+
