@@ -490,6 +490,6 @@ def camila_red_panda(soft_file_in_path: Path,
     plt.show()
 
 if __name__ == "__main__":
-    annot_file = Path('data/atted_ii/Arabidopsis_thaliana.gene_info')
-    testfile = Path('data/atted_ii/ath_u_v22-04-G18957-S27427/all_cor_one_matrix.csv')
-    data_wrangling.entrez_to_tair_id(annot_file, testfile)
+    input_file = Path('data/atted_ii/all_cor_one_matrix_renamed.csv')
+    out_dir = Path('data/atted_ii/linkage_matrices')
+    data_wrangling.calculate_linkage_matrix_from_atted_ii(input_file, out_dir)

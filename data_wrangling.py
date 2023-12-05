@@ -4,6 +4,8 @@ from typing import Dict
 
 import numpy as np
 import pandas as pd
+from scipy.cluster.hierarchy import linkage
+from scipy.spatial.distance import squareform
 
 
 def merge_ath_annotation_for_goatools(in_path: Path, out_path: Path):
@@ -93,3 +95,22 @@ def entrez_to_tair_id(annotation_path: Path, coexpression_matrix_path: Path):
     df_coexp_rename = df_coexp.rename(index=translation_dict, columns=translation_dict)
     df_coexp_rename.to_csv(out_path)
 
+def calculate_linkage_matrix_from_atted_ii(in_path: Path, out_dir: Path):
+    """From atted_ii z-scores, calculate linkage matrices
+
+    :param in_path: path to atted_ii matrix that contains pairwise Z-scores
+                    between genes
+    :param out_dir: path in which to save the calculated linkage matrices
+    """
+    out_dir.mkdir(exist_ok=True)
+    df = pd.read_csv(in_path, index_col=0)
+    # Todo later on try with absolute Z-scores
+    # From Z score to distance; substract maximum z-score
+    dist = df.max().max() - df
+    # Convert matrix into dense format
+    dense_dist = squareform(dist, checks=False)
+    for method in ['complete', 'single', 'average']:
+        logging.info(f'Performing {method} now')
+        linkage_matrix = linkage(dense_dist, method=method)
+        out_path = out_dir / f'{in_path.stem}_{method}_linkage.npy'
+        np.save(out_path, linkage_matrix)
