@@ -15,6 +15,7 @@ import seaborn as sns
 import GEOparse
 from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
+from scipy.stats import zscore
 import qnorm
 from scipy.integrate._ivp.ivp import OdeResult
 from scipy.spatial.distance import pdist, squareform
@@ -241,6 +242,11 @@ class ExpressionMatrix:
                        yticklabels=False, xticklabels=False, standard_scale=standard_scale)
         plt.show()
 
+    def plot_cluster_sizes(self):
+        sns.histplot(self.df.cluster_id.value_counts())
+        plt.xlabel('Cluster size')
+        plt.show()
+
     def _calculate_gene_variation(self, method: Literal['std', 'mad', 'cv', 'qcd']) -> pd.Series:
         """Calculate for each gene how much it varies over all the samples
 
@@ -432,6 +438,46 @@ class ExpressionMatrix:
         df = df.set_index('gene_name')
         self._apply_cluster_mapping_from_df(df)
 
+    def assign_clusters_from_linkage_matrix(self,
+                                            linkage_matrix_path: Path,
+                                            nr_clusters: int,
+                                            atted_path: Path):
+        """Used when you have a precalculated linkage matrix in a .npy file
+        and get clusters
+
+        :param linkage_matrix_path: Path to linkage matrix
+                                    output by scipy linkage
+        :param nr_clusters: Nr of clusters
+        :param atted_path: Path to matrix containing atted correlations. Matrix
+                           should contain gene names, and be the matrix from
+                           which the linkage matrix was calculated. It is used
+                           to link the linkage matrix back to the gene names
+        """
+        linkage_matrix = np.load(linkage_matrix_path)
+        self._cluster_from_linkage_matrix(linkage_matrix, nr_clusters, atted_path)
+
+    def _cluster_from_linkage_matrix(self, linkage_matrix: np.ndarray,
+                                     n_cluster: int,
+                                     original_atted_matrix_path: Path):
+        """Internal use for going from linkage matrix to assigning clusters
+
+        :param linkage_matrix: Path to linkage matrix
+                                    output by scipy linkage
+        :param n_cluster: Nr of clusters
+        :param original_atted_matrix_path: Path to matrix containing atted correlations. Matrix
+                           should contain gene names, and be the matrix from
+                           which the linkage matrix was calculated. It is used
+                           to link the linkage matrix back to the gene names
+        """
+        clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
+        # Make clustering be 0-based instead of 1-based
+        clustering = clustering - 1
+        og_df = pd.read_csv(original_atted_matrix_path, usecols=[0], index_col=0)
+        og_df = og_df.assign(cluster_id=clustering)
+
+        self._apply_cluster_mapping_from_df(og_df)
+
+
     def _apply_cluster_mapping_from_df(self, mapping_df):
         """
 
@@ -581,19 +627,9 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         # Create linkage matrix and infer clusters
         linkage_matrix = linkage(dense_dist, method='complete')
         # linkage_matrix = linkage(dense_dist, method='average')
-        clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
-        # Make clustering be 0-based instead of 1-based
-        clustering = clustering - 1
-        if do_plotting:
-            # Create colours to use in clustermap
-            lut = dict(zip([i for i in range(0, n_cluster + 1)],
-                           sns.color_palette(n_colors=n_cluster)))
-            row_colors = [lut[i] for i in clustering]
-            sns.clustermap(dist, row_linkage=linkage_matrix,
-                           col_linkage=linkage_matrix , row_colors=row_colors)
-            plt.show()
-        self.df = self.df.assign(cluster_id=clustering)
-        self.has_been_clustered = True
+        self._cluster_from_linkage_matrix(linkage_matrix, n_cluster,
+                                          do_plotting, dist)
+
 
     def _do_random_clustering(self, n_cluster: int = 2) -> None:
         """Assign genes to random clusters. Used for testing the null hypothesis"""
@@ -897,26 +933,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             - How much its expression changes over time
             - Median expression of genes in module to see if it is switched on
         """
-        grouped_df = self.df.groupby('cluster_id')
-
-        size = grouped_df.apply(len)
-        explained_var = grouped_df.apply(self._get_eigengene_explained_var,
-                                         transform=True)
-        mean_pairwise_abs_cor = grouped_df.apply(self._mean_pairwise_abs_cor)
-        var_through_time = grouped_df.apply(
-            self._get_eigengene_variation_over_time, transform=True)
-        var_through_time = np.log(var_through_time)
-        median_expression = grouped_df.median().T.median()
-
-        summary_df = pd.concat([explained_var, size,
-                                var_through_time, median_expression,
-                                mean_pairwise_abs_cor], axis=1)
-        summary_df.columns = ['explained_var',
-                              'size',
-                              'var_through_time',
-                              'median_expression',
-                              'mean_pairwise_abs_cor']
-
+        summary_df = self._get_characteristics_of_clusters()
         sns.scatterplot(summary_df,
                         x='explained_var',
                         hue='size',
@@ -930,6 +947,36 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         # plt.xscale('log')
         plt.show()
         # plt.savefig('test_output.svg')
+
+    def _get_characteristics_of_clusters(self):
+        """Retrieve how the clusters behave in the dataset
+
+        Returns:
+            - the percentage of explained variance of the first PC to measure
+              expression coherence
+            - Mean pairwise absolute correlation to also measure
+              expression coherence
+            - Size of the cluster
+            - How much its expression changes over time
+            - Median expression of genes in module to see if it is switched on
+        """
+        grouped_df = self.df.groupby('cluster_id')
+        size = grouped_df.apply(len)
+        explained_var = grouped_df.apply(self._get_eigengene_explained_var,
+                                         transform=True)
+        mean_pairwise_abs_cor = grouped_df.apply(self._mean_pairwise_abs_cor)
+        var_through_time = grouped_df.apply(
+            self._get_eigengene_variation_over_time, transform=True)
+        median_expression = grouped_df.median().T.median()
+        summary_df = pd.concat([explained_var, size,
+                                var_through_time, median_expression,
+                                mean_pairwise_abs_cor], axis=1)
+        summary_df.columns = ['explained_var',
+                              'size',
+                              'var_through_time',
+                              'median_expression',
+                              'mean_pairwise_abs_cor']
+        return summary_df
 
     @staticmethod
     def _mean_pairwise_abs_cor(one_group_df: pd.Dataframe) -> float:
@@ -967,7 +1014,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
     @classmethod
     def _get_eigengene_variation_over_time(cls, one_group_df: pd.DataFrame,
                                            transform: bool) -> float:
-        """Get quartile coefficient of dispersion of eigengene
+        """Standard deviation of eigengene over time
 
         Used to see if a gene module changes expression throughout
         the different samples.
@@ -981,10 +1028,12 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         # Calculate PCA
         pca = cls._do_pca_of_group(one_group_df, transform)
         eigen_values_through_time = pca.transform(one_group_df.T)
-        q3, q1 = np.percentile(eigen_values_through_time, [75, 25])
-        iqr = q3 - q1
-        cod = iqr / (q3 + q1)
-        return cod
+        return np.std(eigen_values_through_time)
+
+        # q3, q1 = np.percentile(eigen_values_through_time, [75, 25])
+        # iqr = q3 - q1
+        # cod = iqr / (q3 + q1)
+        # return cod
 
     @classmethod
     def _do_pca_of_group(cls, one_group_df: pd.DataFrame, transform: bool) -> PCA:
@@ -1003,3 +1052,23 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             transposed_df = transposed_df / transposed_df.std()
         pca.fit(transposed_df)
         return pca
+
+    def get_z_score_of_cluster_characteristics(self):
+        """TODO work in progress, but we will use something like this
+            to select final modules for inclusion in the ODE model"""
+        summary_df = self._get_characteristics_of_clusters()
+        # Calculate Z score per category
+        z_scores = summary_df.apply(zscore)
+        summary_df = summary_df.assign(z_sum=z_scores.sum(axis=1))
+        summary_df.sort_values('z_sum').head(5)
+        plotting = False
+        if plotting:
+            # Is higher better for all? Or how can we make it that way?
+            sns.histplot(z_scores)
+            plt.show()
+            sns.boxplot(z_scores.sum(axis=1))
+            plt.show()
+        return z_scores
+
+
+

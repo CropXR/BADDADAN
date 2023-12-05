@@ -11,6 +11,7 @@ import typer
 from lmfit import fit_report, create_params, Parameters
 from matplotlib import pyplot as plt
 from sklearn.metrics import adjusted_rand_score
+import seaborn as sns
 
 import data_wrangling
 import exploring_questions
@@ -67,6 +68,23 @@ def annotate_microarray_expression(
                 'Cannot parse file format that is currently provided')
     expression_matrix.df.to_csv(output_path)
     logging.info(f'Successfullly saved output to {output_path}')
+
+def pipeline_from_atted_clustering(soft_file_path: Path,
+                                   atted_linkage_matrix: Path,
+                                   do_log2: bool = True
+                                   ):
+    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(soft_file_path,
+                                                        log2_transform=do_log2,
+                                                             annotate_from_gpl=True)
+    atted_path = Path('data/atted_ii/all_cor_one_matrix_renamed.csv')
+    nr_clusters = 500
+    expr_mat_time.assign_clusters_from_linkage_matrix(atted_linkage_matrix,
+                                                      nr_clusters,
+                                                      atted_path=atted_path)
+    expr_mat_time.plot_cluster_sizes()
+    expr_mat_time.write_tf2_input_file(Path(f'data/gse65046/{nr_clusters}_clusters_tf2_input.txt'))
+    expr_mat_time.show_characteristics_of_clusters()
+    expr_mat_time.get_z_score_of_cluster_characteristics()
 
 
 def full_pipeline_prototype(out_dir: Path,
@@ -133,9 +151,9 @@ def full_pipeline_prototype(out_dir: Path,
     # expr_mat_subset.corr_to_phenotypes()
     # expr_mat_subset.plot_clusters_over_time(title=condition)
     # fit_ode_to_data(module_module, expr_mat_drought)
-    fig_path = out_path / 'fitted_model.svg'
-    fit_ode_to_two_datasets(module_module, expr_mat_drought, expr_mat_control, fig_path)
-
+    # fig_path = out_path / 'fitted_model.svg'
+    # fit_ode_to_two_datasets(module_module, expr_mat_drought, expr_mat_control, fig_path)
+    #
 
 def fit_ode_to_two_simulated_data(module_network: ModuleRegulatoryNetwork):
     """Trying this with parameters from the 500 highest MAD log2 genes,
@@ -490,6 +508,13 @@ def camila_red_panda(soft_file_in_path: Path,
     plt.show()
 
 if __name__ == "__main__":
-    input_file = Path('data/atted_ii/all_cor_one_matrix_renamed.csv')
-    out_dir = Path('data/atted_ii/linkage_matrices')
-    data_wrangling.calculate_linkage_matrix_from_atted_ii(input_file, out_dir)
+    in_path = Path('data/gse65046/GSE65046_family.soft')
+    linkage_matrix = Path('data/atted_ii/linkage_matrices/all_cor_one_matrix_renamed_complete_linkage.npy')
+
+    pipeline_from_atted_clustering(in_path, linkage_matrix)
+    #
+    # my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(Path('data/gse65046/02_500_clusters_tf2network_output.tsv'))
+    # my_grn.add_tf_module_mappings(Path('data/gse65046/500_clusters_tf2_input.txt'), from_tf2_input=True)
+    # my_grn.clean_up_network()
+    # my_modules = my_grn.get_module_module_network()
+    # my_modules.save_for_cytoscape(Path('data/gse65046/03_cytoscape_modules.tsv'))
