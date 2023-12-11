@@ -57,24 +57,22 @@ def split_based_on_temp(expression_matrix,
 
 
 def get_info_from_gse65046(sample_names: list[str] | pd.Index | pd.DataFrame) -> dict:
-    """From sample names that are used in GSE65046, extract time, tissue and replicate number.
+    """From sample names that are used in GSE65046, extract time, condition,
+     replicate number.
+
     Example sample name: '3 control b'
 
     :param sample_names: List of sample names
-    :return: out dict with keys: time, tissue, and rep_nr.
+    :return: out dict with keys: time, condition, and rep_nr.
     """
-    # TODO properly handle condition here
     out_dict = {'time': [],
-                'tissue': [],
+                'condition': [],
                 'rep_nr': []}
     for sample in sample_names:
-        # time = re.search(r'\d+\.\d+h', sample).group()
-        time = re.search(r'^\d+', sample).group() + ' days'
-        time = pd.to_timedelta(time)
+        time, condition, rep_letter = sample.split(' ')
+        time = pd.to_timedelta(time + ' days')
         out_dict['time'].append(time)
-        tissue = 'leaf'
-        out_dict['tissue'].append(tissue)
-        rep_letter = re.search(r'\w+$', sample).group()
+        out_dict['condition'].append(condition)
         rep_nr = string.ascii_lowercase.index(rep_letter)
         out_dict['rep_nr'].append(rep_nr)
     return out_dict
