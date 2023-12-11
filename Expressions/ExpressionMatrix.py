@@ -407,11 +407,6 @@ class ExpressionMatrix:
         self._apply_cluster_mapping_from_df(mapping_df)
 
     def assign_clusters_from_jordi_input(self, input_file_jordi, drop_duplicates=False):
-        """
-
-        :param input_file_jordi:
-        :return:
-        """
         df = pd.read_csv(input_file_jordi)
         sub_df_list = []
         # Take every second column from the dataframe
@@ -463,7 +458,8 @@ class ExpressionMatrix:
 
         :param linkage_matrix: Path to linkage matrix
                                     output by scipy linkage
-        :param n_cluster: Nr of clusters
+        :param n_cluster: Max nr of clusters, real number of clusters could be
+                          slightly lower due to tree cutting
         :param original_atted_matrix_path: Path to matrix containing atted correlations. Matrix
                            should contain gene names, and be the matrix from
                            which the linkage matrix was calculated. It is used
@@ -721,15 +717,33 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                 sns.lineplot(self.phenotype_dict[key])
                 plt.show()
 
-    def corr_to_phenotypes(self):
-        df = self._get_gene_expression_long_form()
-        df = df.groupby(['time', 'cluster']).mean()['expression'].reset_index()
-        for key, values in self.phenotype_dict.items():
-            y = values
-            for i in range(0, max(df['cluster'])+1):
-                sub_df = df[df['cluster'] == i]['expression']
-                p = np.corrcoef(sub_df, y)[0][1]
-                print(f'{i} to {key}: {p}')
+    def _corr_to_phenotypes(self, one_group_df: pd.DataFrame) -> float:
+        """Correlate eigengene of module to phenotype, to see if module can be
+         used to predict a phenotype abundance.
+
+        Only applied to one dataframe, so call in the form of a
+        df.groupby().apply() context
+
+        :param one_group_df: Dataframe that contains expressions of one module
+        :return: absolute correlation value
+        """
+        assert self.column_parser is not None, 'Explicitly provide a column_parser first'
+
+        eigengenes = self._get_eigengene_over_time(one_group_df, transform=True)
+        # TODO move this updating index
+        updated_indices = pd.DataFrame(self.column_parser(one_group_df.columns[:-1]))
+        updated_indices = updated_indices.drop('rep_nr', axis=1)
+        eigengenes.index = pd.MultiIndex.from_frame(updated_indices)
+        eigengenes = eigengenes.reset_index()
+        for phenotype, metabolite_values in self.phenotype_dict.items():
+            sub_df = metabolite_values.merge(eigengenes,
+                                             on=['time', 'condition'])
+            corr_matrix = sub_df.iloc[:, -2:].corr()
+            corr = corr_matrix.iloc[1,0]
+            # TODO handle multiple phenotypes
+            logging.warning("Can only correlate to one phenotype at the moment")
+            return abs(corr)
+
     def _get_cluster_expression_long_form(self, n_clusters: int,
                                           aggregation_method: Literal['mean', 'pca'] = 'mean'):
         """Get dataframe which shows expression of clusters over time
@@ -758,7 +772,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         column_tuples = list(zip(df_no_cluster_column, *column_info.values()))
         # Ensure we do not accidentally modify the original dataframe
         df_no_cluster_column.columns = pd.MultiIndex.from_tuples(
-            column_tuples, names=['sample_name', 'time', 'tissue', 'replicate'])
+            column_tuples, names=['sample_name', 'time', 'condition', 'replicate'])
         stacked_df = df_no_cluster_column.stack(level=['time', 'replicate'])
         # TODO check if only 1 non-NaN item per row
         # Sorry about how ugly this is, it's Friday afternoon 😶
@@ -817,23 +831,28 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                 ExpressionMatrixTimeSeries(tfs_df))
 
     def merge_biological_samples(self) -> None:
-        """Calculate average of two biological samples"""
+        """Calculate average of all biological samples"""
         # First extract meaningful information from column names,
         # so we can group by time and merge biological samples
-        column_info = get_info_from_gse5628(self.df.columns)
+        if self.has_been_clustered:
+            clustering_list = self.df['cluster_id']
+            self.df = self.df.drop('cluster_id', axis=1)
+        column_info = self.column_parser(self.df.columns)
+
         column_tuples = list(zip(self.df.columns, *column_info.values()))
         # Ensure we do not accidentally modify the original dataframe
         temp_df = self.df.copy()
         temp_df.columns = pd.MultiIndex.from_tuples(
-            column_tuples, names=['sample_name', 'time', 'tissue', 'replicate'])
-        my_grouping = temp_df.groupby('time', axis=1)
+            column_tuples, names=['sample_name', 'time', 'condition', 'replicate'])
+        my_grouping = temp_df.groupby(['time', 'condition'], axis=1)
         # Keep original sample names, even after grouping by time
         # (needed for compatibility) TODO with what?
+        # TODO handle the 'ZERO' case for gse65046
         sample_names = [v[0][0] for (_, v)
-                        in temp_df.groupby('time', axis=1).groups.items()]
+                        in my_grouping.groups.items()]
         merged_samples = my_grouping.mean()
         merged_samples.columns = sample_names
-        self.df = merged_samples
+        self.df = pd.concat([merged_samples, clustering_list], axis=1)
 
     def get_clusters_expressions_with_time(
             self,
@@ -884,7 +903,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         with out_path.open('w+') as f:
             f.writelines(lines)
 
-    def add_phenotypes(self, in_dict: Dict[str, list[float]]):
+    def add_phenotypes(self, in_dict: Dict[str, pd.Series]):
         """Provide phenotypes for this expressionmatrix, to see if modules are
         correlated to a phenotype
 
@@ -892,8 +911,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                         to its measured value at each time point
         """
         self.phenotype_dict = in_dict
-        # for i in self.phenotype_dict.values():
-        #     assert len(i) == len(self.)
 
     def get_correlation(self, module_index: int, tf_name: str,
                         plot: bool = False, method: str = 'pearson') -> float:
@@ -948,10 +965,10 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         plt.show()
         # plt.savefig('test_output.svg')
 
-    def _get_characteristics_of_clusters(self):
+    def _get_characteristics_of_clusters(self, tf2_output: Path) -> pd.DataFrame:
         """Retrieve how the clusters behave in the dataset
 
-        Returns:
+        Returns a df containing
             - the percentage of explained variance of the first PC to measure
               expression coherence
             - Mean pairwise absolute correlation to also measure
@@ -959,9 +976,11 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             - Size of the cluster
             - How much its expression changes over time
             - Median expression of genes in module to see if it is switched on
+            - Correlation to a phenotype (in self.phenotype_dict)
         """
         grouped_df = self.df.groupby('cluster_id')
         size = grouped_df.apply(len)
+        corr_to_phenotype = grouped_df.apply(self._corr_to_phenotypes)
         explained_var = grouped_df.apply(self._get_eigengene_explained_var,
                                          transform=True)
         mean_pairwise_abs_cor = grouped_df.apply(self._mean_pairwise_abs_cor)
@@ -970,16 +989,20 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         median_expression = grouped_df.median().T.median()
         summary_df = pd.concat([explained_var, size,
                                 var_through_time, median_expression,
-                                mean_pairwise_abs_cor], axis=1)
+                                mean_pairwise_abs_cor, corr_to_phenotype], axis=1)
+        tf2_df = pd.read_csv(tf2_output, sep='\t')
+        has_tfbs = summary_df.index.isin(tf2_df['GeneSet']).astype(int)
         summary_df.columns = ['explained_var',
                               'size',
                               'var_through_time',
                               'median_expression',
-                              'mean_pairwise_abs_cor']
+                              'mean_pairwise_abs_cor',
+                              'corr_to_phenotype']
+        summary_df = summary_df.assign(tfbs_present=has_tfbs)
         return summary_df
 
     @staticmethod
-    def _mean_pairwise_abs_cor(one_group_df: pd.Dataframe) -> float:
+    def _mean_pairwise_abs_cor(one_group_df: pd.Dataframe) -> float | np.floating:
         """Get the mean pairwise absolute correlation between all variable.
 
         Method typically called in a grouped_df.apply()
@@ -1004,7 +1027,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         :param one_group_df: Dataframe that should come from one cluster.
         :param transform: If true, apply mean centering and scale normalising
                           before doing PCA
-        :return:
+        :return: explained variance as float
         """
         # Calculate PCA
         one_group_df = one_group_df.drop('cluster_id', axis=1)
@@ -1013,7 +1036,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
     @classmethod
     def _get_eigengene_variation_over_time(cls, one_group_df: pd.DataFrame,
-                                           transform: bool) -> float:
+                                           transform: bool) -> float | np.floating:
         """Standard deviation of eigengene over time
 
         Used to see if a gene module changes expression throughout
@@ -1022,19 +1045,34 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         :param one_group_df: Dataframe that should come from one cluster.
         :param transform: If true, apply mean centering and scale normalising
                           before doing PCA
-        :return:
+        :return: standard deviation of eigenvalues
+        """
+        eigen_values_through_time = cls._get_eigengene_over_time(one_group_df, transform)
+        return np.std(eigen_values_through_time)
+
+    @classmethod
+    def _get_eigengene_over_time(cls, one_group_df: pd.DataFrame,
+                                           transform: bool) -> pd.Series:
+        """Get the series of the module eigengene, to see how it behaves over
+           time. Only applies this to one module, so recommended calling this
+           from a grouped_df.apply context.
+
+        :param one_group_df: Dataframe of one module to apply eigengene
+                             methodology to.
+        :param transform: If true, perform scaling before PCA
+        :return: expression of module eigengene at all time points
         """
         one_group_df = one_group_df.drop('cluster_id', axis=1)
         # Calculate PCA
         pca = cls._do_pca_of_group(one_group_df, transform)
-        eigen_values_through_time = pca.transform(one_group_df.T)
-        return np.std(eigen_values_through_time)
-
-        # q3, q1 = np.percentile(eigen_values_through_time, [75, 25])
-        # iqr = q3 - q1
-        # cod = iqr / (q3 + q1)
-        # return cod
-
+        eigen_values_through_time = pca.transform(one_group_df.T).flatten()
+        eigen_value_to_mean_expression_corr = np.corrcoef([one_group_df.mean(),
+                                                           eigen_values_through_time])
+        # Set correlation between eigengene and mean expression to be positive
+        # since direction of PC is arbitrary
+        if eigen_value_to_mean_expression_corr[0, 1] < 0:
+            eigen_values_through_time = eigen_values_through_time * -1
+        return pd.Series(eigen_values_through_time)
     @classmethod
     def _do_pca_of_group(cls, one_group_df: pd.DataFrame, transform: bool) -> PCA:
         """For one gene module, do PCA with one component to get idea of
@@ -1053,22 +1091,30 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         pca.fit(transposed_df)
         return pca
 
-    def get_z_score_of_cluster_characteristics(self):
-        """TODO work in progress, but we will use something like this
-            to select final modules for inclusion in the ODE model"""
-        summary_df = self._get_characteristics_of_clusters()
-        # Calculate Z score per category
+    def get_z_score_of_cluster_characteristics(self, tf2_output: Path) -> pd.DataFrame:
+        """For clusters, get their sum of z-scores to find out which is the
+           most interesting to look at
+
+        :param tf2_output: Path to TF2Network output file, used to see if
+                           modules have an enriched TFBS
+        :return: dataframe of z_scores for each module
+        """
+        summary_df = self._get_characteristics_of_clusters(tf2_output)
+        # TODO do we actually need to care about size, don't think so
+        #  neither should we look at mean pairwise abs corr
+        summary_df = summary_df.drop(['size', 'mean_pairwise_abs_cor'], axis=1)
+        # Get Z scores
         z_scores = summary_df.apply(zscore)
         summary_df = summary_df.assign(z_sum=z_scores.sum(axis=1))
-        summary_df.sort_values('z_sum').head(5)
-        plotting = False
+        z_scores = z_scores.assign(z_sum=z_scores.sum(axis=1))
+
+        # View some of the best clusters
+        summary_df.sort_values('z_sum', ascending=False).head(5)
+        plotting = True
         if plotting:
             # Is higher better for all? Or how can we make it that way?
-            sns.histplot(z_scores)
+            sns.histplot(z_scores, kde=True, element='step')
             plt.show()
             sns.boxplot(z_scores.sum(axis=1))
             plt.show()
         return z_scores
-
-
-
