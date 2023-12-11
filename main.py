@@ -71,11 +71,34 @@ def annotate_microarray_expression(
 
 def pipeline_from_atted_clustering(soft_file_path: Path,
                                    atted_linkage_matrix: Path,
+                                   metabolites_path: Path,
                                    do_log2: bool = True
                                    ):
     expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(soft_file_path,
                                                         log2_transform=do_log2,
                                                              annotate_from_gpl=True)
+    metabolite_time_series = pd.read_excel(metabolites_path,
+                                           index_col=0 ,
+                                           header = [0, 1, 2]
+                                           )
+    # Convert the time level to pd.timedelta
+    columns_as_frame = metabolite_time_series.columns.to_frame()
+    columns_as_frame['time'] = pd.to_timedelta(columns_as_frame['time'])
+    multi_index = pd.MultiIndex.from_frame(columns_as_frame)
+    metabolite_time_series = metabolite_time_series.set_axis(multi_index, axis=1)
+
+    metabolite_time_series = metabolite_time_series.groupby(
+        level=[0,1], axis=1).mean()
+    metabolite_time_series = metabolite_time_series.dropna()
+
+    # Start with ABA?
+    aba_series = metabolite_time_series.loc['Abscisic acid (ABA) ', :]
+    aba_series = aba_series.reset_index()
+
+    sns.lineplot(data=aba_series, x='time', y='Abscisic acid (ABA) ', hue='condition')
+    plt.show()
+
+    expr_mat_time.add_phenotypes({'aba': aba_series})
     atted_path = Path('data/atted_ii/all_cor_one_matrix_renamed.csv')
     nr_clusters = 500
     expr_mat_time.assign_clusters_from_linkage_matrix(atted_linkage_matrix,
@@ -83,8 +106,13 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
                                                       atted_path=atted_path)
     expr_mat_time.plot_cluster_sizes()
     expr_mat_time.write_tf2_input_file(Path(f'data/gse65046/{nr_clusters}_clusters_tf2_input.txt'))
-    expr_mat_time.show_characteristics_of_clusters()
-    expr_mat_time.get_z_score_of_cluster_characteristics()
+    expr_mat_time.column_parser = get_info_from_gse65046
+    expr_mat_time.merge_biological_samples()
+    # expr_mat_time._corr_to_phenotypes()
+    # TF2Output file should be here
+    tf2_out_path = Path('data/gse65046/02_500_clusters_tf2network_output.tsv')
+    # expr_mat_time.show_characteristics_of_clusters()
+    expr_mat_time.get_z_score_of_cluster_characteristics(tf2_output=tf2_out_path)
 
 
 def full_pipeline_prototype(out_dir: Path,
@@ -510,8 +538,8 @@ def camila_red_panda(soft_file_in_path: Path,
 if __name__ == "__main__":
     in_path = Path('data/gse65046/GSE65046_family.soft')
     linkage_matrix = Path('data/atted_ii/linkage_matrices/all_cor_one_matrix_renamed_complete_linkage.npy')
-
-    pipeline_from_atted_clustering(in_path, linkage_matrix)
+    measured_metabolites = Path('data/gse65046/plcell_v28_2_345_s1/TPC2015-00910-LSBR1_Supplemental_Data_sets_1_18.xlsx')
+    pipeline_from_atted_clustering(in_path, linkage_matrix, measured_metabolites)
     #
     # my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(Path('data/gse65046/02_500_clusters_tf2network_output.tsv'))
     # my_grn.add_tf_module_mappings(Path('data/gse65046/500_clusters_tf2_input.txt'), from_tf2_input=True)
