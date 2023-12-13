@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 from typing import Callable
 
+import networkx as nx
 import numpy as np
 from lmfit import Parameters
 from scipy.integrate._ivp.ivp import OdeResult, solve_ivp
@@ -19,9 +21,11 @@ class OdeModel:
 
     def __init__(self,
                  formula_per_module: list[LinearFormula | NonLinearFormula],
-                 is_nonlinear: bool):
+                 is_nonlinear: bool,
+                 old_to_new_mapping: dict[str, str]):
         self.formula_per_module = formula_per_module
         self.is_nonlinear = is_nonlinear
+        self.old_to_new_mapping = old_to_new_mapping
 
     def __repr__(self):
         return ('OdeModel:\n'
@@ -62,6 +66,14 @@ class OdeModel:
                        for _, _, origin in regulatory_directions), \
                 ('Make sure you have removed all TFs from regulatory '
                  'network and converted it to Module-Module network')
+        mapping_dict = {}
+        # Rename all modules
+        for new_module_index, old_module_name in enumerate(sorted(list(graph))):
+            new_module_name = re.sub(r'\d+$',
+                                              str(new_module_index),
+                                              old_module_name)
+            mapping_dict[old_module_name] = new_module_name
+        graph = nx.relabel_nodes(graph, mapping_dict)
         # Iterate over modules in lexicographic order
         for module in sorted(list(graph)):
             if nonlinear:
@@ -71,7 +83,7 @@ class OdeModel:
                 regulators = list(graph.predecessors(module))
                 formula = LinearFormula(module, regulators)
             formulas.append(formula)
-        return cls(formulas, nonlinear)
+        return cls(formulas, nonlinear, mapping_dict)
 
     def compute_one_step(self, t: float, y: list[float],
                          params: dict[str, float]) -> list[float]:

@@ -42,7 +42,7 @@ class OdeFitterMultipleDatasets:
         for dataset in datasets:
             assert dataset.has_been_clustered
             time, data = dataset.get_clusters_expressions_with_time(
-                0, aggregation_method='mean')
+                0, aggregation_method='pca')
             u_t_for_dataset = custom_params_per_dataset[dataset].u_t
             fitter = OdeFitter(copy.deepcopy(ode_model), data, time, param_limit=param_limit,
                                u_t_function=u_t_for_dataset,

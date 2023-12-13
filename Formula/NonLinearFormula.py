@@ -19,7 +19,7 @@ class FormulaSuperClass:
         :param regulator_names: List of all modules that regulate this module
         """
         self.module_name = module_name
-        self.module_index = int(module_name[-1])
+        self.module_index = self.module_name_to_index(module_name)
         self.params = []
         self.regulator_names = []
         # Capture each term of the formula
@@ -55,6 +55,10 @@ class FormulaSuperClass:
         self.compiled_formula_string = compile(self.formula_string.lstrip(),
                                                "<string>", "eval")
         self.formula_is_compiled = True
+
+    @staticmethod
+    def module_name_to_index(module_name):
+        return int(re.search(r'\d+$', module_name).group())
 
     @staticmethod
     def generate_linear_term(param_name: str, var_name: str,
@@ -136,7 +140,7 @@ class LinearFormula(FormulaSuperClass):
         :param regulator: Name of regulator module, e.g. MODULE3
         :return: Name of the new parameter
         """
-        regulator_index = int(regulator[-1])
+        regulator_index = self.module_name_to_index(regulator)
         b_param_name = f'beta_{regulator_index}_{self.module_index}'
         self.regulator_names.append(regulator)
         self.params.append(b_param_name)
@@ -154,7 +158,7 @@ class LinearFormula(FormulaSuperClass):
         :return: Name of the new parameter"""
         raise NotImplementedError('Since rewriting this class, '
                                   'this method is broken')
-        regulator_index = int(regulator_to_remove[-1])
+        regulator_index = self.module_name_to_index(regulator_to_remove)
         b_param_name = f'beta_{regulator_index}_{self.module_index}'
         assert regulator_to_remove in self.regulator_names, \
             'Regulator cannot be removed, it is not present in the current formula'
@@ -201,6 +205,8 @@ class NonLinearFormula(FormulaSuperClass):
             for i, time_point in enumerate(t):
                 all_params = params.valuesdict() | {'y': current_fit.y[:, i]}
                 outcome = eval(formula_part, {}, all_params)
+                raise NotImplementedError('Might not be able to handle'
+                                          ' module names with two digit indices')
                 norm_outcome = outcome / all_params[f'beta_{self.regulator_names[regulator_count][-1]}_{self.module_name[-1]}']
                 yield (f'{self.regulator_names[regulator_count]}->{self.module_name}',
                        time_point, outcome, norm_outcome)
@@ -234,7 +240,7 @@ class NonLinearFormula(FormulaSuperClass):
          and the input variable (e.g. y[1]) should be.
          """
         # Assume module index is integer at end of module name
-        regulator_index = int(re.search(r'\d+$', regulator).group())
+        regulator_index = self.module_name_to_index(regulator)
         b_param_name = f'beta_{regulator_index}_{self.module_index}'
         k_param_name = f'k_{regulator_index}_{self.module_index}'
         var_name = f'y[{regulator_index}]'

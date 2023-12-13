@@ -140,7 +140,7 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
     expr_mat_control.keep_only_samples_with_string('control')
     expr_mat_control.plot_clusters_over_time(title='Control')
 
-    # fit_ode_to_two_datasets(module_module, expr_mat_drought, expr_mat_control)
+    fit_ode_to_two_datasets(module_module, expr_mat_drought, expr_mat_control)
 
 
 def full_pipeline_prototype(out_dir: Path,
@@ -351,12 +351,19 @@ def fit_ode_to_two_datasets(
     my_time_series_expressions.plot_clusters_over_time()
     control_experiment.plot_clusters_over_time()
     # Step uno
-    multiple_fitters = [OdeFitterMultipleDatasets(
+    my_fitter = OdeFitterMultipleDatasets(
         my_ode, [my_time_series_expressions, control_experiment],
         custom_params,
-        param_limit=5) for _ in range(5)]
-    best_fit = fit_multiple_fitters(multiple_fitters, 100)
-    best_fit.calculate_current_best_fits(fig_path)
+        param_limit=5)
+    my_fitter.fit(max_iter=50)
+    my_fitter.calculate_current_best_fits()
+    # # Step uno
+    # multiple_fitters = [OdeFitterMultipleDatasets(
+    #     my_ode, [my_time_series_expressions, control_experiment],
+    #     custom_params,
+    #     param_limit=5) for _ in range(5)]
+    # best_fit = fit_multiple_fitters(multiple_fitters, 100)
+    # best_fit.calculate_current_best_fits(fig_path)
     # multiple_fitter.fit(100)
     # best_fits = multiple_fitter.calculate_current_best_fits()
 
