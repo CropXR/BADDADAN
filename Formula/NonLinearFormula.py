@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Tuple, Generator, Callable
 
 import numpy as np
@@ -232,7 +233,8 @@ class NonLinearFormula(FormulaSuperClass):
         """For a given regulator, generate what the names of beta, k,
          and the input variable (e.g. y[1]) should be.
          """
-        regulator_index = int(regulator[-1])
+        # Assume module index is integer at end of module name
+        regulator_index = int(re.search(r'\d+$', regulator).group())
         b_param_name = f'beta_{regulator_index}_{self.module_index}'
         k_param_name = f'k_{regulator_index}_{self.module_index}'
         var_name = f'y[{regulator_index}]'
