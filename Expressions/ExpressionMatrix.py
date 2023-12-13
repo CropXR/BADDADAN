@@ -914,7 +914,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
     def get_correlation(self, module_index: int, tf_name: str,
                         plot: bool = False, method: str = 'pearson') -> float:
-        """Calculate the correlation between mean expression of a module and a
+        """Calculate the correlation between eigengene of a module and a
         transcription factor
 
         :param module_index: the index of the module (e.g. 1)
@@ -926,19 +926,27 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         if tf_name not in self.df.index:
             logging.warning(f'TF ({tf_name}) not present in dataframe')
             return np.nan
-        module_expressions = self.df.groupby('cluster_id').mean()
-        selected_module_expression = module_expressions.loc[module_index]
-
+        module_expressions = self.df[self.df['cluster_id'] == module_index]
+        module_expressions = self._get_eigengene_over_time(module_expressions,
+                                                           transform=True)
         tf_expressions = self.df.loc[tf_name]
         tf_expressions = tf_expressions.drop('cluster_id')
+        # Ensure that indices match between eigengene and transciption factor
+        # Otherwise cannot calculate correlation
+        updated_indices = pd.DataFrame(
+            self.column_parser(tf_expressions.index))
+        updated_indices = updated_indices.drop('rep_nr', axis=1)
+        tf_expressions.index = pd.MultiIndex.from_frame(updated_indices)
+
         if plot:
             fig, ax = plt.subplots()
-            ax.plot(selected_module_expression.to_numpy(),
+            ax.plot(module_expressions.to_numpy(),
                     tf_expressions.to_numpy(), 'o')
             ax.set_xlabel(f'Module {module_index} expression')
             ax.set_ylabel(f'{tf_name} expression')
             plt.show()
-        return tf_expressions.corr(selected_module_expression, method=method)
+        corr =  tf_expressions.corr(module_expressions, method=method)
+        return corr
 
     def show_characteristics_of_clusters(self):
         """Plot how the clusters behave in the dataset
@@ -1034,8 +1042,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         pca = cls._do_pca_of_group(one_group_df, transform)
         return pca.explained_variance_ratio_[0]
 
-    @classmethod
-    def _get_eigengene_variation_over_time(cls, one_group_df: pd.DataFrame,
+    def _get_eigengene_variation_over_time(self, one_group_df: pd.DataFrame,
                                            transform: bool) -> float | np.floating:
         """Standard deviation of eigengene over time
 
@@ -1047,11 +1054,10 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                           before doing PCA
         :return: standard deviation of eigenvalues
         """
-        eigen_values_through_time = cls._get_eigengene_over_time(one_group_df, transform)
+        eigen_values_through_time = self._get_eigengene_over_time(one_group_df, transform)
         return np.std(eigen_values_through_time)
 
-    @classmethod
-    def _get_eigengene_over_time(cls, one_group_df: pd.DataFrame,
+    def _get_eigengene_over_time(self, one_group_df: pd.DataFrame,
                                            transform: bool) -> pd.Series:
         """Get the series of the module eigengene, to see how it behaves over
            time. Only applies this to one module, so recommended calling this
@@ -1064,15 +1070,20 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """
         one_group_df = one_group_df.drop('cluster_id', axis=1)
         # Calculate PCA
-        pca = cls._do_pca_of_group(one_group_df, transform)
+        pca = self._do_pca_of_group(one_group_df, transform)
         eigen_values_through_time = pca.transform(one_group_df.T).flatten()
-        eigen_value_to_mean_expression_corr = np.corrcoef([one_group_df.mean(),
-                                                           eigen_values_through_time])
         # Set correlation between eigengene and mean expression to be positive
         # since direction of PC is arbitrary
+        eigen_value_to_mean_expression_corr = np.corrcoef([one_group_df.mean(),
+                                                           eigen_values_through_time])
         if eigen_value_to_mean_expression_corr[0, 1] < 0:
             eigen_values_through_time = eigen_values_through_time * -1
-        return pd.Series(eigen_values_through_time)
+        eigen_values_through_time = pd.Series(eigen_values_through_time)
+        updated_indices = pd.DataFrame(
+            self.column_parser(one_group_df.columns))
+        updated_indices = updated_indices.drop('rep_nr', axis=1)
+        eigen_values_through_time.index = pd.MultiIndex.from_frame(updated_indices)
+        return eigen_values_through_time
     @classmethod
     def _do_pca_of_group(cls, one_group_df: pd.DataFrame, transform: bool) -> PCA:
         """For one gene module, do PCA with one component to get idea of
@@ -1091,7 +1102,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         pca.fit(transposed_df)
         return pca
 
-    def get_z_score_of_cluster_characteristics(self, tf2_output: Path) -> pd.DataFrame:
+    def get_z_score_of_cluster_characteristics(self, tf2_output: Path, plotting=False) -> pd.DataFrame:
         """For clusters, get their sum of z-scores to find out which is the
            most interesting to look at
 
@@ -1108,9 +1119,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         summary_df = summary_df.assign(z_sum=z_scores.sum(axis=1))
         z_scores = z_scores.assign(z_sum=z_scores.sum(axis=1))
 
-        # View some of the best clusters
-        summary_df.sort_values('z_sum', ascending=False).head(5)
-        plotting = True
         if plotting:
             # Is higher better for all? Or how can we make it that way?
             sns.histplot(z_scores, kde=True, element='step')
@@ -1118,3 +1126,18 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             sns.boxplot(z_scores.sum(axis=1))
             plt.show()
         return z_scores
+
+    def keep_highest_z_clusters(self, nr_clusters: int, tf2_output_path: Path) -> pd.DataFrame:
+        """Only keep clusters with highest z_scores. Modifies object in-place.
+
+        :param nr_clusters: Top number of clusters to select
+        :param tf2_output_path: Path to TF2Output, used to determine if module
+                                contains TFBS (which has positive
+                                impact on z-score).
+        :return: Dataframe of z-scores of the best clusters
+        """
+        z_scores = self.get_z_score_of_cluster_characteristics(tf2_output_path)
+        best_clusters = z_scores.sort_values(
+            'z_sum', ascending=False).head(nr_clusters)
+        self.df = self.df[self.df['cluster_id'].isin(best_clusters.index)]
+        return best_clusters
