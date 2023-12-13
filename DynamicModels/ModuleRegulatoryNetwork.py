@@ -378,4 +378,45 @@ class ModuleRegulatoryNetwork:
                               for key, value in cluster_to_gene_dict.items()}
         nx.set_node_attributes(self.graph, module_name_as_key, name='gene_names')
 
+    def save_for_cytoscape(self, out_path: Path):
+        """Save edge list for opening network in Cytoscape
+
+        :param out_path: tsv file to save file to
+        """
+        # TODO correctly add edge attributes to this output
+        # nx.write_edgelist(self.graph, out_path)
+        # Save gene pairs to a file
+        with out_path.open('w+') as f:
+            f.write("Gene1\tGene2\tCorr_strength\n")
+            for pair in self.graph.edges(data=True):
+                f.write(f"{pair[0]}\t{pair[1]}\t{pair[2]}\n")
+
+    def keep_only_modules_of_interest(self, expr_mat: ExpressionMatrixTimeSeries):
+        """Only maintain nodes that belong to a module that is still in the expr_mat
+
+        Used if you have filtered certain modules in the expression data, and
+        only want to see what their intermodular network looks like.
+
+        :param expr_mat: Expression matrix that only contains clusters of interest
+        """
+        valid_edges = []
+        modules = expr_mat.get_genes_per_cluster().keys()
+        for edge in self.graph.edges(data=True):
+            edge_type = edge[2]['origin']
+            if edge_type == EdgeRelation.BINDS_TO:
+                module_index = 1
+            elif edge_type == EdgeRelation.TRANSCRIBED_BY:
+                module_index = 0
+            else:
+                raise NotImplementedError('Currently can only keep modules '
+                                          'when selecting in a TF->MODULE '
+                                          'network')
+
+            module_int = int(edge[module_index].replace(self.module_prefix, ''))
+            if module_int in modules:
+                valid_edges.append(edge)
+
+        new_graph = nx.from_edgelist(valid_edges, nx.DiGraph)
+        self.graph = new_graph
+
 
