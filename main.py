@@ -74,9 +74,11 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
                                    metabolites_path: Path,
                                    do_log2: bool = True
                                    ):
-    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(soft_file_path,
-                                                        log2_transform=do_log2,
-                                                             annotate_from_gpl=True)
+    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
+        soft_file_path,
+        log2_transform=do_log2,
+        annotate_from_gpl=True
+    )
     metabolite_time_series = pd.read_excel(metabolites_path,
                                            index_col=0 ,
                                            header = [0, 1, 2]
@@ -105,14 +107,40 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
                                                       nr_clusters,
                                                       atted_path=atted_path)
     expr_mat_time.plot_cluster_sizes()
-    expr_mat_time.write_tf2_input_file(Path(f'data/gse65046/{nr_clusters}_clusters_tf2_input.txt'))
+    tf2_in_path = Path(f'data/gse65046/{nr_clusters}_clusters_tf2_input.txt')
+    expr_mat_time.write_tf2_input_file(tf2_in_path)
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.merge_biological_samples()
-    # expr_mat_time._corr_to_phenotypes()
     # TF2Output file should be here
-    tf2_out_path = Path('data/gse65046/02_500_clusters_tf2network_output.tsv')
-    # expr_mat_time.show_characteristics_of_clusters()
-    expr_mat_time.get_z_score_of_cluster_characteristics(tf2_output=tf2_out_path)
+    tf2_out_path = Path(f'data/gse65046/02_{nr_clusters}_clusters_tf2network_output.tsv')
+    expr_mat_time.keep_highest_z_clusters(15, tf2_out_path)
+
+    my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(tf2_out_path)
+    my_grn.add_tf_module_mappings(tf2_in_path,
+                                  from_tf2_input=True)
+    my_grn.keep_only_modules_of_interest(expr_mat_time)
+    my_grn.clean_up_network()
+    my_grn.check_if_tfs_created_by_module(expr_mat_time, do_plotting=True,
+                                          remove_low_corr=True)
+    my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True, threshold=.4)
+    # my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
+    module_module = my_grn.get_module_module_network()
+    # # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
+    module_module.plot_network(with_labels=True)
+
+    # My god it's ugly but I'll fix it later
+    expr_mat_time.df = expr_mat_time.df[
+        expr_mat_time.df['cluster_id'].isin([int(i.replace(module_module.module_prefix, ""))
+                                             for i in module_module.get_modules()])]
+    expr_mat_drought = copy.deepcopy(expr_mat_time)
+    expr_mat_drought.keep_only_samples_with_string('drought')
+    expr_mat_drought.plot_clusters_over_time(title='Drought')
+
+    expr_mat_control = copy.deepcopy(expr_mat_time)
+    expr_mat_control.keep_only_samples_with_string('control')
+    expr_mat_control.plot_clusters_over_time(title='Control')
+
+    # fit_ode_to_two_datasets(module_module, expr_mat_drought, expr_mat_control)
 
 
 def full_pipeline_prototype(out_dir: Path,
@@ -172,7 +200,6 @@ def full_pipeline_prototype(out_dir: Path,
     module_module = my_grn.get_module_module_network()
     # # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
     module_module.plot_network(with_labels=True)
-
 
     # expr_mat_time.assign_clusters_from_jordi_input(input_file_jordi, drop_duplicates=True)
     # expr_mat_subset.add_phenotypes(phenotype_dict[condition])
