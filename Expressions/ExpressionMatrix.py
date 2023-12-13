@@ -538,15 +538,15 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                                         values='expression')
             return summary_df
         elif aggregation_method == 'pca':
-            # # PCA-based
-            pca_values = self.df.groupby('cluster_id').apply(do_pca)
-            plt.legend()
-            plt.show()
-            raise NotImplementedError("Cannot yet use these pca values"
-                                      " downstream in the pipeline")
+            # PCA-based
+            eigengenes = self.df.groupby('cluster_id').apply(
+                self._get_eigengene_over_time, transform=True)
+            # Convert to long form
+            eigengenes = eigengenes.T.reset_index().melt(
+                id_vars=['time', 'condition'], value_name='expression')
+            return eigengenes
         else:
             raise NotImplementedError(f'{aggregation_method=} is not implemented')
-        # PERFORM EIGENGENE clustering at each timepoint(?)
 
     def save_tf_produced_by_module_file(self, out_file_path: Path,
                                         tf_list_path: Path):
@@ -712,10 +712,10 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         if title:
             plt.title(title)
         plt.show()
-        if self.phenotype_dict:
-            for key in self.phenotype_dict:
-                sns.lineplot(self.phenotype_dict[key])
-                plt.show()
+        # if self.phenotype_dict:
+        #     for key in self.phenotype_dict:
+        #         sns.lineplot(self.phenotype_dict[key])
+        #         plt.show()
 
     def _corr_to_phenotypes(self, one_group_df: pd.DataFrame) -> float:
         """Correlate eigengene of module to phenotype, to see if module can be
@@ -729,19 +729,16 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """
         assert self.column_parser is not None, 'Explicitly provide a column_parser first'
 
-        eigengenes = self._get_eigengene_over_time(one_group_df, transform=True)
-        # TODO move this updating index
-        updated_indices = pd.DataFrame(self.column_parser(one_group_df.columns[:-1]))
-        updated_indices = updated_indices.drop('rep_nr', axis=1)
-        eigengenes.index = pd.MultiIndex.from_frame(updated_indices)
+        eigengenes = self._get_eigengene_over_time(one_group_df,
+                                                   transform=True)
         eigengenes = eigengenes.reset_index()
+        logging.warning("Can only correlate to one phenotype at the moment")
         for phenotype, metabolite_values in self.phenotype_dict.items():
             sub_df = metabolite_values.merge(eigengenes,
                                              on=['time', 'condition'])
             corr_matrix = sub_df.iloc[:, -2:].corr()
             corr = corr_matrix.iloc[1,0]
             # TODO handle multiple phenotypes
-            logging.warning("Can only correlate to one phenotype at the moment")
             return abs(corr)
 
     def _get_cluster_expression_long_form(self, n_clusters: int,
@@ -752,8 +749,10 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         out_df = self.extract_module_expressions(n_clusters, do_plotting=False,
                                                  aggregation_method=aggregation_method)
         # Get time point info from sample names
-        new_cols = self.column_parser(out_df['sample'].to_list())
-        out_df = pd.concat([out_df, pd.DataFrame.from_dict(new_cols)], axis=1)
+        # Parse time info based on columns
+        if 'time' not in out_df.columns:
+            new_cols = self.column_parser(out_df['sample'].to_list())
+            out_df = pd.concat([out_df, pd.DataFrame.from_dict(new_cols)], axis=1)
         out_df['elapsed_mins'] = out_df['time'].astype('timedelta64[m]')
         return out_df
 
@@ -857,7 +856,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
     def get_clusters_expressions_with_time(
             self,
             n_clusters: int,
-            aggregation_method: Literal['mean', 'pca'] = 'mean'
+            aggregation_method: Literal['mean', 'pca'] = 'pca'
     ) -> tuple[np.ndarray, np.ndarray]:
         """For fitting ODEs, get expression of clusters over time.
         First array in tuple indicates time_points in minutes, second array
@@ -867,15 +866,17 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """
         some_df = self._get_cluster_expression_long_form(
             n_clusters, aggregation_method=aggregation_method)
-        # Take mean of all biological replicates
-        some_df = some_df.groupby(['cluster_id', 'elapsed_mins']).mean(
-            numeric_only=True).reset_index()
-        new_df = some_df.pivot(index='cluster_id', columns='elapsed_mins',
+        # Slightly different preprocessing in case mean aggregation was used
+        if aggregation_method == 'mean':
+            # Take mean of all biological replicates
+            some_df = some_df.groupby(['cluster_id', 'elapsed_mins']).mean(
+                numeric_only=True).reset_index()
+        some_df = some_df.pivot(index='cluster_id', columns='elapsed_mins',
                                values='expression')
-        time_points = new_df.columns.to_numpy()
+        time_points = some_df.columns.to_numpy()
         # Convert time to hours
         time_points = time_points / 60
-        module_expressions = new_df.to_numpy()
+        module_expressions = some_df.to_numpy()
         return time_points, module_expressions
 
     def write_tf2_input_file(self, out_path: Path,
