@@ -343,17 +343,18 @@ def fit_ode_to_two_datasets(
     # They are the initial values, and the drought treatment (i.e. u_t function)
     custom_params = dict()
     # TODO make these lambda functions more interpretable, e.g. change them into a custom object
-    # custom_params[my_time_series_expressions] = OdeLocalParameters(
-    #      u_t=(lambda t: 100 - t * (100 - 20) / (13 * 24)))
+    small_constant = 0.01
+
     custom_params[my_time_series_expressions] = OdeLocalParameters(
-        u_t=(lambda t: 0))
+         u_t=(lambda t: small_constant*(100 - t * (100 - 20) / (13 * 24))))
 
     custom_params[control_experiment] = OdeLocalParameters(
-        u_t=(lambda t: 0))
+         u_t=(lambda t: small_constant*(90 - t * 0)))
 
+    # custom_params[my_time_series_expressions] = OdeLocalParameters(
+    #     u_t=(lambda t: 0))
     # custom_params[control_experiment] = OdeLocalParameters(
-    #      u_t=(lambda t: 90 - t * 0))
-
+    #     u_t=(lambda t: 0))
     # my_time_series_expressions.plot_clusters_over_time()
     # control_experiment.plot_clusters_over_time()
     # Step uno
