@@ -205,7 +205,7 @@ class OdeModel:
         y_pred = solve_ivp(self.compute_one_step, (t_start, t_end),
                                 y0,
                                 t_eval=t,
-                                args=[params], method='RK45')
+                                args=[params], method='RK23')
         assert y_pred.success, (
             f"Integration failed: {y_pred.message}"
             f"\nParams: {params}")

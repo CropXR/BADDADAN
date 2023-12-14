@@ -113,7 +113,7 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
     expr_mat_time.merge_biological_samples()
     # TF2Output file should be here
     tf2_out_path = Path(f'data/gse65046/02_{nr_clusters}_clusters_tf2network_output.tsv')
-    expr_mat_time.keep_highest_z_clusters(15, tf2_out_path)
+    expr_mat_time.keep_highest_z_clusters(10, tf2_out_path)
 
     my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(tf2_out_path)
     my_grn.add_tf_module_mappings(tf2_in_path,
@@ -343,19 +343,25 @@ def fit_ode_to_two_datasets(
     # They are the initial values, and the drought treatment (i.e. u_t function)
     custom_params = dict()
     # TODO make these lambda functions more interpretable, e.g. change them into a custom object
+    # custom_params[my_time_series_expressions] = OdeLocalParameters(
+    #      u_t=(lambda t: 100 - t * (100 - 20) / (13 * 24)))
     custom_params[my_time_series_expressions] = OdeLocalParameters(
-         u_t=(lambda t: 100 - t * (100 - 20) / (13 * 24)))
-    custom_params[control_experiment] = OdeLocalParameters(
-         u_t=(lambda t: 90 - t * 0))
+        u_t=(lambda t: 0))
 
-    my_time_series_expressions.plot_clusters_over_time()
-    control_experiment.plot_clusters_over_time()
+    custom_params[control_experiment] = OdeLocalParameters(
+        u_t=(lambda t: 0))
+
+    # custom_params[control_experiment] = OdeLocalParameters(
+    #      u_t=(lambda t: 90 - t * 0))
+
+    # my_time_series_expressions.plot_clusters_over_time()
+    # control_experiment.plot_clusters_over_time()
     # Step uno
     my_fitter = OdeFitterMultipleDatasets(
         my_ode, [my_time_series_expressions, control_experiment],
         custom_params,
-        param_limit=5)
-    my_fitter.fit(max_iter=50)
+        param_limit=1)
+    my_fitter.fit(max_iter=100)
     my_fitter.calculate_current_best_fits()
     # # Step uno
     # multiple_fitters = [OdeFitterMultipleDatasets(
