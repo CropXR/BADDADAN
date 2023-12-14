@@ -52,7 +52,7 @@ class OdeFitterMultipleDatasets:
                      f'to be fitted simultaneously.')
 
         # Master params are the parameters that are the same between all fitters
-        self._master_params = self.all_fitters[0].params.copy()
+        self._master_params = self._get_master_params_from_fitters()
 
         # Custom (or local) parameters are the parameters that are different between the fitters.
         # First off; the initial values are different between fits
@@ -156,7 +156,7 @@ class OdeFitterMultipleDatasets:
             real = fitter.measured_data
             plot_y_and_y_hat(real, fitter.time_points, pred, axs=ax)
         plt.tight_layout()
-        plt.savefig(out_path)
+        # plt.savefig(out_path)
         plt.show()
 
     @property
@@ -188,3 +188,17 @@ class OdeFitterMultipleDatasets:
                     'Setting non_heat_temp as local global parameter')
                 fitter.params['non_heat_temp'].set(value=new_parameters['non_heat_temp'].value)
             fitter.has_been_fitted = True
+
+    def _get_master_params_from_fitters(self) -> Parameters:
+        """
+        If ranges are slightly different between parameters,
+        ensure that the global parameters have the largest range.
+        """
+        master_params = self.all_fitters[0].params.copy()
+        for fitter in self.all_fitters:
+            for param_name, param_object in fitter.params.items():
+                master_params[param_name].min = min(param_object.min,
+                                                    master_params[param_name].min)
+                master_params[param_name].max = max(param_object.max,
+                                                    master_params[param_name].max)
+        return master_params
