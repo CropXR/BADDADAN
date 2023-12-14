@@ -1,4 +1,5 @@
 import logging
+import re
 
 from typing import Literal, Callable
 
@@ -31,13 +32,21 @@ class OdeFitter:
         for param_name in self.odes.get_param_names():
             min_value = -self.param_limit
             max_value = self.param_limit
-            if 'delta' in param_name or 'k_' in param_name:
+            if 'delta' in param_name:
                 # Decay rates cannot be negative
                 min_value = 0.
-            if self.odes.is_nonlinear and 'beta_' in param_name:
+            elif 'k_' in param_name:
+                # Set range of k based on the values that the corresponding
+                # module can take (2 standard deviations below or above
+                # the minimum or maximum value respectively)
+                module_of_interest = int(re.search(r'\d+', param_name).group())
+                module_expressions = self.measured_data[module_of_interest, :]
+                min_value = min(module_expressions) - 2*np.std(module_expressions)
+                max_value = max(module_expressions) + 2*np.std(module_expressions)
+            elif self.odes.is_nonlinear and 'beta_' in param_name:
                 # Beta values cannot be negative in nonlinear model
                 min_value = 0.
-            if 'gamma' in param_name:
+            elif 'gamma' in param_name:
                 min_value = -1e-2
                 max_value = 1e-2
 
