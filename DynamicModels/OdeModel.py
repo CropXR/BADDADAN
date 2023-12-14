@@ -26,6 +26,9 @@ class OdeModel:
         self.formula_per_module = formula_per_module
         self.is_nonlinear = is_nonlinear
         self.old_to_new_mapping = old_to_new_mapping
+        logging.info(f'Mapped old module names to new module names:')
+        for k,v in self.old_to_new_mapping.items():
+            logging.info(f'{k} -> {v}')
 
     def __repr__(self):
         return ('OdeModel:\n'

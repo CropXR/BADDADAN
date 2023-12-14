@@ -96,7 +96,9 @@ class OdeFitterMultipleDatasets:
                 fitter.measured_data, custom_param_names, return_scalar=True)
             norm_loss = loss / len(fitter.time_points)
             all_loss.append(norm_loss)
-        return sum(all_loss)
+        total_loss = sum(all_loss)
+        logging.debug(f'{total_loss=}')
+        return total_loss
 
     def fit(self, max_iter=None) -> MinimizerResult:
         """Find optimal parameters for ODE
