@@ -668,6 +668,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         :param plot_units: If true, plot line for each gene individually.
                             If false, plot mean of all genes in a cluster.
         """
+        logging.warning('This only shows the mean of the module over time')
         sns.set_theme()
         some_df = self._get_gene_expression_long_form()
         some_df['time (days)'] = some_df['time'].dt.days
