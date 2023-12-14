@@ -668,10 +668,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         :param plot_units: If true, plot line for each gene individually.
                             If false, plot mean of all genes in a cluster.
         """
-        logging.warning('This only shows the mean of the module over time')
         sns.set_theme()
-        some_df = self._get_gene_expression_long_form()
-        some_df['time (days)'] = some_df['time'].dt.days
 
         if plot_units:
             # sns.relplot(data=some_df, x='time (days)', y='expression',
@@ -679,6 +676,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             #             hue='replicate', col='cluster_id',
             #             palette=sns.color_palette(),
             #             units='level_0', estimator=None, lw=1, alpha=.2)
+            some_df = self._get_gene_expression_long_form()
+            some_df['time (days)'] = some_df['time'].dt.days
             nr_hues = some_df['replicate'].nunique()
             sns.relplot(data=some_df, x='time (days)', y='expression',
                         kind='line',
@@ -686,6 +685,10 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                         palette=sns.color_palette(n_colors=nr_hues),
                         units='ID_REF', estimator=None, lw=1, alpha=.2)
         else:
+            some_df = self.df.groupby('cluster_id').apply(self._get_eigengene_over_time, transform=True)
+            some_df = some_df.reset_index().melt(id_vars='cluster_id', value_name='expression')
+            some_df['time (days)'] = some_df['time'].dt.days
+
             nr_hues = some_df['cluster_id'].nunique()
             sns.lineplot(data=some_df, x='time (days)', y='expression',
                          hue='cluster_id',
