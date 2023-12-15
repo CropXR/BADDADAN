@@ -619,13 +619,11 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         assert np.allclose(dist, dist.T), 'Matrix does not appear symmetrical?'
         assert sum(np.diag(dist)) < 1e-6, 'Sum of diagonal too high'
         dense_dist = squareform(dist, checks=False)
-
         # Create linkage matrix and infer clusters
         linkage_matrix = linkage(dense_dist, method='complete')
         # linkage_matrix = linkage(dense_dist, method='average')
-        self._cluster_from_linkage_matrix(linkage_matrix, n_cluster,
-                                          do_plotting, dist)
-
+        clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
+        self.df = self.df.assign(cluster_id=clustering)
 
     def _do_random_clustering(self, n_cluster: int = 2) -> None:
         """Assign genes to random clusters. Used for testing the null hypothesis"""
