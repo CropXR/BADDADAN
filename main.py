@@ -343,7 +343,7 @@ def fit_ode_to_two_datasets(
     # They are the initial values, and the drought treatment (i.e. u_t function)
     custom_params = dict()
     # TODO make these lambda functions more interpretable, e.g. change them into a custom object
-    small_constant = 0.01
+    small_constant = 0.1
 
     custom_params[my_time_series_expressions] = OdeLocalParameters(
          u_t=(lambda t: small_constant*(100 - t * (100 - 20) / (13 * 24))))
@@ -362,6 +362,14 @@ def fit_ode_to_two_datasets(
         my_ode, [my_time_series_expressions, control_experiment],
         custom_params,
         param_limit=1)
+
+    # Make the =0 params where we think is appropriate
+    new_params = Parameters()
+    for param_name in my_fitter.master_params:
+        if any([i in param_name for i in ['delta', 'gamma', 'beta']]):
+            new_params.add(param_name, value=0)
+
+    my_fitter.master_params = new_params
     my_fitter.fit(max_iter=100)
     my_fitter.calculate_current_best_fits()
     # # Step uno
