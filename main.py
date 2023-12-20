@@ -93,7 +93,7 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
         level=[0,1], axis=1).mean()
     metabolite_time_series = metabolite_time_series.dropna()
 
-    # Start with ABA?
+    # Start with ABA? -> Yes
     aba_series = metabolite_time_series.loc['Abscisic acid (ABA) ', :]
     aba_series = aba_series.reset_index()
 
@@ -107,31 +107,51 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
                                                       nr_clusters,
                                                       atted_path=atted_path)
     expr_mat_time.plot_cluster_sizes()
-    tf2_in_path = Path(f'data/gse65046/{nr_clusters}_clusters_tf2_input.txt')
-    expr_mat_time.write_tf2_input_file(tf2_in_path)
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.merge_biological_samples()
+    # expr_mat_time.see_pairwise_cluster_correlations('Pre-cluster')
+    # expr_mat_time.merge_correlating_modules(cutoff=0.9, criterion_type='maxclust',
+    #                                         criterion_start_value=150,
+    #                                         criterion_step=-10)
+    # expr_mat_time.see_pairwise_cluster_correlations('Post-cluster')
+
+    tf2_in_path = Path(f'data/gse65046/{nr_clusters}_clusters_tf2_input.txt')
+    expr_mat_time.write_tf2_input_file(tf2_in_path)
+    # expr_mat_time._do_random_clustering(nr_clusters)
+    # expr_mat_time.see_pairwise_cluster_correlations('Random')
+    # expr_mat_time.do_hierachical_clustering(nr_clusters)
+    # expr_mat_time.see_pairwise_cluster_correlations('Hierarchical on dataset')
+    # expr_mat_time.assign_clusters_from_tf2_input(tf2_in_path, overwrite=True)
+    # expr_mat_time.see_pairwise_cluster_correlations('Post-cluster')
+    # expr_mat_time.plot_cluster_sizes()
+
     # TF2Output file should be here
     tf2_out_path = Path(f'data/gse65046/02_{nr_clusters}_clusters_tf2network_output.tsv')
-    expr_mat_time.keep_highest_z_clusters(10, tf2_out_path)
+    expr_mat_time.keep_highest_z_clusters(20, tf2_out_path)
 
     my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(tf2_out_path)
     my_grn.add_tf_module_mappings(tf2_in_path,
                                   from_tf2_input=True)
     my_grn.keep_only_modules_of_interest(expr_mat_time)
     my_grn.clean_up_network()
-    my_grn.check_if_tfs_created_by_module(expr_mat_time, do_plotting=True,
+    my_grn.check_if_tfs_created_by_module(expr_mat_time,
+                                          do_plotting=True,
                                           remove_low_corr=True)
-    my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True, threshold=.4)
-    # my_grn.plot_network(nx.draw_kamada_kawai, with_labels=False)
+    my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True,
+                                    threshold=.6)
+    # my_grn.plot_network(nx.d  raw_kamada_kawai, with_labels=False)
     module_module = my_grn.get_module_module_network()
     # # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
     module_module.plot_network(with_labels=True)
 
-    # My god it's ugly but I'll fix it later
-    expr_mat_time.df = expr_mat_time.df[
-        expr_mat_time.df['cluster_id'].isin([int(i.replace(module_module.module_prefix, ""))
-                                             for i in module_module.get_modules()])]
+    expr_mat_time.keep_only_modules_in_network(module_module)
+
+    expr_mat_time.see_pairwise_cluster_correlations('Pre-selection')
+    expr_mat_time.merge_correlating_modules(cutoff=0.9,
+                                            criterion_type='maxclust',
+                                            criterion_start_value=20,
+                                            criterion_step=-1)
+    expr_mat_time.see_pairwise_cluster_correlations('Post-selection')
     expr_mat_drought = copy.deepcopy(expr_mat_time)
     expr_mat_drought.keep_only_samples_with_string('drought')
     expr_mat_drought.plot_clusters_over_time(title='Drought')

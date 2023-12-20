@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal, Callable, Dict
+from typing import Literal, Callable, Dict, List, Tuple
 import re
 import subprocess
 
@@ -20,6 +20,7 @@ import qnorm
 from scipy.integrate._ivp.ivp import OdeResult
 from scipy.spatial.distance import pdist, squareform
 from sklearn.decomposition import PCA
+from sklearn.metrics import mean_squared_error
 
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628, standardize, \
@@ -45,6 +46,9 @@ class ExpressionMatrix:
         self.column_parser: Callable = None
         # TODO declare this from the start?
         self.phenotype_dict = None
+        # Before doing PCA for eigengene analysis, always do
+        # mean centering + scaling
+        self.scale_before_pca = True
 
     def __repr__(self):
         return (f'ExpressionMatrix with {len(self.df)} genes'
@@ -394,17 +398,19 @@ class ExpressionMatrix:
         assert (self.get_gene_names().sort()
                 == clustered_expressions.get_gene_names().sort())
 
-    def assign_clusters_from_tf2_input(self, tf2_input_path: Path):
+    def assign_clusters_from_tf2_input(self, tf2_input_path: Path,
+                                       overwrite: bool):
         """Find which genes belong to which cluster, based
         on the TF2Network input file.
 
+        :param overwrite: If true, overwrite the existing clusters
         :param tf2_input_path: Path to tf2network input file, should
                                 contain lines with cluster_id and gene
                                 name separated by space.
         """
         print()
         mapping_df = pd.read_csv(tf2_input_path, sep=' ', names=['cluster_id','gene_name'], index_col='gene_name')
-        self._apply_cluster_mapping_from_df(mapping_df)
+        self._apply_cluster_mapping_from_df(mapping_df, overwrite=overwrite)
 
     def assign_clusters_from_jordi_input(self, input_file_jordi, drop_duplicates=False):
         df = pd.read_csv(input_file_jordi)
@@ -474,11 +480,14 @@ class ExpressionMatrix:
         self._apply_cluster_mapping_from_df(og_df)
 
 
-    def _apply_cluster_mapping_from_df(self, mapping_df):
+    def _apply_cluster_mapping_from_df(self, mapping_df: pd.DataFrame,
+                                       overwrite: bool = False):
         """
 
+        :param overwrite: If true, overwrite existing clusters. If false and
+                          df has already been clustered, method will raise
+                          ValueError
         :param mapping_df: Index should be gene name, column should be 'cluster_id'
-        :return:
         """
         assert not mapping_df.index.has_duplicates, 'Mapping dataframe contains duplicate indices'
         # TODO is this proper way to handle mismatch?
@@ -486,6 +495,14 @@ class ExpressionMatrix:
         # Drop duplicates based on index
         self.df = self.df.reset_index().drop_duplicates(
             subset='index').set_index('index')
+        if 'cluster_id' in self.df.columns:
+            if not overwrite:
+                raise ValueError('DataFrame has already been clustered, '
+                                 'but overwrite=False for the cluster '
+                                 'assignment. To fix, assign '
+                                 'the clusters with overwrite=True')
+            else:
+                self.df = self.df.drop('cluster_id', axis=1)
         new_df = pd.concat([self.df, mapping_df], join='inner', axis=1)
         logging.info(f'Lost {len(mapping_df)-len(new_df)} genes during annotation')
         self.df = new_df
@@ -540,13 +557,60 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         elif aggregation_method == 'pca':
             # PCA-based
             eigengenes = self.df.groupby('cluster_id').apply(
-                self._get_eigengene_over_time, transform=True)
+                self._get_eigengene_over_time)
             # Convert to long form
             eigengenes = eigengenes.T.reset_index().melt(
                 id_vars=['time', 'condition'], value_name='expression')
             return eigengenes
         else:
             raise NotImplementedError(f'{aggregation_method=} is not implemented')
+
+    def _get_eigengene_over_time(self,
+                                 one_group_df: pd.DataFrame) -> pd.Series:
+        """Get the series of the module eigengene, to see how it behaves over
+           time. Only applies this to one module, so recommended calling this
+           from a grouped_df.apply context.
+
+        :param one_group_df: Dataframe of one module to apply eigengene
+                             methodology to.
+        :return: expression of module eigengene at all time points
+        """
+        one_group_df = one_group_df.drop('cluster_id', axis=1)
+        # Calculate PCA
+        pca = self._do_pca_of_group(one_group_df)
+        one_group_transpose = one_group_df.T
+        if self.scale_before_pca:
+            one_group_transpose = one_group_transpose - one_group_transpose.mean()
+            one_group_transpose = one_group_transpose / one_group_transpose.std()
+
+        eigen_values_through_time = pca.transform(one_group_transpose).flatten()
+        # Set correlation between eigengene and mean expression to be positive
+        # since direction of PC is arbitrary
+        eigen_value_to_mean_expression_corr = np.corrcoef([one_group_transpose.T.mean(),
+                                                           eigen_values_through_time])
+        if eigen_value_to_mean_expression_corr[0, 1] < 0:
+            eigen_values_through_time = eigen_values_through_time * -1
+        eigen_values_through_time = pd.Series(eigen_values_through_time)
+        updated_indices = pd.DataFrame(
+            self.column_parser(one_group_df.columns))
+        updated_indices = updated_indices.drop('rep_nr', axis=1)
+        eigen_values_through_time.index = pd.MultiIndex.from_frame(updated_indices)
+        return eigen_values_through_time
+
+    def _do_pca_of_group(self, one_group_df: pd.DataFrame) -> PCA:
+        """For one gene module, do PCA with one component to get idea of
+        eigengene values and how much variance it explains
+
+        :param one_group_df: Dataframe that should come from one cluster.
+        :return: PCA object that was fitted to input dataframe
+        """
+        pca = PCA(n_components=1)
+        transposed_df = one_group_df.T
+        if self.scale_before_pca:
+            transposed_df = transposed_df - transposed_df.mean()
+            transposed_df = transposed_df / transposed_df.std()
+        pca.fit(transposed_df)
+        return pca
 
     def save_tf_produced_by_module_file(self, out_file_path: Path,
                                         tf_list_path: Path):
@@ -683,8 +747,10 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                         palette=sns.color_palette(n_colors=nr_hues),
                         units='ID_REF', estimator=None, lw=1, alpha=.2)
         else:
-            some_df = self.df.groupby('cluster_id').apply(self._get_eigengene_over_time, transform=True)
-            some_df = some_df.reset_index().melt(id_vars='cluster_id', value_name='expression')
+            some_df = self.df.groupby('cluster_id').apply(
+                self._get_eigengene_over_time)
+            some_df = some_df.reset_index().melt(id_vars='cluster_id',
+                                                 value_name='expression')
             some_df['time (days)'] = some_df['time'].dt.days
 
             nr_hues = some_df['cluster_id'].nunique()
@@ -731,8 +797,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """
         assert self.column_parser is not None, 'Explicitly provide a column_parser first'
 
-        eigengenes = self._get_eigengene_over_time(one_group_df,
-                                                   transform=True)
+        eigengenes = self._get_eigengene_over_time(one_group_df)
         eigengenes = eigengenes.reset_index()
         logging.warning("Can only correlate to one phenotype at the moment")
         for phenotype, metabolite_values in self.phenotype_dict.items():
@@ -930,8 +995,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             logging.warning(f'TF ({tf_name}) not present in dataframe')
             return np.nan
         module_expressions = self.df[self.df['cluster_id'] == module_index]
-        module_expressions = self._get_eigengene_over_time(module_expressions,
-                                                           transform=True)
+        module_expressions = self._get_eigengene_over_time(module_expressions)
         tf_expressions = self.df.loc[tf_name]
         tf_expressions = tf_expressions.drop('cluster_id')
         # Ensure that indices match between eigengene and transciption factor
@@ -986,31 +1050,55 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
               expression coherence
             - Size of the cluster
             - How much its expression changes over time
+            - Difference in expression between control condition and
+              experimental condition
             - Median expression of genes in module to see if it is switched on
             - Correlation to a phenotype (in self.phenotype_dict)
         """
         grouped_df = self.df.groupby('cluster_id')
-        size = grouped_df.apply(len)
-        corr_to_phenotype = grouped_df.apply(self._corr_to_phenotypes)
-        explained_var = grouped_df.apply(self._get_eigengene_explained_var,
-                                         transform=True)
-        mean_pairwise_abs_cor = grouped_df.apply(self._mean_pairwise_abs_cor)
-        var_through_time = grouped_df.apply(
-            self._get_eigengene_variation_over_time, transform=True)
-        median_expression = grouped_df.median().T.median()
-        summary_df = pd.concat([explained_var, size,
-                                var_through_time, median_expression,
-                                mean_pairwise_abs_cor, corr_to_phenotype], axis=1)
-        tf2_df = pd.read_csv(tf2_output, sep='\t')
-        has_tfbs = summary_df.index.isin(tf2_df['GeneSet']).astype(int)
-        summary_df.columns = ['explained_var',
-                              'size',
-                              'var_through_time',
-                              'median_expression',
-                              'mean_pairwise_abs_cor',
-                              'corr_to_phenotype']
+        characteristics_dict = {
+            'explained_var': self._get_eigengene_explained_var,
+            'size': len,
+            'corr_to_phenotype': self._corr_to_phenotypes,
+            'mean_pairwise_abs_cor': self._mean_pairwise_abs_cor,
+            'var_through_time': self._get_eigengene_variation_over_time,
+            'difference_between_conditions': self._get_difference_between_conditions,
+        }
+        all_dfs = []
+        for col_name, function_name in characteristics_dict.items():
+            charac_series = grouped_df.apply(function_name)
+            charac_series.name = col_name
+            all_dfs.append(charac_series)
+        summary_df = pd.concat(all_dfs, axis=1)
+
+        mean_expression = grouped_df.mean().T.mean()
+        summary_df = summary_df.assign(mean_expression=mean_expression)
+
+        if tf2_output:
+            tf2_df = pd.read_csv(tf2_output, sep='\t')
+            has_tfbs = summary_df.index.isin(tf2_df['GeneSet']).astype(int)
+        else:
+            logging.info('No tf2output provided, z-scoring will assume that '
+                         'none of the modules have a tfbs.')
+            has_tfbs = 0
         summary_df = summary_df.assign(tfbs_present=has_tfbs)
         return summary_df
+
+    def _get_difference_between_conditions(self, one_group_df: pd.DataFrame):
+        """Measure difference in expression of the module between two conditions
+
+        :param one_group_df: Dataframe that contains expressions of genes in
+                             one column. (Typically from .grouppby() method)
+        :return: mean squared error
+        """
+        eigengenes = self._get_eigengene_over_time(one_group_df)
+        # Split into drought and control time series
+        control_series = eigengenes[eigengenes.index.get_level_values(
+            'condition').isin(['zero', 'control'])]
+        drought_series = eigengenes[eigengenes.index.get_level_values(
+            'condition').isin(['zero', 'drought'])]
+
+        return mean_squared_error(control_series, drought_series)
 
     @staticmethod
     def _mean_pairwise_abs_cor(one_group_df: pd.Dataframe) -> float | np.floating:
@@ -1027,26 +1115,23 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         dense_corr = squareform(corr_matrix, checks=False)
         return np.mean(dense_corr)
 
-    @classmethod
-    def _get_eigengene_explained_var(cls, one_group_df: pd.DataFrame,
-                                     transform: bool) -> float:
+    def _get_eigengene_explained_var(self, one_group_df: pd.DataFrame) -> float:
         """
         Get how much variance the first principal component explains.
         (Used to get an idea how much expression coherence
         is within the cluster)
 
         :param one_group_df: Dataframe that should come from one cluster.
-        :param transform: If true, apply mean centering and scale normalising
-                          before doing PCA
         :return: explained variance as float
         """
         # Calculate PCA
         one_group_df = one_group_df.drop('cluster_id', axis=1)
-        pca = cls._do_pca_of_group(one_group_df, transform)
+        pca = self._do_pca_of_group(one_group_df)
         return pca.explained_variance_ratio_[0]
 
-    def _get_eigengene_variation_over_time(self, one_group_df: pd.DataFrame,
-                                           transform: bool) -> float | np.floating:
+    def _get_eigengene_variation_over_time(self,
+                                           one_group_df: pd.DataFrame
+                                           ) -> float | np.floating:
         """Standard deviation of eigengene over time
 
         Used to see if a gene module changes expression throughout
@@ -1057,80 +1142,49 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                           before doing PCA
         :return: standard deviation of eigenvalues
         """
-        eigen_values_through_time = self._get_eigengene_over_time(one_group_df, transform)
+        # TODO Make this based on mean over time ?
+        eigen_values_through_time = self._get_eigengene_over_time(one_group_df)
         return np.std(eigen_values_through_time)
 
-    def _get_eigengene_over_time(self, one_group_df: pd.DataFrame,
-                                           transform: bool) -> pd.Series:
-        """Get the series of the module eigengene, to see how it behaves over
-           time. Only applies this to one module, so recommended calling this
-           from a grouped_df.apply context.
 
-        :param one_group_df: Dataframe of one module to apply eigengene
-                             methodology to.
-        :param transform: If true, perform scaling before PCA
-        :return: expression of module eigengene at all time points
-        """
-        one_group_df = one_group_df.drop('cluster_id', axis=1)
-        # Calculate PCA
-        pca = self._do_pca_of_group(one_group_df, transform)
-        eigen_values_through_time = pca.transform(one_group_df.T).flatten()
-        # Set correlation between eigengene and mean expression to be positive
-        # since direction of PC is arbitrary
-        eigen_value_to_mean_expression_corr = np.corrcoef([one_group_df.mean(),
-                                                           eigen_values_through_time])
-        if eigen_value_to_mean_expression_corr[0, 1] < 0:
-            eigen_values_through_time = eigen_values_through_time * -1
-        eigen_values_through_time = pd.Series(eigen_values_through_time)
-        updated_indices = pd.DataFrame(
-            self.column_parser(one_group_df.columns))
-        updated_indices = updated_indices.drop('rep_nr', axis=1)
-        eigen_values_through_time.index = pd.MultiIndex.from_frame(updated_indices)
-        return eigen_values_through_time
-    @classmethod
-    def _do_pca_of_group(cls, one_group_df: pd.DataFrame, transform: bool) -> PCA:
-        """For one gene module, do PCA with one component to get idea of
-        eigengene values and how much variance it explains
-
-        :param one_group_df: Dataframe that should come from one cluster.
-        :param transform: If true, apply mean centering and scale normalising
-                          before doing PCA
-        :return: PCA object that was fitted to input dataframe
-        """
-        pca = PCA(n_components=1)
-        transposed_df = one_group_df.T
-        if transform:
-            transposed_df = transposed_df - transposed_df.mean()
-            transposed_df = transposed_df / transposed_df.std()
-        pca.fit(transposed_df)
-        return pca
-
-    def get_z_score_of_cluster_characteristics(self, tf2_output: Path, plotting=False) -> pd.DataFrame:
+    def get_z_score_of_cluster_characteristics(self, tf2_output: Path | None,
+                                               plotting=False,
+                                               subset: Tuple[str] = (
+                                                   'explained_var',
+                                                   'difference_between_conditions',
+                                                   'corr_to_phenotype',
+                                                   'mean_expression',
+                                                   'tfbs_present')
+                                               ) -> pd.DataFrame:
         """For clusters, get their sum of z-scores to find out which is the
            most interesting to look at
 
+        :param subset: Column names to use for z-score selection
         :param tf2_output: Path to TF2Network output file, used to see if
                            modules have an enriched TFBS
         :return: dataframe of z_scores for each module
         """
         summary_df = self._get_characteristics_of_clusters(tf2_output)
-        # TODO do we actually need to care about size, don't think so
-        #  neither should we look at mean pairwise abs corr
-        summary_df = summary_df.drop(['size', 'mean_pairwise_abs_cor'], axis=1)
+        summary_df = summary_df[list(subset)]
+        # summary_df = summary_df.drop(['size',
+        #                               'mean_pairwise_abs_cor'], axis=1)
         # Get Z scores
         z_scores = summary_df.apply(zscore)
-        summary_df = summary_df.assign(z_sum=z_scores.sum(axis=1))
-        z_scores = z_scores.assign(z_sum=z_scores.sum(axis=1))
+        stouffler_z = z_scores.sum(axis=1) / np.sqrt(len(z_scores.columns))
+        z_scores = z_scores.assign(z_sum=stouffler_z)
+        summary_df = summary_df.assign(z_sum=stouffler_z)
 
         if plotting:
             # Is higher better for all? Or how can we make it that way?
             sns.histplot(z_scores, kde=True, element='step')
             plt.show()
-            sns.boxplot(z_scores.sum(axis=1))
-            plt.show()
+            # sns.boxplot(z_scores.sum(axis=1))
+            # plt.show()
         return z_scores
 
-    def keep_highest_z_clusters(self, nr_clusters: int, tf2_output_path: Path) -> pd.DataFrame:
+    def keep_highest_z_clusters(self, nr_clusters: int,
+                                tf2_output_path: Path | None
+                                ) -> pd.DataFrame:
         """Only keep clusters with highest z_scores. Modifies object in-place.
 
         :param nr_clusters: Top number of clusters to select
@@ -1144,3 +1198,79 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             'z_sum', ascending=False).head(nr_clusters)
         self.df = self.df[self.df['cluster_id'].isin(best_clusters.index)]
         return best_clusters
+
+    def see_pairwise_cluster_correlations(self, title: str):
+        """See how strongly modules correlate in histogram.
+
+        Shows absolute correlations between modules.
+
+        :parameter title: Title to display in plot
+        """
+        correlations = self.get_pairwise_module_correlations()
+        correlations = correlations.to_numpy()
+        selection = correlations[np.triu_indices_from(correlations, k=1)]
+        sns.histplot(abs(selection))
+        logging.info(f'Max correlation between modules {max(abs(selection))}')
+        plt.xlabel('Absolute pearson correlation between modules')
+        plt.title(title)
+        plt.show()
+
+    def get_pairwise_module_correlations(self) -> pd.DataFrame:
+        """Get dataframe that shows pairwise module correlations"""
+        eigengenes = self.df.groupby('cluster_id').apply(
+            self._get_eigengene_over_time)
+        correlations = eigengenes.T.corr()
+        return correlations
+
+    def merge_correlating_modules(self, cutoff: float,
+                                  criterion_type: Literal['distance', 'maxclust'],
+                                  criterion_start_value: float,
+                                  criterion_step: float):
+        """To prevent that modules have a high correlation, merge them together
+
+        :param criterion_step: What criterion to pass to fcluster.
+            'maxclust' for maximum number of clusters, 'distance' for maximum
+            distance between observations in a cluster.
+        :param criterion_start_value: At what value to start the criterion
+        :param criterion_type: How much to increase criterion at each
+            step (if negative, decrease it by this at each step)
+        :param cutoff: While max correlation is above this cutoff,
+            keep clustering.
+        """
+        correlations = self.get_pairwise_module_correlations()
+        correlation_array = correlations.to_numpy()
+        correlation_dists = 1 - correlation_array
+        nr_groups = len(correlation_dists)
+        logging.info(f"{nr_groups} clusters")
+
+        while np.max(correlation_array[np.triu_indices_from(correlation_array, k=1)]) > cutoff:
+            criterion_start_value += criterion_step
+            logging.info(np.max(correlation_array[np.triu_indices_from(correlation_array, k=1)]))
+            dense_dist = squareform(correlation_dists)
+            linkage_matrix = linkage(dense_dist, method='complete')
+            clustering = fcluster(linkage_matrix, criterion_start_value, criterion_type)
+            logging.info(f"{len(set(clustering))} clusters")
+            new_module_names_dict = dict()
+            for old_index, new_module_id in enumerate(clustering):
+                old_id = correlations.index[old_index]
+                new_module_names_dict[old_id] = int(f'{new_module_id}')
+
+            self.df['cluster_id'] = self.df['cluster_id'].replace(
+                new_module_names_dict)
+            correlations = self.get_pairwise_module_correlations()
+            correlation_array= correlations.to_numpy()
+            correlation_dists = 1 - correlation_array
+            # Todo increase or decrease
+
+
+    def keep_only_modules_in_network(self, module_module):
+        """Filters the expression matrix to keep only the modules present
+        in the given module_module network.
+
+        :param module_module: ModuleRegulatoryNetwork that only contains the modules you want to keep
+        :type module_module: ModuleRegulatoryNetwork
+        """
+        self.df = self.df[
+            self.df['cluster_id'].isin(
+                [int(i.replace(module_module.module_prefix, ""))
+                 for i in module_module.get_modules()])]
