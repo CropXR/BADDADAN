@@ -386,7 +386,7 @@ def fit_ode_to_two_datasets(
     # They are the initial values, and the drought treatment (i.e. u_t function)
     custom_params = dict()
     # TODO make these lambda functions more interpretable, e.g. change them into a custom object
-    small_constant = 0.1
+    small_constant = .1
 
     custom_params[my_time_series_expressions] = OdeLocalParameters(
          u_t=(lambda t: small_constant*(100 - t * (100 - 20) / (13 * 24))))
@@ -404,24 +404,24 @@ def fit_ode_to_two_datasets(
     my_fitter = OdeFitterMultipleDatasets(
         my_ode, [my_time_series_expressions, control_experiment],
         custom_params,
-        param_limit=1)
+        param_limit=1, aggregation_method='mean')
 
-    # Make the =0 params where we think is appropriate
-    new_params = Parameters()
-    for param_name in my_fitter.master_params:
-        if any([i in param_name for i in ['delta', 'gamma', 'beta']]):
-            new_params.add(param_name, value=0)
-
-    my_fitter.master_params = new_params
-    my_fitter.fit(max_iter=100)
-    my_fitter.calculate_current_best_fits()
+    # # Make the =0 params where we think is appropriate
+    # new_params = Parameters()
+    # for param_name in my_fitter.master_params:
+    #     if any([i in param_name for i in ['delta', 'gamma', 'beta']]):
+    #         new_params.add(param_name, value=0)
+    #
+    # my_fitter.master_params = new_params
+    # my_fitter.fit(max_iter=500)
+    # my_fitter.calculate_current_best_fits()
     # # Step uno
-    # multiple_fitters = [OdeFitterMultipleDatasets(
-    #     my_ode, [my_time_series_expressions, control_experiment],
-    #     custom_params,
-    #     param_limit=5) for _ in range(5)]
-    # best_fit = fit_multiple_fitters(multiple_fitters, 100)
-    # best_fit.calculate_current_best_fits(fig_path)
+    multiple_fitters = [OdeFitterMultipleDatasets(
+        my_ode, [my_time_series_expressions, control_experiment],
+        custom_params,
+        param_limit=2) for _ in range(5)]
+    best_fit = fit_multiple_fitters(multiple_fitters, 300)
+    best_fit.calculate_current_best_fits(fig_path)
     # multiple_fitter.fit(100)
     # best_fits = multiple_fitter.calculate_current_best_fits()
 
@@ -628,8 +628,22 @@ def camila_red_panda(soft_file_in_path: Path,
     plt.show()
 
 if __name__ == "__main__":
-    in_path = Path('data/gse65046/GSE65046_family.soft')
-    linkage_matrix = Path('data/atted_ii/linkage_matrices/all_cor_one_matrix_renamed_complete_linkage.npy')
-    measured_metabolites = Path('data/gse65046/plcell_v28_2_345_s1/TPC2015-00910-LSBR1_Supplemental_Data_sets_1_18.xlsx')
-    pipeline_from_atted_clustering(in_path, linkage_matrix, measured_metabolites)
+    with open('data/gse65046/merged_clusters_ExpressionMatrix.pkl', 'rb') as f:
+        expr_mat_time = pickle.load(f)
+    expr_mat_drought = copy.deepcopy(expr_mat_time)
+    expr_mat_drought.keep_only_samples_with_string('drought')
+    expr_mat_drought.plot_clusters_over_time(title='Drought')
 
+    expr_mat_control = copy.deepcopy(expr_mat_time)
+    expr_mat_control.keep_only_samples_with_string('control')
+    expr_mat_control.plot_clusters_over_time(title='Control')
+
+    new_tf2_in = Path(f'data/gse65046/merged_clusters_tf2_input.txt')
+    expr_mat_time.write_tf2_input_file(new_tf2_in)
+    new_tf2_out = Path(f'data/gse65046/merged_clusters_tf2network_output.tsv')
+    new_module_module = module_network_from_tf2_output(expr_mat_time,
+                                                       new_tf2_in,
+                                                       new_tf2_out,
+                                                       threshold=.3)
+
+    fit_ode_to_two_datasets(new_module_module, expr_mat_drought, expr_mat_control)

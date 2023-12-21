@@ -23,7 +23,8 @@ class OdeFitterMultipleDatasets:
                  param_limit: float = 800.,
                  method: Literal['lbfgs', 'bfgs',
                                  'differential_evolution',
-                                 'basinhopping', 'shgo'] = 'lbfgs'):
+                                 'basinhopping', 'shgo'] = 'lbfgs',
+                 aggregation_method: Literal['pca', 'mean'] = 'mean'):
         """
         :param ode_model: The ODE model used for fitting.
         :param datasets: A list of ExpressionMatrixTimeSeries objects, one for
@@ -42,7 +43,7 @@ class OdeFitterMultipleDatasets:
         for dataset in datasets:
             assert dataset.has_been_clustered
             time, data = dataset.get_clusters_expressions_with_time(
-                0, aggregation_method='pca')
+                0, aggregation_method=aggregation_method)
             u_t_for_dataset = custom_params_per_dataset[dataset].u_t
             fitter = OdeFitter(copy.deepcopy(ode_model), data, time, param_limit=param_limit,
                                u_t_function=u_t_for_dataset,
@@ -79,7 +80,8 @@ class OdeFitterMultipleDatasets:
         assert check_all_identical_lists(output)
         return set(output[0])
 
-    def loss_on_multiple_datasets(self, params: Parameters, custom_param_names: set[str] = None) -> float:
+    def loss_on_multiple_datasets(self, params: Parameters,
+                                  custom_param_names: set[str] = None) -> float:
         """Fit multiple time series and return the total loss over all datasets.
 
         :param params: Parameters for which loss should be calculated.
@@ -89,7 +91,6 @@ class OdeFitterMultipleDatasets:
         :return: Total loss as a float.
         """
         all_loss = []
-        # all y0 values should be variable too of course ya knobhead
         for fitter in self.all_fitters:
             loss = fitter.loss_function(
                 params, fitter.time_points,
