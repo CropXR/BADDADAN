@@ -149,6 +149,9 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
                                             criterion_step=-1)
 
     expr_mat_time.see_pairwise_cluster_correlations('Post-selection')
+    with open('data/gse65046/merged_clusters_ExpressionMatrix.pkl', 'wb') as f:
+        pickle.dump(expr_mat_time, f)
+
     expr_mat_drought = copy.deepcopy(expr_mat_time)
     expr_mat_drought.keep_only_samples_with_string('drought')
     expr_mat_drought.plot_clusters_over_time(title='Drought')
@@ -629,9 +632,4 @@ if __name__ == "__main__":
     linkage_matrix = Path('data/atted_ii/linkage_matrices/all_cor_one_matrix_renamed_complete_linkage.npy')
     measured_metabolites = Path('data/gse65046/plcell_v28_2_345_s1/TPC2015-00910-LSBR1_Supplemental_Data_sets_1_18.xlsx')
     pipeline_from_atted_clustering(in_path, linkage_matrix, measured_metabolites)
-    #
-    # my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(Path('data/gse65046/02_500_clusters_tf2network_output.tsv'))
-    # my_grn.add_tf_module_mappings(Path('data/gse65046/500_clusters_tf2_input.txt'), from_tf2_input=True)
-    # my_grn.clean_up_network()
-    # my_modules = my_grn.get_module_module_network()
-    # my_modules.save_for_cytoscape(Path('data/gse65046/03_cytoscape_modules.tsv'))
+
