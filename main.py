@@ -129,6 +129,43 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
     tf2_out_path = Path(f'data/gse65046/02_{nr_clusters}_clusters_tf2network_output.tsv')
     expr_mat_time.keep_highest_z_clusters(20, tf2_out_path)
 
+    module_module = module_network_from_tf2_output(expr_mat_time, tf2_in_path,
+                                                   tf2_out_path, threshold=.6)
+
+    expr_mat_time.keep_only_modules_in_network(module_module)
+
+    expr_mat_drought = copy.deepcopy(expr_mat_time)
+    expr_mat_drought.keep_only_samples_with_string('drought')
+    expr_mat_drought.plot_clusters_over_time(title='Drought')
+
+    expr_mat_control = copy.deepcopy(expr_mat_time)
+    expr_mat_control.keep_only_samples_with_string('control')
+    expr_mat_control.plot_clusters_over_time(title='Control')
+
+    expr_mat_time.see_pairwise_cluster_correlations('Pre-selection')
+    expr_mat_time.merge_correlating_modules(cutoff=0.8,
+                                            criterion_type='maxclust',
+                                            criterion_start_value=7,
+                                            criterion_step=-1)
+
+    expr_mat_time.see_pairwise_cluster_correlations('Post-selection')
+    expr_mat_drought = copy.deepcopy(expr_mat_time)
+    expr_mat_drought.keep_only_samples_with_string('drought')
+    expr_mat_drought.plot_clusters_over_time(title='Drought')
+
+    expr_mat_control = copy.deepcopy(expr_mat_time)
+    expr_mat_control.keep_only_samples_with_string('control')
+    expr_mat_control.plot_clusters_over_time(title='Control')
+    new_tf2_in = Path(f'data/gse65046/merged_clusters_tf2_input.txt')
+    new_tf2_out = Path(f'data/gse65046/merged_clusters_tf2network_output.tsv')
+    expr_mat_time.write_tf2_input_file(new_tf2_in)
+
+    new_module_module = module_network_from_tf2_output(expr_mat_time, new_tf2_in, new_tf2_out, threshold=.3)
+
+    fit_ode_to_two_datasets(new_module_module, expr_mat_drought, expr_mat_control)
+
+
+def module_network_from_tf2_output(expr_mat_time, tf2_in_path, tf2_out_path, threshold):
     my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(tf2_out_path)
     my_grn.add_tf_module_mappings(tf2_in_path,
                                   from_tf2_input=True)
@@ -138,29 +175,12 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
                                           do_plotting=True,
                                           remove_low_corr=True)
     my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True,
-                                    threshold=.6)
+                                    threshold=threshold)
     # my_grn.plot_network(nx.d  raw_kamada_kawai, with_labels=False)
     module_module = my_grn.get_module_module_network()
     # # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
     module_module.plot_network(with_labels=True)
-
-    expr_mat_time.keep_only_modules_in_network(module_module)
-
-    expr_mat_time.see_pairwise_cluster_correlations('Pre-selection')
-    expr_mat_time.merge_correlating_modules(cutoff=0.9,
-                                            criterion_type='maxclust',
-                                            criterion_start_value=20,
-                                            criterion_step=-1)
-    expr_mat_time.see_pairwise_cluster_correlations('Post-selection')
-    expr_mat_drought = copy.deepcopy(expr_mat_time)
-    expr_mat_drought.keep_only_samples_with_string('drought')
-    expr_mat_drought.plot_clusters_over_time(title='Drought')
-
-    expr_mat_control = copy.deepcopy(expr_mat_time)
-    expr_mat_control.keep_only_samples_with_string('control')
-    expr_mat_control.plot_clusters_over_time(title='Control')
-
-    fit_ode_to_two_datasets(module_module, expr_mat_drought, expr_mat_control)
+    return module_module
 
 
 def full_pipeline_prototype(out_dir: Path,

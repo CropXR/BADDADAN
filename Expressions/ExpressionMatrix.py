@@ -1260,7 +1260,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             correlations = self.get_pairwise_module_correlations()
             correlation_array= correlations.to_numpy()
             correlation_dists = 1 - correlation_array
-            # Todo increase or decrease
 
 
     def keep_only_modules_in_network(self, module_module):
