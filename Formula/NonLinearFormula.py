@@ -36,6 +36,7 @@ class FormulaSuperClass:
 
         # TODO make this nonlinear?
         self.formula_parts.append(f' + {gamma_param_name} * u_t * y[{self.module_index}] ')
+        # self.formula_parts.append(f' + {gamma_param_name} * u_t ')
 
         # Register if the module has been compiled (which speeds up its evaluation)
         self.formula_is_compiled = False

@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Literal
 
+import pandas as pd
 from lmfit import Parameters, minimize, fit_report
 from lmfit.minimizer import MinimizerResult
 from matplotlib import pyplot as plt
@@ -17,14 +18,16 @@ from helpers import check_all_identical_lists, plot_y_and_y_hat
 class OdeFitterMultipleDatasets:
     """Class for fitting to multiple datasets"""
     def __init__(self, ode_model: OdeModel,
-                 datasets: List[ExpressionMatrixTimeSeries],
-                 custom_params_per_dataset: Dict[ExpressionMatrixTimeSeries,
+                 dataset: ExpressionMatrixTimeSeries,
+                 words_to_split_dataset: List[str],
+                 custom_params_per_dataset: Dict[str,
                                                  OdeLocalParameters],
                  param_limit: float = 800.,
                  method: Literal['lbfgs', 'bfgs',
                                  'differential_evolution',
                                  'basinhopping', 'shgo'] = 'lbfgs',
-                 aggregation_method: Literal['pca', 'mean'] = 'mean'):
+                 aggregation_method: Literal['pca', 'mean'] = 'mean',
+                 constant_value_to_add_to_expression: float =None):
         """
         :param ode_model: The ODE model used for fitting.
         :param datasets: A list of ExpressionMatrixTimeSeries objects, one for
@@ -33,6 +36,8 @@ class OdeFitterMultipleDatasets:
          to its custom parameters as OdeLocalParameters object.
         :param param_limit: The parameter limit. Default is 800.
         :param method: The optimization method to be used. Default is 'lbfgs'.
+        :param constant_value_to_add_to_expression: If aggregation is PCA, expressions can be negative, which breaks the ODE model.
+        To overcome this, add a constant value to all expressions.
         """
 
         self.method = method
@@ -40,12 +45,29 @@ class OdeFitterMultipleDatasets:
 
         # Combine all OdeFitter objects
         self.all_fitters = []
-        for dataset in datasets:
-            assert dataset.has_been_clustered
-            time, data = dataset.get_clusters_expressions_with_time(
-                0, aggregation_method=aggregation_method)
-            u_t_for_dataset = custom_params_per_dataset[dataset].u_t
-            fitter = OdeFitter(copy.deepcopy(ode_model), data, time, param_limit=param_limit,
+        assert dataset.has_been_clustered
+        if aggregation_method == 'pca':
+            eigengenes: pd.DataFrame = dataset.df.groupby('cluster_id').apply(
+                            dataset._get_eigengene_over_time)
+            # Add constant value to eigengenes
+            eigengenes = abs(eigengenes.min().min()) + eigengenes
+        elif aggregation_method == 'mean':
+            raise NotImplementedError
+
+
+        for word in words_to_split_dataset:
+            old_time, old_data = dataset.get_clusters_expressions_with_time(
+                0, aggregation_method='mean')
+            valid_index = eigengenes.columns.get_level_values(
+                'condition').isin(['zero', word])
+            data = eigengenes.loc[:, valid_index]
+            time = data.columns.get_level_values('time').astype('timedelta64[h]')
+            assert len(data.columns) == len(time)
+            data = data.to_numpy()
+            time = time.to_numpy()
+            u_t_for_dataset = custom_params_per_dataset[word].u_t
+            fitter = OdeFitter(copy.deepcopy(ode_model), data, time,
+                               param_limit=param_limit,
                                u_t_function=u_t_for_dataset,
                                method=method)
             self.all_fitters.append(fitter)
@@ -180,16 +202,13 @@ class OdeFitterMultipleDatasets:
         for param_name in new_parameters.valuesdict():
             if param_name in self._master_params:
                 self._master_params[param_name].set(
-                    value=new_parameters[param_name].value)
+                    value=new_parameters[param_name].value,
+                    vary=new_parameters[param_name].vary)
             else:
                 logging.warning(f'{param_name} is not a global parameters, so cannot be set here')
                 continue
         for fitter in self.all_fitters:
             fitter.params.update(self._master_params)
-            if 'non_heat_temp' in new_parameters:
-                logging.info(
-                    'Setting non_heat_temp as local global parameter')
-                fitter.params['non_heat_temp'].set(value=new_parameters['non_heat_temp'].value)
             fitter.has_been_fitted = True
 
     def _get_master_params_from_fitters(self) -> Parameters:

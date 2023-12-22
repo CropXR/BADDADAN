@@ -724,9 +724,13 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                         if 'Shoot' in col]
         self.df = self.df[col_mask]
 
-    def plot_clusters_over_time(self, plot_units: bool = False, title=None) -> None:
+    def plot_clusters_over_time(self, plot_units: bool = False,
+                                title=None,
+                                split_by_condition: List[str] = None) -> None:
         """Plot expression of clusters over time.
 
+        :param split_by_condition: If multiple conditions in dataframe,
+            split into different plots using these keywords
         :param plot_units: If true, plot line for each gene individually.
                             If false, plot mean of all genes in a cluster.
         """
@@ -752,14 +756,24 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             some_df = some_df.reset_index().melt(id_vars='cluster_id',
                                                  value_name='expression')
             some_df['time (days)'] = some_df['time'].dt.days
-
             nr_hues = some_df['cluster_id'].nunique()
-            sns.lineplot(data=some_df, x='time (days)', y='expression',
-                         hue='cluster_id',
-                         palette=sns.color_palette(n_colors=nr_hues), errorbar='se')
-            # sns.lineplot(data=some_df, x='time', y='expression',
-            #              hue='cluster', style='replicate',
-            #              palette=sns.color_palette(), errorbar='sd')
+            if split_by_condition is None:
+                sns.lineplot(data=some_df, x='time (days)', y='expression',
+                             hue='cluster_id',
+                             palette=sns.color_palette(n_colors=nr_hues),
+                             errorbar='se')
+            else:
+                for word in split_by_condition:
+                    selected_df = some_df[some_df['condition'].isin(
+                        ['zero', word])]
+                    sns.lineplot(data=selected_df, x='time (days)',
+                                 y='expression',
+                                 hue='cluster_id',
+                                 palette=sns.color_palette(n_colors=nr_hues))
+                    plt.title(word)
+                    plt.show()
+                ...
+
 
         # Unused bit of code to show the indivudual genes with
         # the mean per module overlay

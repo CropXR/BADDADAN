@@ -35,14 +35,16 @@ class OdeFitter:
             if 'delta' in param_name:
                 # Decay rates cannot be negative
                 min_value = 0.
+                max_value = .1
             elif 'k_' in param_name:
                 # Set range of k based on the values that the corresponding
                 # module can take (2 standard deviations below or above
                 # the minimum or maximum value respectively)
                 module_of_interest = int(re.search(r'\d+', param_name).group())
                 module_expressions = self.measured_data[module_of_interest, :]
-                min_value = min(module_expressions) - 2*np.std(module_expressions)
-                max_value = max(module_expressions) + 2*np.std(module_expressions)
+                min_value = min(module_expressions) - .5 * np.std(module_expressions)
+                min_value = max(0, min_value)
+                max_value = max(module_expressions) + .5 * np.std(module_expressions)
             elif self.odes.is_nonlinear and 'beta_' in param_name:
                 # Beta values cannot be negative in nonlinear model
                 min_value = 0.

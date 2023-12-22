@@ -373,11 +373,9 @@ def fit_ode_to_two_simulated_data(module_network: ModuleRegulatoryNetwork):
 def fit_ode_to_two_datasets(
         module_network: ModuleRegulatoryNetwork,
         my_time_series_expressions: ExpressionMatrixTimeSeries,
-        control_experiment: ExpressionMatrixTimeSeries = None,
         fig_path: Path = None):
     # Assure that data has already been clustered
     assert my_time_series_expressions.has_been_clustered
-    assert control_experiment.has_been_clustered
     my_ode = OdeModel.construct_from_regulatory_network(module_network,
                                                         nonlinear=True)
     logging.info(my_ode)
@@ -386,42 +384,51 @@ def fit_ode_to_two_datasets(
     # They are the initial values, and the drought treatment (i.e. u_t function)
     custom_params = dict()
     # TODO make these lambda functions more interpretable, e.g. change them into a custom object
-    small_constant = .1
+    small_constant = 1
+    control_name = 'control'
+    drought_name = 'drought'
+    condition_names = [control_name, drought_name]
+    # custom_params[drought_name] = OdeLocalParameters(
+    #      u_t=(lambda t: small_constant*(100 - t * (100 - 20) / (13 * 24))))
+    #
+    # custom_params[control_name] = OdeLocalParameters(
+    #      u_t=(lambda t: small_constant*(90 - t * 0)))
 
-    custom_params[my_time_series_expressions] = OdeLocalParameters(
-         u_t=(lambda t: small_constant*(100 - t * (100 - 20) / (13 * 24))))
 
-    custom_params[control_experiment] = OdeLocalParameters(
-         u_t=(lambda t: small_constant*(90 - t * 0)))
+    custom_params[control_name] = OdeLocalParameters(
+         u_t=(lambda t: 0))
+    custom_params[drought_name] = OdeLocalParameters(
+         u_t=(lambda t: small_constant * t / (13*24)))
 
-    # custom_params[my_time_series_expressions] = OdeLocalParameters(
-    #     u_t=(lambda t: 0))
-    # custom_params[control_experiment] = OdeLocalParameters(
-    #     u_t=(lambda t: 0))
-    # my_time_series_expressions.plot_clusters_over_time()
-    # control_experiment.plot_clusters_over_time()
     # Step uno
     my_fitter = OdeFitterMultipleDatasets(
-        my_ode, [my_time_series_expressions, control_experiment],
-        custom_params,
-        param_limit=1, aggregation_method='mean')
+            my_ode, my_time_series_expressions, condition_names,
+            custom_params,
+            param_limit=1, aggregation_method='pca')
 
-    # # Make the =0 params where we think is appropriate
-    # new_params = Parameters()
-    # for param_name in my_fitter.master_params:
-    #     if any([i in param_name for i in ['delta', 'gamma', 'beta']]):
-    #         new_params.add(param_name, value=0)
-    #
-    # my_fitter.master_params = new_params
-    # my_fitter.fit(max_iter=500)
-    # my_fitter.calculate_current_best_fits()
+    # Make the =0 params where we think is appropriate
+    new_params = Parameters()
+    for param_name in my_fitter.master_params:
+        if 'k_' in param_name:
+            new_params.add(param_name, value=22)
+        elif 'delta' in param_name:
+            new_params.add(param_name, value=0, vary=True)
+        elif param_name in ['gamma_1', 'gamma_2']:
+            new_params.add(param_name, value=0, vary=False)
+        elif param_name == 'gamma_0':
+            new_params.add(param_name, value=0.005, vary=False)
+
+    my_fitter.master_params = new_params
+
+    my_fitter.fit(max_iter=500)
+    my_fitter.calculate_current_best_fits()
     # # Step uno
-    multiple_fitters = [OdeFitterMultipleDatasets(
-        my_ode, [my_time_series_expressions, control_experiment],
-        custom_params,
-        param_limit=2) for _ in range(5)]
-    best_fit = fit_multiple_fitters(multiple_fitters, 300)
-    best_fit.calculate_current_best_fits(fig_path)
+    # multiple_fitters = [OdeFitterMultipleDatasets(
+    #     my_ode, my_time_series_expressions, condition_names,
+    #     custom_params,
+    #     param_limit=2, aggregation_method='pca') for _ in range(5)]
+    # best_fit = fit_multiple_fitters(multiple_fitters, 300)
+    # best_fit.calculate_current_best_fits(fig_path)
     # multiple_fitter.fit(100)
     # best_fits = multiple_fitter.calculate_current_best_fits()
 
@@ -629,14 +636,7 @@ def camila_red_panda(soft_file_in_path: Path,
 
 if __name__ == "__main__":
     with open('data/gse65046/merged_clusters_ExpressionMatrix.pkl', 'rb') as f:
-        expr_mat_time = pickle.load(f)
-    expr_mat_drought = copy.deepcopy(expr_mat_time)
-    expr_mat_drought.keep_only_samples_with_string('drought')
-    expr_mat_drought.plot_clusters_over_time(title='Drought')
-
-    expr_mat_control = copy.deepcopy(expr_mat_time)
-    expr_mat_control.keep_only_samples_with_string('control')
-    expr_mat_control.plot_clusters_over_time(title='Control')
+        expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
 
     new_tf2_in = Path(f'data/gse65046/merged_clusters_tf2_input.txt')
     expr_mat_time.write_tf2_input_file(new_tf2_in)
@@ -646,4 +646,4 @@ if __name__ == "__main__":
                                                        new_tf2_out,
                                                        threshold=.3)
 
-    fit_ode_to_two_datasets(new_module_module, expr_mat_drought, expr_mat_control)
+    fit_ode_to_two_datasets(new_module_module, expr_mat_time)
