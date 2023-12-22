@@ -411,8 +411,8 @@ def fit_ode_to_two_datasets(
     for param_name in my_fitter.master_params:
         if 'k_' in param_name:
             new_params.add(param_name, value=22)
-        elif 'delta' in param_name:
-            new_params.add(param_name, value=0, vary=True)
+        # elif 'delta' in param_name:
+        #     new_params.add(param_name, value=0, vary=True)
         elif param_name in ['gamma_1', 'gamma_2']:
             new_params.add(param_name, value=0, vary=False)
         elif param_name == 'gamma_0':
