@@ -27,7 +27,7 @@ class OdeFitterMultipleDatasets:
                                  'differential_evolution',
                                  'basinhopping', 'shgo'] = 'lbfgs',
                  aggregation_method: Literal['pca', 'mean'] = 'mean',
-                 constant_value_to_add_to_expression: float =None):
+                 ):
         """
         :param ode_model: The ODE model used for fitting.
         :param datasets: A list of ExpressionMatrixTimeSeries objects, one for
@@ -36,7 +36,6 @@ class OdeFitterMultipleDatasets:
          to its custom parameters as OdeLocalParameters object.
         :param param_limit: The parameter limit. Default is 800.
         :param method: The optimization method to be used. Default is 'lbfgs'.
-        :param constant_value_to_add_to_expression: If aggregation is PCA, expressions can be negative, which breaks the ODE model.
         To overcome this, add a constant value to all expressions.
         """
 
@@ -53,7 +52,6 @@ class OdeFitterMultipleDatasets:
             eigengenes = abs(eigengenes.min().min()) + eigengenes
         elif aggregation_method == 'mean':
             raise NotImplementedError
-
 
         for word in words_to_split_dataset:
             old_time, old_data = dataset.get_clusters_expressions_with_time(
