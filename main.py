@@ -22,7 +22,7 @@ from DynamicModels.OdeLocalParameters import OdeLocalParameters
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
-    ExpressionMatrixTimeSeries
+    ExpressionMatrixTimeSeries, AggregationMethod
 from helpers import plot_y_and_y_hat, fit_spline, get_info_from_gse65046
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
@@ -79,6 +79,7 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
         log2_transform=do_log2,
         annotate_from_gpl=True
     )
+    expr_mat_time.summary_method = AggregationMethod.MEAN
     metabolite_time_series = pd.read_excel(metabolites_path,
                                            index_col=0 ,
                                            header = [0, 1, 2]
@@ -127,30 +128,24 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
 
     # TF2Output file should be here
     tf2_out_path = Path(f'data/gse65046/02_{nr_clusters}_clusters_tf2network_output.tsv')
+    # expr_mat_time.get_z_score_of_cluster_characteristics(tf2_out_path, plotting=True)
     expr_mat_time.keep_highest_z_clusters(20, tf2_out_path)
-
     module_module = module_network_from_tf2_output(expr_mat_time, tf2_in_path,
-                                                   tf2_out_path, threshold=.6)
+                                                   tf2_out_path, threshold=.3)
 
     expr_mat_time.keep_only_modules_in_network(module_module)
 
-    expr_mat_drought = copy.deepcopy(expr_mat_time)
-    expr_mat_drought.keep_only_samples_with_string('drought')
-    expr_mat_drought.plot_clusters_over_time(title='Drought')
+    expr_mat_time.plot_clusters_over_time(split_by_condition=['control', 'drought'])
 
-    expr_mat_control = copy.deepcopy(expr_mat_time)
-    expr_mat_control.keep_only_samples_with_string('control')
-    expr_mat_control.plot_clusters_over_time(title='Control')
-
-    expr_mat_time.see_pairwise_cluster_correlations('Pre-selection')
-    expr_mat_time.merge_correlating_modules(cutoff=0.8,
-                                            criterion_type='maxclust',
-                                            criterion_start_value=7,
-                                            criterion_step=-1)
-
-    expr_mat_time.see_pairwise_cluster_correlations('Post-selection')
-    with open('data/gse65046/merged_clusters_ExpressionMatrix.pkl', 'wb') as f:
-        pickle.dump(expr_mat_time, f)
+    # expr_mat_time.see_pairwise_cluster_correlations('Pre-selection', method='mean')
+    # expr_mat_time.merge_correlating_modules(cutoff=0.8,
+    #                                         criterion_type='maxclust',
+    #                                         criterion_start_value=11,
+    #                                         criterion_step=-1, method='mean')
+    #
+    # expr_mat_time.see_pairwise_cluster_correlations('Post-selection', method='mean')
+    # with open('data/gse65046/merged_clusters_mean_values_ExpressionMatrix.pkl', 'wb') as f:
+    #     pickle.dump(expr_mat_time, f)
 
     expr_mat_drought = copy.deepcopy(expr_mat_time)
     expr_mat_drought.keep_only_samples_with_string('drought')
@@ -159,13 +154,16 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
     expr_mat_control = copy.deepcopy(expr_mat_time)
     expr_mat_control.keep_only_samples_with_string('control')
     expr_mat_control.plot_clusters_over_time(title='Control')
-    new_tf2_in = Path(f'data/gse65046/merged_clusters_tf2_input.txt')
-    new_tf2_out = Path(f'data/gse65046/merged_clusters_tf2network_output.tsv')
-    expr_mat_time.write_tf2_input_file(new_tf2_in)
+    # new_tf2_in = Path(f'data/gse65046/merged_mean_clusters_tf2_input.txt')
+    # expr_mat_time.write_tf2_input_file(new_tf2_in)
+    #
+    # new_tf2_out = Path(f'data/gse65046/merged_mean_clusters_tf2network_output.tsv')
+    # new_module_module = module_network_from_tf2_output(expr_mat_time,
+    #                                                    new_tf2_in,
+    #                                                    new_tf2_out,
+    #                                                    threshold=.4)
 
-    new_module_module = module_network_from_tf2_output(expr_mat_time, new_tf2_in, new_tf2_out, threshold=.3)
-
-    fit_ode_to_two_datasets(new_module_module, expr_mat_drought, expr_mat_control)
+    fit_ode_to_two_datasets(module_module, expr_mat_drought, expr_mat_control)
 
 
 def module_network_from_tf2_output(expr_mat_time, tf2_in_path, tf2_out_path, threshold):
@@ -635,15 +633,23 @@ def camila_red_panda(soft_file_in_path: Path,
     plt.show()
 
 if __name__ == "__main__":
-    with open('data/gse65046/merged_clusters_ExpressionMatrix.pkl', 'rb') as f:
-        expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
+    # with open('data/gse65046/merged_clusters_ExpressionMatrix.pkl', 'rb') as f:
+    #     expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
 
-    new_tf2_in = Path(f'data/gse65046/merged_clusters_tf2_input.txt')
-    expr_mat_time.write_tf2_input_file(new_tf2_in)
-    new_tf2_out = Path(f'data/gse65046/merged_clusters_tf2network_output.tsv')
-    new_module_module = module_network_from_tf2_output(expr_mat_time,
-                                                       new_tf2_in,
-                                                       new_tf2_out,
-                                                       threshold=.3)
 
-    fit_ode_to_two_datasets(new_module_module, expr_mat_time)
+    soft_path = Path('data/gse65046/GSE65046_family.soft')
+
+    linkage_path = Path('data/atted_ii/linkage_matrices/all_cor_one_matrix_renamed_complete_linkage.npy')
+    metabolite_path =  Path('data/gse65046/plcell_v28_2_345_s1/TPC2015-00910-LSBR1_Supplemental_Data_sets_1_18.xlsx')
+    pipeline_from_atted_clustering(soft_path, linkage_path, metabolite_path)
+
+    #
+    # new_tf2_in = Path(f'data/gse65046/merged_clusters_tf2_input.txt')
+    # expr_mat_time.write_tf2_input_file(new_tf2_in)
+    # new_tf2_out = Path(f'data/gse65046/merged_clusters_tf2network_output.tsv')
+    # new_module_module = module_network_from_tf2_output(expr_mat_time,
+    #                                                    new_tf2_in,
+    #                                                    new_tf2_out,
+    #                                                    threshold=.3)
+    #
+    # fit_ode_to_two_datasets(new_module_module, expr_mat_time)
