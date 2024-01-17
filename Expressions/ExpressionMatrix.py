@@ -3,6 +3,7 @@ Contains classes that contain matrices of gene expression levels.
 """
 from __future__ import annotations
 import logging
+from enum import Enum
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal, Callable, Dict, List, Tuple
@@ -26,6 +27,13 @@ from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628, standardize, \
     calculate_coefficient_of_variation, calculate_qcd, do_pca
 
+class AggregationMethod(Enum):
+    """Used to set the type of aggregation methot that is used
+    to represent a module as one number. Can be either through
+    the eigengene (value of PC1), or through the mean of a module.
+    """
+    EIGENGENE = 'eigengene'
+    MEAN = 'mean'
 
 class ExpressionMatrix:
     # Default prefixes to use when exporting to LPAN rscript files
@@ -44,11 +52,13 @@ class ExpressionMatrix:
         self.df = self.df[~self.df.index.duplicated(keep='first')]
         self.has_been_clustered = False
         self.column_parser: Callable = None
-        # TODO declare this from the start?
+        # TODO declare these from the start?
         self.phenotype_dict = None
         # Before doing PCA for eigengene analysis, always do
         # mean centering + scaling
         self.scale_before_pca = True
+        # Can be mean or eigengene
+        self.aggregation_method: AggregationMethod = AggregationMethod.MEAN
 
     def __repr__(self):
         return (f'ExpressionMatrix with {len(self.df)} genes'
@@ -408,7 +418,6 @@ class ExpressionMatrix:
                                 contain lines with cluster_id and gene
                                 name separated by space.
         """
-        print()
         mapping_df = pd.read_csv(tf2_input_path, sep=' ', names=['cluster_id','gene_name'], index_col='gene_name')
         self._apply_cluster_mapping_from_df(mapping_df, overwrite=overwrite)
 
@@ -519,8 +528,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
     def extract_module_expressions(self, n_cluster: int,
                                    for_static_predictions = False,
                                    do_plotting: bool = False,
-                                   random_clustering: bool = False,
-                                   aggregation_method: Literal['mean', 'pca'] = 'mean'
+                                   random_clustering: bool = False
                                    ) -> pd.DataFrame:
         """Get mean expression per gene module based on
         clustering of expression correlation. And return as dataframe.
@@ -541,29 +549,27 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                 self.do_hierachical_clustering(n_cluster, do_plotting=do_plotting)
         else:
             logging.info('Already clustered, will not perform clustering again')
-
-        if aggregation_method == 'mean':
-            # DO MEAN CLUSTERING
-            molten_df = pd.melt(self.df, id_vars='cluster_id',
-                                value_vars=self.df.columns[:-1],
-                                ignore_index=False, var_name='sample',
-                                value_name='expression')
-            summary_df = molten_df.groupby(
-                ['sample', 'cluster_id']).mean().reset_index()
-            if for_static_predictions:
-                return summary_df.pivot(index='sample', columns='cluster_id',
-                                        values='expression')
-            return summary_df
-        elif aggregation_method == 'pca':
-            # PCA-based
-            eigengenes = self.df.groupby('cluster_id').apply(
-                self._get_eigengene_over_time)
-            # Convert to long form
-            eigengenes = eigengenes.T.reset_index().melt(
-                id_vars=['time', 'condition'], value_name='expression')
-            return eigengenes
-        else:
-            raise NotImplementedError(f'{aggregation_method=} is not implemented')
+        match self.aggregation_method:
+            case AggregationMethod.MEAN:
+                molten_df = pd.melt(self.df, id_vars='cluster_id',
+                                    value_vars=self.df.columns[:-1],
+                                    ignore_index=False, var_name='sample',
+                                    value_name='expression')
+                summary_df = molten_df.groupby(
+                    ['sample', 'cluster_id']).mean().reset_index()
+                if for_static_predictions:
+                    return summary_df.pivot(index='sample', columns='cluster_id',
+                                            values='expression')
+                return summary_df
+            case AggregationMethod.EIGENGENE:
+                eigengenes = self.df.groupby('cluster_id').apply(
+                    self._get_eigengene_over_time)
+                # Convert to long form
+                eigengenes = eigengenes.T.reset_index().melt(
+                    id_vars=['time', 'condition'], value_name='expression')
+                return eigengenes
+            case _:
+                raise NotImplementedError(f'{self.aggregation_method=} is not implemented')
 
     def _get_eigengene_over_time(self,
                                  one_group_df: pd.DataFrame) -> pd.Series:
@@ -596,6 +602,24 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         updated_indices = updated_indices.drop('rep_nr', axis=1)
         eigen_values_through_time.index = pd.MultiIndex.from_frame(updated_indices)
         return eigen_values_through_time
+
+    def _get_mean_over_time(self, one_group_df: pd.DataFrame) -> pd.Series:
+        """Get the series of the module mean, to see how it behaves over
+           time. Only applies this to one module, so recommended calling this
+           from a grouped_df.apply context.
+
+        :param one_group_df: Dataframe of one module to apply mean
+                             methodology to.
+        :return: expression of module mean at all time points
+        """
+        one_group_df = one_group_df.drop('cluster_id', axis=1)
+        expressions = one_group_df.mean()
+        updated_indices = pd.DataFrame(
+            self.column_parser(expressions.index))
+        updated_indices = updated_indices.drop('rep_nr', axis=1)
+        expressions.index = pd.MultiIndex.from_frame(
+            updated_indices)
+        return expressions
 
     def _do_pca_of_group(self, one_group_df: pd.DataFrame) -> PCA:
         """For one gene module, do PCA with one component to get idea of
@@ -724,7 +748,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                         if 'Shoot' in col]
         self.df = self.df[col_mask]
 
-    def plot_clusters_over_time(self, plot_units: bool = False,
+    def plot_clusters_over_time(self,
+                                plot_units: bool = False,
                                 title=None,
                                 split_by_condition: List[str] = None) -> None:
         """Plot expression of clusters over time.
@@ -751,10 +776,18 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                         palette=sns.color_palette(n_colors=nr_hues),
                         units='ID_REF', estimator=None, lw=1, alpha=.2)
         else:
-            some_df = self.df.groupby('cluster_id').apply(
-                self._get_eigengene_over_time)
-            some_df = some_df.reset_index().melt(id_vars='cluster_id',
-                                                 value_name='expression')
+            match self.aggregation_method:
+                case AggregationMethod.EIGENGENE:
+                    some_df = self.df.groupby('cluster_id').apply(
+                        self._get_eigengene_over_time)
+                    some_df = some_df.reset_index().melt(id_vars='cluster_id',
+                                                         value_name='expression')
+                case AggregationMethod.MEAN:
+                    some_df = self._get_cluster_expression_long_form(0)
+                    some_df = some_df[['cluster_id', 'time', 'condition', 'expression']]
+                case _:
+                    raise NotImplementedError
+
             some_df['time (days)'] = some_df['time'].dt.days
             nr_hues = some_df['cluster_id'].nunique()
             if split_by_condition is None:
@@ -769,7 +802,9 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                     sns.lineplot(data=selected_df, x='time (days)',
                                  y='expression',
                                  hue='cluster_id',
-                                 palette=sns.color_palette(n_colors=nr_hues))
+                                 palette=sns.color_palette(n_colors=nr_hues),
+                                 # legend=False
+                                 )
                     plt.title(word)
                     plt.show()
                 ...
@@ -810,25 +845,28 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         :return: absolute correlation value
         """
         assert self.column_parser is not None, 'Explicitly provide a column_parser first'
-
-        eigengenes = self._get_eigengene_over_time(one_group_df)
-        eigengenes = eigengenes.reset_index()
+        match self.aggregation_method:
+            case AggregationMethod.EIGENGENE:
+                expressions = self._get_eigengene_over_time(one_group_df)
+            case AggregationMethod.MEAN:
+                expressions = self._get_mean_over_time(one_group_df)
+            case _:
+                raise NotImplementedError
+        expressions = expressions.reset_index()
         logging.warning("Can only correlate to one phenotype at the moment")
         for phenotype, metabolite_values in self.phenotype_dict.items():
-            sub_df = metabolite_values.merge(eigengenes,
+            sub_df = metabolite_values.merge(expressions,
                                              on=['time', 'condition'])
             corr_matrix = sub_df.iloc[:, -2:].corr()
             corr = corr_matrix.iloc[1,0]
             # TODO handle multiple phenotypes
             return abs(corr)
 
-    def _get_cluster_expression_long_form(self, n_clusters: int,
-                                          aggregation_method: Literal['mean', 'pca'] = 'mean'):
+    def _get_cluster_expression_long_form(self, n_clusters: int):
         """Get dataframe which shows expression of clusters over time
         in long-form dataframe
         """
-        out_df = self.extract_module_expressions(n_clusters, do_plotting=False,
-                                                 aggregation_method=aggregation_method)
+        out_df = self.extract_module_expressions(n_clusters, do_plotting=False)
         # Get time point info from sample names
         # Parse time info based on columns
         if 'time' not in out_df.columns:
@@ -838,6 +876,9 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         return out_df
 
     def _get_gene_expression_long_form(self):
+        """Expression of all individual genes.
+        Used if you want to plot them all seperately
+        """
         assert self.has_been_clustered, ('Cluster genes first.'
                                          'I.e. call the .do_hierarchical_clustering() method before calling this method.')
         # TODO create private method of this snippet of code is used twice atm
@@ -936,8 +977,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
     def get_clusters_expressions_with_time(
             self,
-            n_clusters: int,
-            aggregation_method: Literal['mean', 'pca'] = 'pca'
+            n_clusters: int
     ) -> tuple[np.ndarray, np.ndarray]:
         """For fitting ODEs, get expression of clusters over time.
         First array in tuple indicates time_points in minutes, second array
@@ -946,9 +986,9 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         :return: tuple of time points, module expressions
         """
         some_df = self._get_cluster_expression_long_form(
-            n_clusters, aggregation_method=aggregation_method)
+            n_clusters)
         # Slightly different preprocessing in case mean aggregation was used
-        if aggregation_method == 'mean':
+        if self.aggregation_method == AggregationMethod.MEAN:
             # Take mean of all biological replicates
             some_df = some_df.groupby(['cluster_id', 'elapsed_mins']).mean(
                 numeric_only=True).reset_index()
@@ -1001,6 +1041,9 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
         :param module_index: the index of the module (e.g. 1)
         :param tf_name: Name of transcription factor
+        :param method: Method to calculate correlation.
+                       E.g. spearman or pearson.
+        :param plot: If true, plot the distribution of correlations
         :return: Pearson correlation coefficient
         """
         # TODO eventually check if this can be moved higher up in the hierarchy
@@ -1009,7 +1052,15 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             logging.warning(f'TF ({tf_name}) not present in dataframe')
             return np.nan
         module_expressions = self.df[self.df['cluster_id'] == module_index]
-        module_expressions = self._get_eigengene_over_time(module_expressions)
+        match self.aggregation_method:
+            case AggregationMethod.EIGENGENE:
+                module_expressions = self._get_eigengene_over_time(
+                    module_expressions)
+            case AggregationMethod.MEAN:
+                module_expressions = self._get_mean_over_time(
+                    module_expressions)
+            case _:
+                raise NotImplementedError
         tf_expressions = self.df.loc[tf_name]
         tf_expressions = tf_expressions.drop('cluster_id')
         # Ensure that indices match between eigengene and transciption factor
@@ -1039,6 +1090,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             - How much its expression changes over time
             - Median expression of genes in module to see if it is switched on
         """
+        raise NotImplementedError
         summary_df = self._get_characteristics_of_clusters()
         sns.scatterplot(summary_df,
                         x='explained_var',
@@ -1105,13 +1157,18 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                              one column. (Typically from .grouppby() method)
         :return: mean squared error
         """
-        eigengenes = self._get_eigengene_over_time(one_group_df)
+        match self.aggregation_method:
+            case AggregationMethod.EIGENGENE:
+                expressions = self._get_eigengene_over_time(one_group_df)
+            case AggregationMethod.MEAN:
+                expressions = self._get_mean_over_time(one_group_df)
+            case _:
+                raise NotImplementedError
         # Split into drought and control time series
-        control_series = eigengenes[eigengenes.index.get_level_values(
+        control_series = expressions[expressions.index.get_level_values(
             'condition').isin(['zero', 'control'])]
-        drought_series = eigengenes[eigengenes.index.get_level_values(
+        drought_series = expressions[expressions.index.get_level_values(
             'condition').isin(['zero', 'drought'])]
-
         return mean_squared_error(control_series, drought_series)
 
     @staticmethod
@@ -1231,9 +1288,15 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
     def get_pairwise_module_correlations(self) -> pd.DataFrame:
         """Get dataframe that shows pairwise module correlations"""
-        eigengenes = self.df.groupby('cluster_id').apply(
-            self._get_eigengene_over_time)
-        correlations = eigengenes.T.corr()
+        match self.aggregation_method:
+            case AggregationMethod.EIGENGENE:
+                expressions = self.df.groupby('cluster_id').apply(
+                    self._get_eigengene_over_time)
+            case AggregationMethod.MEAN:
+                expressions = self.df.groupby('cluster_id').mean()
+            case _:
+                raise NotImplementedError(f'{self.aggregation_method} not found as method')
+        correlations = expressions.T.corr()
         return correlations
 
     def merge_correlating_modules(self, cutoff: float,
@@ -1265,6 +1328,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             clustering = fcluster(linkage_matrix, criterion_start_value, criterion_type)
             logging.info(f"{len(set(clustering))} clusters")
             new_module_names_dict = dict()
+            # TODO revisit this so clustering is just more elegant?
             for old_index, new_module_id in enumerate(clustering):
                 old_id = correlations.index[old_index]
                 new_module_names_dict[old_id] = int(f'{new_module_id}')
@@ -1274,7 +1338,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             correlations = self.get_pairwise_module_correlations()
             correlation_array= correlations.to_numpy()
             correlation_dists = 1 - correlation_array
-
 
     def keep_only_modules_in_network(self, module_module):
         """Filters the expression matrix to keep only the modules present
