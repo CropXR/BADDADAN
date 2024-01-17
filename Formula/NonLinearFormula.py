@@ -226,10 +226,10 @@ class NonLinearFormula(FormulaSuperClass):
         self.params.extend([b_param_name, k_param_name])
         if direction == EdgeRelation.UPREGULATES:
             term_to_add = self.generate_hill_activation_term(
-                b_param_name, k_param_name, var_name, n=10)
+                b_param_name, k_param_name, var_name, n=1)
         elif direction == EdgeRelation.DOWNREGULATES:
             term_to_add = self.generate_hill_inhibition_term(
-                b_param_name, k_param_name, var_name, n=10)
+                b_param_name, k_param_name, var_name, n=1)
         else:
             raise NotImplementedError('If regulatory interaction is unclear, cannot use that properly yet')
         self.formula_parts.append(term_to_add)
