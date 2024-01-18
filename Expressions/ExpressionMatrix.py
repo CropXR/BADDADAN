@@ -2,6 +2,8 @@
 Contains classes that contain matrices of gene expression levels.
 """
 from __future__ import annotations
+
+import copy
 import logging
 from enum import Enum
 from pathlib import Path
@@ -1317,27 +1319,34 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         correlations = self.get_pairwise_module_correlations()
         correlation_array = correlations.to_numpy()
         correlation_dists = 1 - correlation_array
-        nr_groups = len(correlation_dists)
-        logging.info(f"{nr_groups} clusters")
+        self_copy = copy.deepcopy(self)
 
         while np.max(correlation_array[np.triu_indices_from(correlation_array, k=1)]) > cutoff:
+            self_copy = copy.deepcopy(self)
             criterion_start_value += criterion_step
-            logging.info(np.max(correlation_array[np.triu_indices_from(correlation_array, k=1)]))
             dense_dist = squareform(correlation_dists)
             linkage_matrix = linkage(dense_dist, method='complete')
-            clustering = fcluster(linkage_matrix, criterion_start_value, criterion_type)
-            logging.info(f"{len(set(clustering))} clusters")
+            clustering = fcluster(linkage_matrix,
+                                  criterion_start_value,
+                                  criterion_type)
+
             new_module_names_dict = dict()
-            # TODO revisit this so clustering is just more elegant?
             for old_index, new_module_id in enumerate(clustering):
                 old_id = correlations.index[old_index]
                 new_module_names_dict[old_id] = int(f'{new_module_id}')
 
-            self.df['cluster_id'] = self.df['cluster_id'].replace(
+            self_copy.df['cluster_id'] = self_copy.df['cluster_id'].replace(
                 new_module_names_dict)
-            correlations = self.get_pairwise_module_correlations()
+            correlations = self_copy.get_pairwise_module_correlations()
             correlation_array= correlations.to_numpy()
             correlation_dists = 1 - correlation_array
+            logging.info(f"{criterion_start_value} clusters gives max cor: "
+                         f"{np.max(correlation_array[np.triu_indices_from(correlation_array,k=1)]):.2f}")
+        else:
+            logging.info(f"""Merged in the following way:
+             {dict(sorted(new_module_names_dict.items(), key=lambda item: item[1]))}
+             """)
+            self.df = self_copy.df
 
     def keep_only_modules_in_network(self, module_module):
         """Filters the expression matrix to keep only the modules present
