@@ -11,7 +11,8 @@ from matplotlib import pyplot as plt
 from DynamicModels.OdeFitter import OdeFitter
 from DynamicModels.OdeLocalParameters import OdeLocalParameters
 from DynamicModels.OdeModel import OdeModel
-from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
+from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries, \
+    AggregationMethod
 from helpers import check_all_identical_lists, plot_y_and_y_hat
 
 
@@ -26,7 +27,7 @@ class OdeFitterMultipleDatasets:
                  method: Literal['lbfgs', 'bfgs',
                                  'differential_evolution',
                                  'basinhopping', 'shgo'] = 'lbfgs',
-                 aggregation_method: Literal['pca', 'mean'] = 'mean',
+                 aggregation_method: AggregationMethod = AggregationMethod.MEAN,
                  ):
         """
         :param ode_model: The ODE model used for fitting.
@@ -45,20 +46,21 @@ class OdeFitterMultipleDatasets:
         # Combine all OdeFitter objects
         self.all_fitters = []
         assert dataset.has_been_clustered
-        if aggregation_method == 'pca':
-            eigengenes: pd.DataFrame = dataset.df.groupby('cluster_id').apply(
+        if aggregation_method == AggregationMethod.EIGENGENE:
+            expressions: pd.DataFrame = dataset.df.groupby('cluster_id').apply(
                             dataset._get_eigengene_over_time)
             # Add constant value to eigengenes
-            eigengenes = abs(eigengenes.min().min()) + eigengenes
-        elif aggregation_method == 'mean':
+            expressions = abs(expressions.min().min()) + expressions
+        elif aggregation_method == AggregationMethod.MEAN:
+            expressions: pd.DataFrame = dataset.df.groupby('cluster_id').apply(
+                dataset._get_mean_over_time)
+        else:
             raise NotImplementedError
 
         for word in words_to_split_dataset:
-            old_time, old_data = dataset.get_clusters_expressions_with_time(
-                0, aggregation_method='mean')
-            valid_index = eigengenes.columns.get_level_values(
+            valid_index = expressions.columns.get_level_values(
                 'condition').isin(['zero', word])
-            data = eigengenes.loc[:, valid_index]
+            data = expressions.loc[:, valid_index]
             time = data.columns.get_level_values('time').astype('timedelta64[h]')
             assert len(data.columns) == len(time)
             data = data.to_numpy()
@@ -162,22 +164,33 @@ class OdeFitterMultipleDatasets:
 
         return result
 
-    def calculate_current_best_fits(self, out_path: Path = None):
+    def calculate_current_best_fits(self, data_point_overlay: bool = False,
+                                    out_path: Path = None):
         """Calculate the solution of the ODEs for all conditions to which
         they were fitted
          """
-        fig, axs = plt.subplots(len(self.all_fitters), 2, sharey='all')
-        logging.debug([(i, j)
-                       for i, j in zip(self.all_fitters[0].params.values(),
-                                       self.all_fitters[1].params.values())
-                       ]
-                      )
-        for i, fitter in enumerate(self.all_fitters):
-            i *= 2
-            ax = axs.flatten()[i:i+2]
-            pred = fitter.calculate_current_best_fit(fitter.time_points)
-            real = fitter.measured_data
-            plot_y_and_y_hat(real, fitter.time_points, pred, axs=ax)
+        if not data_point_overlay:
+            fig, axs = plt.subplots(len(self.all_fitters), 2, sharey='all')
+            logging.debug([(i, j)
+                           for i, j in zip(self.all_fitters[0].params.values(),
+                                           self.all_fitters[1].params.values())
+                           ]
+                          )
+            for i, fitter in enumerate(self.all_fitters):
+                i *= 2
+                ax = axs.flatten()[i:i+2]
+                pred = fitter.calculate_current_best_fit(fitter.time_points)
+                real = fitter.measured_data
+                plot_y_and_y_hat(real, fitter.time_points, pred, axs=ax)
+        else:
+            fig, axs = plt.subplots(1, len(self.all_fitters), sharey='all')
+            for i, fitter in enumerate(self.all_fitters):
+                ax = axs.flatten()[i]
+                pred = fitter.calculate_current_best_fit(fitter.time_points)
+                real = fitter.measured_data
+                plot_y_and_y_hat(real, fitter.time_points, pred,
+                                 axs=ax,
+                                 data_point_overlay=True)
         plt.tight_layout()
         # plt.savefig(out_path)
         plt.show()

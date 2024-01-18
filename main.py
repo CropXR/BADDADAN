@@ -110,11 +110,6 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
     expr_mat_time.plot_cluster_sizes()
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.merge_biological_samples()
-    # expr_mat_time.see_pairwise_cluster_correlations('Pre-cluster')
-    # expr_mat_time.merge_correlating_modules(cutoff=0.9, criterion_type='maxclust',
-    #                                         criterion_start_value=150,
-    #                                         criterion_step=-10)
-    # expr_mat_time.see_pairwise_cluster_correlations('Post-cluster')
 
     tf2_in_path = Path(f'data/gse65046/{nr_clusters}_clusters_tf2_input.txt')
     expr_mat_time.write_tf2_input_file(tf2_in_path)
@@ -137,15 +132,15 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
 
     expr_mat_time.plot_clusters_over_time(split_by_condition=['control', 'drought'])
 
-    # expr_mat_time.see_pairwise_cluster_correlations('Pre-selection', method='mean')
-    # expr_mat_time.merge_correlating_modules(cutoff=0.8,
-    #                                         criterion_type='maxclust',
-    #                                         criterion_start_value=11,
-    #                                         criterion_step=-1, method='mean')
-    #
-    # expr_mat_time.see_pairwise_cluster_correlations('Post-selection', method='mean')
-    # with open('data/gse65046/merged_clusters_mean_values_ExpressionMatrix.pkl', 'wb') as f:
-    #     pickle.dump(expr_mat_time, f)
+    expr_mat_time.see_pairwise_cluster_correlations('Pre-selection')
+    expr_mat_time.merge_correlating_modules(cutoff=0.8,
+                                            criterion_type='maxclust',
+                                            criterion_start_value=13,
+                                            criterion_step=-1)
+
+    expr_mat_time.see_pairwise_cluster_correlations('Post-selection')
+    with open('data/gse65046/merged_clusters_mean_values_ExpressionMatrix.pkl', 'wb') as f:
+        pickle.dump(expr_mat_time, f)
 
     expr_mat_drought = copy.deepcopy(expr_mat_time)
     expr_mat_drought.keep_only_samples_with_string('drought')
@@ -154,8 +149,8 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
     expr_mat_control = copy.deepcopy(expr_mat_time)
     expr_mat_control.keep_only_samples_with_string('control')
     expr_mat_control.plot_clusters_over_time(title='Control')
-    # new_tf2_in = Path(f'data/gse65046/merged_mean_clusters_tf2_input.txt')
-    # expr_mat_time.write_tf2_input_file(new_tf2_in)
+    new_tf2_in = Path(f'data/gse65046/merged_mean_clusters_tf2_input.txt')
+    expr_mat_time.write_tf2_input_file(new_tf2_in)
     #
     # new_tf2_out = Path(f'data/gse65046/merged_mean_clusters_tf2network_output.tsv')
     # new_module_module = module_network_from_tf2_output(expr_mat_time,
@@ -381,7 +376,6 @@ def fit_ode_to_two_datasets(
     # These are parameters that are different between the two datasets
     # They are the initial values, and the drought treatment (i.e. u_t function)
     custom_params = dict()
-    # TODO make these lambda functions more interpretable, e.g. change them into a custom object
     small_constant = 1
     control_name = 'control'
     drought_name = 'drought'
@@ -399,34 +393,35 @@ def fit_ode_to_two_datasets(
          u_t=(lambda t: small_constant * t / (13*24)))
 
     # Step uno
-    my_fitter = OdeFitterMultipleDatasets(
+    # my_fitter = OdeFitterMultipleDatasets(
+    #         my_ode, my_time_series_expressions, condition_names,
+    #         custom_params,
+    #         param_limit=.5, aggregation_method=AggregationMethod.MEAN)
+
+    # # Make the =0 params where we think is appropriate
+    # new_params = Parameters()
+    # for param_name in my_fitter.master_params:
+    #     if 'k_' in param_name:
+    #         new_params.add(param_name, value=22)
+    #     # elif 'delta' in param_name:
+    #     #     new_params.add(param_name, value=0, vary=True)
+    #     elif param_name in ['gamma_1', 'gamma_2']:
+    #         new_params.add(param_name, value=0, vary=False)
+    #     elif param_name == 'gamma_0':
+    #         new_params.add(param_name, value=0.005, vary=False)
+    #
+    # my_fitter.master_params = new_params
+
+    # my_fitter.fit(max_iter=500)
+    # my_fitter.calculate_current_best_fits()
+    # my_fitter.all_fitters[0].plot_hill_equation_range()
+    # Step uno
+    multiple_fitters = [OdeFitterMultipleDatasets(
             my_ode, my_time_series_expressions, condition_names,
             custom_params,
-            param_limit=1, aggregation_method='pca')
-
-    # Make the =0 params where we think is appropriate
-    new_params = Parameters()
-    for param_name in my_fitter.master_params:
-        if 'k_' in param_name:
-            new_params.add(param_name, value=22)
-        # elif 'delta' in param_name:
-        #     new_params.add(param_name, value=0, vary=True)
-        elif param_name in ['gamma_1', 'gamma_2']:
-            new_params.add(param_name, value=0, vary=False)
-        elif param_name == 'gamma_0':
-            new_params.add(param_name, value=0.005, vary=False)
-
-    my_fitter.master_params = new_params
-
-    my_fitter.fit(max_iter=500)
-    my_fitter.calculate_current_best_fits()
-    # # Step uno
-    # multiple_fitters = [OdeFitterMultipleDatasets(
-    #     my_ode, my_time_series_expressions, condition_names,
-    #     custom_params,
-    #     param_limit=2, aggregation_method='pca') for _ in range(5)]
-    # best_fit = fit_multiple_fitters(multiple_fitters, 300)
-    # best_fit.calculate_current_best_fits(fig_path)
+            param_limit=.1, aggregation_method=AggregationMethod.MEAN) for _ in range(5)]
+    best_fit = fit_multiple_fitters(multiple_fitters, 500)
+    best_fit.calculate_current_best_fits(data_point_overlay=True)
     # multiple_fitter.fit(100)
     # best_fits = multiple_fitter.calculate_current_best_fits()
 
@@ -437,7 +432,7 @@ def fit_ode_to_data(module_network: ModuleRegulatoryNetwork,
     assert my_time_series_expressions.has_been_clustered
     # my_time_series_expressions.plot_clusters_over_time(plot_units=True)
     my_time, my_data = my_time_series_expressions.get_clusters_expressions_with_time(
-        0, aggregation_method='mean')
+        0)
 
     plot_y_and_y_hat(my_data, my_time)
     # my_time_series_expressions.get_genes_per_cluster()
@@ -633,23 +628,21 @@ def camila_red_panda(soft_file_in_path: Path,
     plt.show()
 
 if __name__ == "__main__":
-    # with open('data/gse65046/merged_clusters_ExpressionMatrix.pkl', 'rb') as f:
-    #     expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
-
-
-    soft_path = Path('data/gse65046/GSE65046_family.soft')
-
-    linkage_path = Path('data/atted_ii/linkage_matrices/all_cor_one_matrix_renamed_complete_linkage.npy')
-    metabolite_path =  Path('data/gse65046/plcell_v28_2_345_s1/TPC2015-00910-LSBR1_Supplemental_Data_sets_1_18.xlsx')
-    pipeline_from_atted_clustering(soft_path, linkage_path, metabolite_path)
-
+    # soft_path = Path('data/gse65046/GSE65046_family.soft')
     #
-    # new_tf2_in = Path(f'data/gse65046/merged_clusters_tf2_input.txt')
+    # linkage_path = Path('data/atted_ii/linkage_matrices/all_cor_one_matrix_renamed_complete_linkage.npy')
+    # metabolite_path =  Path('data/gse65046/plcell_v28_2_345_s1/TPC2015-00910-LSBR1_Supplemental_Data_sets_1_18.xlsx')
+    # pipeline_from_atted_clustering(soft_path, linkage_path, metabolite_path)
+
+    with open('data/gse65046/merged_clusters_mean_values_ExpressionMatrix.pkl', 'rb') as f:
+        expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
+    expr_mat_time.plot_clusters_over_time(split_by_condition=['control', 'drought'])
+    new_tf2_in = Path(f'data/gse65046/merged_mean_clusters_tf2_input.txt')
     # expr_mat_time.write_tf2_input_file(new_tf2_in)
-    # new_tf2_out = Path(f'data/gse65046/merged_clusters_tf2network_output.tsv')
-    # new_module_module = module_network_from_tf2_output(expr_mat_time,
-    #                                                    new_tf2_in,
-    #                                                    new_tf2_out,
-    #                                                    threshold=.3)
+    new_tf2_out = Path(f'data/gse65046/02_merged_mean_clusters_tf2network_output.tsv')
+    new_module_module = module_network_from_tf2_output(expr_mat_time,
+                                                       new_tf2_in,
+                                                       new_tf2_out,
+                                                       threshold=.3)
     #
-    # fit_ode_to_two_datasets(new_module_module, expr_mat_time)
+    fit_ode_to_two_datasets(new_module_module, expr_mat_time)

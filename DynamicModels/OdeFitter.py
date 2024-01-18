@@ -35,7 +35,7 @@ class OdeFitter:
             if 'delta' in param_name:
                 # Decay rates cannot be negative
                 min_value = 0.
-                max_value = .1
+                # max_value = .1
             elif 'k_' in param_name:
                 # Set range of k based on the values that the corresponding
                 # module can take (2 standard deviations below or above
@@ -48,9 +48,9 @@ class OdeFitter:
             elif self.odes.is_nonlinear and 'beta_' in param_name:
                 # Beta values cannot be negative in nonlinear model
                 min_value = 0.
-            elif 'gamma' in param_name:
-                min_value = -1e-2
-                max_value = 1e-2
+            # elif 'gamma' in param_name:
+            #     min_value = min_value
+            #     max_value = 1e-1
 
             self.params.add(param_name,
                             value=np.random.uniform(min_value,

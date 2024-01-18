@@ -208,7 +208,7 @@ class OdeModel:
         y_pred = solve_ivp(self.compute_one_step, (t_start, t_end),
                                 y0,
                                 t_eval=t,
-                                args=[params], method='RK23')
+                                args=[params], method='Radau')
         assert y_pred.success, (
             f"Integration failed: {y_pred.message}"
             f"\nParams: {params}")

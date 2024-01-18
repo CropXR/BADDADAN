@@ -809,8 +809,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                                  )
                     plt.title(word)
                     plt.show()
-                ...
-
 
         # Unused bit of code to show the indivudual genes with
         # the mean per module overlay
