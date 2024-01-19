@@ -697,20 +697,22 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         :returns: Dataframe with cluster_id column which indicates the
                   clustering.
         """
-        # Calculate pearson correlation
-        subset_corr = np.corrcoef(self.df)
-        # subset_corr = np.abs(subset_corr)
-        # subset_corr = subset_corr**2
+        # # Calculate pearson correlation
+        # subset_corr = np.corrcoef(self.df)
+        # # Calculate distance
+        # dist = 1 - subset_corr
+        #
+        # # subset_corr = np.abs(subset_corr)
+        # # subset_corr = subset_corr**2
+        # # Squareform diagonality checking can be too strict, so we do it
+        # # explicitly here and disable checks in the squareform function call
+        # assert np.allclose(dist, dist.T), 'Matrix does not appear symmetrical?'
+        # assert sum(np.diag(dist)) < 1e-6, 'Sum of diagonal too high'
+        # dist = squareform(dist, checks=False)
 
-        # Calculate distance
-        dist = 1 - subset_corr
-        # Squareform diagonality checking can be too strict, so we do it
-        # explicitly here and disable checks in the squareform function call
-        assert np.allclose(dist, dist.T), 'Matrix does not appear symmetrical?'
-        assert sum(np.diag(dist)) < 1e-6, 'Sum of diagonal too high'
-        dense_dist = squareform(dist, checks=False)
+        dist = pdist(self.df, metric='correlation')
         # Create linkage matrix and infer clusters
-        linkage_matrix = linkage(dense_dist, method='complete')
+        linkage_matrix = linkage(dist, method='complete')
         # linkage_matrix = linkage(dense_dist, method='average')
         clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
         self.df = self.df.assign(cluster_id=clustering)
