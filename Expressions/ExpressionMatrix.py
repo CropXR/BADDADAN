@@ -716,6 +716,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         # linkage_matrix = linkage(dense_dist, method='average')
         clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
         self.df = self.df.assign(cluster_id=clustering)
+        self.has_been_clustered = True
 
     def _do_random_clustering(self, n_cluster: int = 2) -> None:
         """Assign genes to random clusters. Used for testing the null hypothesis"""

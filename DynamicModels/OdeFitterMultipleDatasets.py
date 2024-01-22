@@ -192,7 +192,8 @@ class OdeFitterMultipleDatasets:
                                  axs=ax,
                                  data_point_overlay=True)
         plt.tight_layout()
-        # plt.savefig(out_path)
+        if out_path:
+            plt.savefig(out_path)
         plt.show()
 
     @property

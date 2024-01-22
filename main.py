@@ -102,16 +102,19 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
     plt.show()
 
     expr_mat_time.add_phenotypes({'aba': aba_series})
-    atted_path = Path('data/atted_ii/all_cor_one_matrix_renamed.csv')
+    # atted_path = Path('data/atted_ii/all_cor_one_matrix_renamed.csv')
     nr_clusters = 500
-    expr_mat_time.assign_clusters_from_linkage_matrix(atted_linkage_matrix,
-                                                      nr_clusters,
-                                                      atted_path=atted_path)
+    # expr_mat_time.assign_clusters_from_linkage_matrix(atted_linkage_matrix,
+    #                                                   nr_clusters,
+    #                                                   atted_path=atted_path)
+    #
+    # expr_mat_time.keep_n_most_deviating_genes(50)
+    expr_mat_time.do_hierachical_clustering(nr_clusters)
     expr_mat_time.plot_cluster_sizes()
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.merge_biological_samples()
 
-    tf2_in_path = Path(f'data/gse65046/{nr_clusters}_clusters_tf2_input.txt')
+    tf2_in_path = Path(f'data/gse65046/local_clustering_{nr_clusters}_clusters_tf2_input.txt')
     expr_mat_time.write_tf2_input_file(tf2_in_path)
     # expr_mat_time._do_random_clustering(nr_clusters)
     # expr_mat_time.see_pairwise_cluster_correlations('Random')
@@ -122,11 +125,11 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
     # expr_mat_time.plot_cluster_sizes()
 
     # TF2Output file should be here
-    tf2_out_path = Path(f'data/gse65046/02_{nr_clusters}_clusters_tf2network_output.tsv')
+    tf2_out_path = Path(f'data/gse65046/02_local_clustering_{nr_clusters}_clusters_tf2network_output.tsv')
     # expr_mat_time.get_z_score_of_cluster_characteristics(tf2_out_path, plotting=True)
     expr_mat_time.keep_highest_z_clusters(20, tf2_out_path)
     module_module = module_network_from_tf2_output(expr_mat_time, tf2_in_path,
-                                                   tf2_out_path, threshold=.3)
+                                                   tf2_out_path, threshold=.4)
 
     expr_mat_time.keep_only_modules_in_network(module_module)
 
@@ -135,11 +138,11 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
     expr_mat_time.see_pairwise_cluster_correlations('Pre-selection')
     expr_mat_time.merge_correlating_modules(cutoff=0.8,
                                             criterion_type='maxclust',
-                                            criterion_start_value=13,
+                                            criterion_start_value=18,
                                             criterion_step=-1)
 
     expr_mat_time.see_pairwise_cluster_correlations('Post-selection')
-    with open('data/gse65046/merged_clusters_mean_values_ExpressionMatrix.pkl', 'wb') as f:
+    with open('data/gse65046/local_clusters_merged_ExpressionMatrix.pkl', 'wb') as f:
         pickle.dump(expr_mat_time, f)
 
     expr_mat_drought = copy.deepcopy(expr_mat_time)
@@ -149,7 +152,7 @@ def pipeline_from_atted_clustering(soft_file_path: Path,
     expr_mat_control = copy.deepcopy(expr_mat_time)
     expr_mat_control.keep_only_samples_with_string('control')
     expr_mat_control.plot_clusters_over_time(title='Control')
-    new_tf2_in = Path(f'data/gse65046/merged_mean_clusters_tf2_input.txt')
+    new_tf2_in = Path(f'data/gse65046/local_clusters_merged_tf2_input.txt')
     expr_mat_time.write_tf2_input_file(new_tf2_in)
     #
     # new_tf2_out = Path(f'data/gse65046/merged_mean_clusters_tf2network_output.tsv')
@@ -421,7 +424,7 @@ def fit_ode_to_two_datasets(
             custom_params,
             param_limit=.1, aggregation_method=AggregationMethod.MEAN) for _ in range(5)]
     best_fit = fit_multiple_fitters(multiple_fitters, 500)
-    best_fit.calculate_current_best_fits(data_point_overlay=True)
+    best_fit.calculate_current_best_fits(data_point_overlay=False)
     # multiple_fitter.fit(100)
     # best_fits = multiple_fitter.calculate_current_best_fits()
 
@@ -630,9 +633,9 @@ def camila_red_panda(soft_file_in_path: Path,
 if __name__ == "__main__":
     # soft_path = Path('data/gse65046/GSE65046_family.soft')
     #
-    # linkage_path = Path('data/atted_ii/linkage_matrices/all_cor_one_matrix_renamed_complete_linkage.npy')
+    # # linkage_path = Path('data/atted_ii/linkage_matrices/all_cor_one_matrix_renamed_complete_linkage.npy')
     # metabolite_path =  Path('data/gse65046/plcell_v28_2_345_s1/TPC2015-00910-LSBR1_Supplemental_Data_sets_1_18.xlsx')
-    # pipeline_from_atted_clustering(soft_path, linkage_path, metabolite_path)
+    # pipeline_from_atted_clustering(soft_path, None, metabolite_path)
 
     with open('data/gse65046/merged_clusters_mean_values_ExpressionMatrix.pkl', 'rb') as f:
         expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
