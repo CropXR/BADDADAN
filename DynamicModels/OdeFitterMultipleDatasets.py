@@ -42,6 +42,7 @@ class OdeFitterMultipleDatasets:
 
         self.method = method
         self.has_been_fitted = False
+        self.dataset = dataset
 
         # Combine all OdeFitter objects
         self.all_fitters = []
@@ -165,10 +166,10 @@ class OdeFitterMultipleDatasets:
         return result
 
     def calculate_current_best_fits(self, data_point_overlay: bool = False,
-                                    out_path: Path = None):
+                                    out_path: Path = None, use_err_bars=False):
         """Calculate the solution of the ODEs for all conditions to which
         they were fitted
-         """
+        """
         if not data_point_overlay:
             fig, axs = plt.subplots(len(self.all_fitters), 2, sharey='all')
             logging.debug([(i, j)
@@ -188,8 +189,11 @@ class OdeFitterMultipleDatasets:
                 ax = axs.flatten()[i]
                 pred = fitter.calculate_current_best_fit(fitter.time_points)
                 real = fitter.measured_data
+                if use_err_bars:
+                    err_bars = self.dataset.get_mean_to_sem_dict_per_cluster() #?
                 plot_y_and_y_hat(real, fitter.time_points, pred,
                                  axs=ax,
+                                 error_bars=err_bars,
                                  data_point_overlay=True)
         plt.tight_layout()
         if out_path:

@@ -110,7 +110,8 @@ def de_print_fun(xk, convergence=None):
 
 
 def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
-                     model_fit: OdeResult = None, axs = None, data_point_overlay=False):
+                     model_fit: OdeResult = None, axs = None, data_point_overlay=False,
+                     error_bars: np.ndarray | list = None):
     """Plot real data y and model prediction y_hat
 
     :param y_real: Numpy array containing measured data. One variable per row
@@ -131,7 +132,11 @@ def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
     line_type = '.' if data_point_overlay else '-'
     colours = sns.color_palette(n_colors=len(y_real))
     for i, row in enumerate(y_real):
-        ax1.plot(t_real, row, line_type, label=f'Module{i}', color=colours[i])
+        if error_bars:
+            ax1.errorbar(t_real, row, yerr=error_bars,
+                         fmt=line_type, label=f'Module{i}', color=colours[i])
+        else:
+            ax1.plot(t_real, row, line_type, label=f'Module{i}', color=colours[i])
     ax1.set_title('y')
     ax1.set_ylabel('Gene expression')
     ax1.set_xlabel('Time (h)')

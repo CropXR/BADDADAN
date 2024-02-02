@@ -99,7 +99,8 @@ def test_get_lpan_input(my_time_series_expressions: ExpressionMatrixTimeSeries):
     assert True
 
 def test_parse_65046_soft_file():
-    soft_path = Path('../data/gse65046/GSE65046_family.soft')
+    soft_path = Path(
+        '../data/raw_data/expression_datasets/gse65046/GSE65046_family.soft')
     annotation_path = Path('../data/resources/96_plates.csv')
     # annotation = ExpressionArrayAnnotation(annotation_path,
     #                                        sep=',',

@@ -1360,3 +1360,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             self.df['cluster_id'].isin(
                 [int(i.replace(module_module.module_prefix, ""))
                  for i in module_module.get_modules()])]
+
+    def get_sem_per_cluster(self):
+        assert self.has_been_clustered
+        return self.df.groupby('cluster_id').sem()

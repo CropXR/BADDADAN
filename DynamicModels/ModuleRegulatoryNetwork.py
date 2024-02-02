@@ -95,6 +95,7 @@ class ModuleRegulatoryNetwork:
         """
         df = pd.read_csv(in_path, sep='\t')
         df = df[df['GeneSet'] != 'unnamed_set']
+        # TODO at some point do this as node attribute instead of prepending to string
         df['target'] = cls.module_prefix + df['GeneSet'].astype(str)
         df['regulator_with_prefix'] = cls.tf_prefix + df['Regulator'].astype(str)
         df['origin'] = EdgeRelation.BINDS_TO
@@ -222,7 +223,7 @@ class ModuleRegulatoryNetwork:
                         continue
                     else:
                         raise ValueError('Disagreement between regulatory directions'
-                                         ' of {original_module} -> {target_module}')
+                                         f' of {original_module} -> {target_module}')
 
         edge_list = []
         for (origin, target), data_dict in candidate_edges.items():

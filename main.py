@@ -1,29 +1,26 @@
 import copy
 import logging
-import pickle
-from itertools import product
 from pathlib import Path
 
-import networkx as nx
 import numpy as np
 import pandas as pd
 import typer
-from lmfit import fit_report, create_params, Parameters
+import yaml
+from lmfit import create_params, Parameters
 from matplotlib import pyplot as plt
 from sklearn.metrics import adjusted_rand_score
-import seaborn as sns
+import mlflow
 
-import data_wrangling
-import exploring_questions
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from DynamicModels.OdeFitter import OdeFitter
 from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
 from DynamicModels.OdeLocalParameters import OdeLocalParameters
 from DynamicModels.OdeModel import OdeModel
-from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries, AggregationMethod
-from helpers import plot_y_and_y_hat, fit_spline, get_info_from_gse65046
+from analysis_pipelines import pipeline_from_atted_clustering, \
+    local_clustering_on_atted_clusters
+from helpers import plot_y_and_y_hat, get_info_from_gse65046
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
 # pd.options.display.width = 0
@@ -31,6 +28,7 @@ from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 logging.basicConfig(level=logging.INFO)
 # logging.basicConfig(level=logging.DEBUG)
 
+mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
 
 def annotate_microarray_expression(
         expression_path: Path = typer.Option(
@@ -68,118 +66,6 @@ def annotate_microarray_expression(
                 'Cannot parse file format that is currently provided')
     expression_matrix.df.to_csv(output_path)
     logging.info(f'Successfullly saved output to {output_path}')
-
-def pipeline_from_atted_clustering(soft_file_path: Path,
-                                   atted_linkage_matrix: Path,
-                                   metabolites_path: Path,
-                                   do_log2: bool = True
-                                   ):
-    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
-        soft_file_path,
-        log2_transform=do_log2,
-        annotate_from_gpl=True
-    )
-    expr_mat_time.summary_method = AggregationMethod.MEAN
-    metabolite_time_series = pd.read_excel(metabolites_path,
-                                           index_col=0 ,
-                                           header = [0, 1, 2]
-                                           )
-    # Convert the time level to pd.timedelta
-    columns_as_frame = metabolite_time_series.columns.to_frame()
-    columns_as_frame['time'] = pd.to_timedelta(columns_as_frame['time'])
-    multi_index = pd.MultiIndex.from_frame(columns_as_frame)
-    metabolite_time_series = metabolite_time_series.set_axis(multi_index, axis=1)
-
-    metabolite_time_series = metabolite_time_series.groupby(
-        level=[0,1], axis=1).mean()
-    metabolite_time_series = metabolite_time_series.dropna()
-
-    # Start with ABA? -> Yes
-    aba_series = metabolite_time_series.loc['Abscisic acid (ABA) ', :]
-    aba_series = aba_series.reset_index()
-
-    sns.lineplot(data=aba_series, x='time', y='Abscisic acid (ABA) ', hue='condition')
-    plt.show()
-
-    expr_mat_time.add_phenotypes({'aba': aba_series})
-    # atted_path = Path('data/atted_ii/all_cor_one_matrix_renamed.csv')
-    nr_clusters = 500
-    # expr_mat_time.assign_clusters_from_linkage_matrix(atted_linkage_matrix,
-    #                                                   nr_clusters,
-    #                                                   atted_path=atted_path)
-    #
-    # expr_mat_time.keep_n_most_deviating_genes(50)
-    expr_mat_time.do_hierachical_clustering(nr_clusters)
-    expr_mat_time.plot_cluster_sizes()
-    expr_mat_time.column_parser = get_info_from_gse65046
-    expr_mat_time.merge_biological_samples()
-
-    tf2_in_path = Path(f'data/gse65046/local_clustering_{nr_clusters}_clusters_tf2_input.txt')
-    expr_mat_time.write_tf2_input_file(tf2_in_path)
-    # expr_mat_time._do_random_clustering(nr_clusters)
-    # expr_mat_time.see_pairwise_cluster_correlations('Random')
-    # expr_mat_time.do_hierachical_clustering(nr_clusters)
-    # expr_mat_time.see_pairwise_cluster_correlations('Hierarchical on dataset')
-    # expr_mat_time.assign_clusters_from_tf2_input(tf2_in_path, overwrite=True)
-    # expr_mat_time.see_pairwise_cluster_correlations('Post-cluster')
-    # expr_mat_time.plot_cluster_sizes()
-
-    # TF2Output file should be here
-    tf2_out_path = Path(f'data/gse65046/02_local_clustering_{nr_clusters}_clusters_tf2network_output.tsv')
-    # expr_mat_time.get_z_score_of_cluster_characteristics(tf2_out_path, plotting=True)
-    expr_mat_time.keep_highest_z_clusters(20, tf2_out_path)
-    module_module = module_network_from_tf2_output(expr_mat_time, tf2_in_path,
-                                                   tf2_out_path, threshold=.4)
-
-    expr_mat_time.keep_only_modules_in_network(module_module)
-
-    expr_mat_time.plot_clusters_over_time(split_by_condition=['control', 'drought'])
-
-    expr_mat_time.see_pairwise_cluster_correlations('Pre-selection')
-    expr_mat_time.merge_correlating_modules(cutoff=0.8,
-                                            criterion_type='maxclust',
-                                            criterion_start_value=18,
-                                            criterion_step=-1)
-
-    expr_mat_time.see_pairwise_cluster_correlations('Post-selection')
-    with open('data/gse65046/local_clusters_merged_ExpressionMatrix.pkl', 'wb') as f:
-        pickle.dump(expr_mat_time, f)
-
-    expr_mat_drought = copy.deepcopy(expr_mat_time)
-    expr_mat_drought.keep_only_samples_with_string('drought')
-    expr_mat_drought.plot_clusters_over_time(title='Drought')
-
-    expr_mat_control = copy.deepcopy(expr_mat_time)
-    expr_mat_control.keep_only_samples_with_string('control')
-    expr_mat_control.plot_clusters_over_time(title='Control')
-    new_tf2_in = Path(f'data/gse65046/local_clusters_merged_tf2_input.txt')
-    expr_mat_time.write_tf2_input_file(new_tf2_in)
-    #
-    # new_tf2_out = Path(f'data/gse65046/merged_mean_clusters_tf2network_output.tsv')
-    # new_module_module = module_network_from_tf2_output(expr_mat_time,
-    #                                                    new_tf2_in,
-    #                                                    new_tf2_out,
-    #                                                    threshold=.4)
-
-    fit_ode_to_two_datasets(module_module, expr_mat_drought, expr_mat_control)
-
-
-def module_network_from_tf2_output(expr_mat_time, tf2_in_path, tf2_out_path, threshold):
-    my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(tf2_out_path)
-    my_grn.add_tf_module_mappings(tf2_in_path,
-                                  from_tf2_input=True)
-    my_grn.keep_only_modules_of_interest(expr_mat_time)
-    my_grn.clean_up_network()
-    my_grn.check_if_tfs_created_by_module(expr_mat_time,
-                                          do_plotting=True,
-                                          remove_low_corr=True)
-    my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=True,
-                                    threshold=threshold)
-    # my_grn.plot_network(nx.d  raw_kamada_kawai, with_labels=False)
-    module_module = my_grn.get_module_module_network()
-    # # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
-    module_module.plot_network(with_labels=True)
-    return module_module
 
 
 def full_pipeline_prototype(out_dir: Path,
@@ -367,14 +253,11 @@ def fit_ode_to_two_simulated_data(module_network: ModuleRegulatoryNetwork):
 
 
 def fit_ode_to_two_datasets(
-        module_network: ModuleRegulatoryNetwork,
+        my_ode: OdeModel,
         my_time_series_expressions: ExpressionMatrixTimeSeries,
-        fig_path: Path = None):
-    # Assure that data has already been clustered
-    assert my_time_series_expressions.has_been_clustered
-    my_ode = OdeModel.construct_from_regulatory_network(module_network,
-                                                        nonlinear=True)
-    logging.info(my_ode)
+        nr_ode_iters: int,
+        fig_path: Path = None,
+        ):
 
     # These are parameters that are different between the two datasets
     # They are the initial values, and the drought treatment (i.e. u_t function)
@@ -423,8 +306,9 @@ def fit_ode_to_two_datasets(
             my_ode, my_time_series_expressions, condition_names,
             custom_params,
             param_limit=.1, aggregation_method=AggregationMethod.MEAN) for _ in range(5)]
-    best_fit = fit_multiple_fitters(multiple_fitters, 500)
+    best_fit = fit_multiple_fitters(multiple_fitters, nr_ode_iters)
     best_fit.calculate_current_best_fits(data_point_overlay=False)
+    return best_fit
     # multiple_fitter.fit(100)
     # best_fits = multiple_fitter.calculate_current_best_fits()
 
@@ -631,21 +515,61 @@ def camila_red_panda(soft_file_in_path: Path,
     plt.show()
 
 if __name__ == "__main__":
-    # soft_path = Path('data/gse65046/GSE65046_family.soft')
-    #
-    # # linkage_path = Path('data/atted_ii/linkage_matrices/all_cor_one_matrix_renamed_complete_linkage.npy')
-    # metabolite_path =  Path('data/gse65046/plcell_v28_2_345_s1/TPC2015-00910-LSBR1_Supplemental_Data_sets_1_18.xlsx')
-    # pipeline_from_atted_clustering(soft_path, None, metabolite_path)
+    # ONLY EDIT THESE LINES
+    experiment_path = Path('data/experiments/02_threshold higher')
+    mlflow.set_experiment("/check-databricks-connection")
 
-    with open('data/gse65046/merged_clusters_mean_values_ExpressionMatrix.pkl', 'rb') as f:
-        expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
-    expr_mat_time.plot_clusters_over_time(split_by_condition=['control', 'drought'])
-    new_tf2_in = Path(f'data/gse65046/merged_mean_clusters_tf2_input.txt')
-    # expr_mat_time.write_tf2_input_file(new_tf2_in)
-    new_tf2_out = Path(f'data/gse65046/02_merged_mean_clusters_tf2network_output.tsv')
-    new_module_module = module_network_from_tf2_output(expr_mat_time,
-                                                       new_tf2_in,
-                                                       new_tf2_out,
-                                                       threshold=.3)
-    #
-    fit_ode_to_two_datasets(new_module_module, expr_mat_time)
+    ##  This all shouldn't have to be changed ##
+    # Load the config file
+    config_path = experiment_path / 'config.yaml'
+    with config_path.open('r') as f:
+        config = yaml.safe_load(f)
+
+    data_params = config['data']
+    hyper_params = config['hyperparams']
+
+    nr_clusters = hyper_params['nr_clusters']
+    agg_method_dict = {'mean': AggregationMethod.MEAN,
+                       'eigengene': AggregationMethod.EIGENGENE}
+    hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
+
+    expr_mat_time, module_module = pipeline_from_atted_clustering(
+        soft_file_path=Path(data_params['soft_path']),
+        atted_linkage_matrix=Path(data_params['linkage_path']),
+        atted_path=Path(data_params['atted_path']),
+        metabolites_path=Path(data_params['metabolite_path']),
+        experiment_path=experiment_path,
+        edge_cor_threshold=hyper_params['edge_corr_threshold'],
+        nr_clusters=hyper_params['nr_clusters'],
+        top_nr_clusters=hyper_params['top_nr_clusters'],
+        do_log2=hyper_params['do_log2'],
+        agg_method=hyper_params['agg_method']
+    )
+
+    if hyper_params['do_atted_ii_clustering_of_clusters']:
+        expr_mat_time, module_module = local_clustering_on_atted_clusters(
+            clustering_of_clusters_threshold=hyper_params['clustering_of_clusters_threshold'],
+            edge_cor_threshold=hyper_params['edge_corr_threshold'],
+            experiment_path=experiment_path,
+            expr_mat_time=expr_mat_time,
+            top_nr_clusters=hyper_params['top_nr_clusters'])
+
+    # Assure that data has already been clustered
+    assert expr_mat_time.has_been_clustered
+    my_ode = OdeModel.construct_from_regulatory_network(module_module,
+                                                        nonlinear=True)
+
+    best_ode_fit = fit_ode_to_two_datasets(
+        my_ode,
+        expr_mat_time,
+        nr_ode_iters=hyper_params['nr_ode_iters']
+    )
+
+    with mlflow.start_run():
+        mlflow.log_params(data_params)
+        mlflow.log_params(hyper_params)
+        mlflow.set_tags(config['experiment_data'])
+        mlflow.log_artifacts(str(experiment_path))
+        # # TODO implement this for the figures
+        # mlflow.log_image()
+        # mlflow.register_model()
