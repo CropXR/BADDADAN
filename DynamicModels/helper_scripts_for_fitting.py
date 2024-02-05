@@ -60,4 +60,6 @@ def fit_multiple_fitters(fitters: list[OdeFitter | OdeFitterMultipleDatasets],
     elif hasattr(best_fit, 'master_params'):
         best_fit.master_params = all_fits[best_index].params
     best_fit.has_been_fitted = True
+    # Set the solution object so its stats can be retrieved
+    best_fit.sol = all_fits[best_index]
     return best_fit

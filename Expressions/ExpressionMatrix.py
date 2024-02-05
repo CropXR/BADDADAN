@@ -174,8 +174,7 @@ class ExpressionMatrix:
         sns.despine()
         if out_path:
             plt.savefig(out_path)
-        else:
-            plt.show()
+        plt.show()
 
     def save_edgelist_for_cytoscape(self,
                                     out_path: Path,
@@ -258,10 +257,14 @@ class ExpressionMatrix:
                        yticklabels=False, xticklabels=False, standard_scale=standard_scale)
         plt.show()
 
-    def plot_cluster_sizes(self):
+    def plot_cluster_sizes(self, out_path: Path|None = None):
         sns.histplot(self.df.cluster_id.value_counts())
         plt.xlabel('Cluster size')
-        plt.show()
+        if not out_path:
+            plt.show()
+        else:
+            plt.savefig(out_path)
+        plt.close()
 
     def _calculate_gene_variation(self, method: Literal['std', 'mad', 'cv', 'qcd']) -> pd.Series:
         """Calculate for each gene how much it varies over all the samples
@@ -756,7 +759,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
     def plot_clusters_over_time(self,
                                 plot_units: bool = False,
                                 title=None,
-                                split_by_condition: List[str] = None) -> None:
+                                split_by_condition: List[str] = None,
+                                out_path: Path|None = None) -> None:
         """Plot expression of clusters over time.
 
         :param split_by_condition: If multiple conditions in dataframe,
@@ -811,27 +815,19 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                                  # legend=False
                                  )
                     plt.title(word)
-                    plt.show()
+                    if out_path:
+                        plt.savefig(out_path.with_name(f'{word}_{out_path.name}'))
+                    else:
+                        plt.show()
+                    plt.close()
+            return
 
-        # Unused bit of code to show the indivudual genes with
-        # the mean per module overlay
-        # my_thingy = True
-        # if my_thingy:
-        #     nr_genes = 100
-        #     # sub df contains only a few entries
-        #     subset_genes = some_df.groupby('cluster').sample(nr_genes)['ID_REF'].to_list()
-        #
-        #     fig, ax = plt.subplots()
-        #     sns.lineplot(data=some_df[some_df['ID_REF'].isin(subset_genes)],
-        #                  x='time', y='expression',
-        #                  hue='cluster', palette=sns.color_palette(),
-        #                  units='ID_REF', estimator=None, lw=1, alpha=.2, ax=ax)
-        #     sns.lineplot(data=some_df, x='time', y='expression',
-        #                  hue='cluster', style='replicate',
-        #                  palette=sns.color_palette(), errorbar=None, ax=ax)
         if title:
             plt.title(title)
-        plt.show()
+        if not out_path:
+            plt.show()
+        else:
+            plt.savefig(out_path)
         # if self.phenotype_dict:
         #     for key in self.phenotype_dict:
         #         sns.lineplot(self.phenotype_dict[key])

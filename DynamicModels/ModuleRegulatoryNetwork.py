@@ -36,7 +36,7 @@ class ModuleRegulatoryNetwork:
         self.graph = graph
 
     def plot_network(self, draw_func: Callable = nx.draw,
-                     out_path: Path = None, with_labels=True):
+                     out_path: Path|None = None, with_labels=True):
         """Plot network using matplotlib."""
 
         node_color_map = ['blue' if (node in self.get_tfs()) else 'orange'
@@ -56,8 +56,7 @@ class ModuleRegulatoryNetwork:
                   edge_color=edge_color_map, with_labels=with_labels, arrowsize=30)
         if out_path:
             plt.savefig(out_path)
-        else:
-            plt.show()
+        plt.show()
 
     @classmethod
     def from_lpan_edge_csv(

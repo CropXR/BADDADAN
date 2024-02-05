@@ -256,7 +256,7 @@ def fit_ode_to_two_datasets(
         my_ode: OdeModel,
         my_time_series_expressions: ExpressionMatrixTimeSeries,
         nr_ode_iters: int,
-        fig_path: Path = None,
+        experiment_path: Path|None = None,
         ):
 
     # These are parameters that are different between the two datasets
@@ -302,12 +302,16 @@ def fit_ode_to_two_datasets(
     # my_fitter.calculate_current_best_fits()
     # my_fitter.all_fitters[0].plot_hill_equation_range()
     # Step uno
-    multiple_fitters = [OdeFitterMultipleDatasets(
+    multiple_fitters = [
+        OdeFitterMultipleDatasets(
             my_ode, my_time_series_expressions, condition_names,
             custom_params,
-            param_limit=.1, aggregation_method=AggregationMethod.MEAN) for _ in range(5)]
+            param_limit=.1,
+            aggregation_method=AggregationMethod.MEAN
+        ) for _ in range(5)]
     best_fit = fit_multiple_fitters(multiple_fitters, nr_ode_iters)
-    best_fit.calculate_current_best_fits(data_point_overlay=False)
+    best_fit.calculate_current_best_fits(data_point_overlay=False,
+                                         out_path=experiment_path / 'final_ode_fit.svg')
     return best_fit
     # multiple_fitter.fit(100)
     # best_fits = multiple_fitter.calculate_current_best_fits()
@@ -514,7 +518,7 @@ def camila_red_panda(soft_file_in_path: Path,
                      model_fit=simulated_data)
     plt.show()
 
-if __name__ == "__main__":
+def main():
     # ONLY EDIT THESE LINES
     experiment_path = Path('data/experiments/02_threshold higher')
     mlflow.set_experiment("/check-databricks-connection")
@@ -548,7 +552,8 @@ if __name__ == "__main__":
 
     if hyper_params['do_atted_ii_clustering_of_clusters']:
         expr_mat_time, module_module = local_clustering_on_atted_clusters(
-            clustering_of_clusters_threshold=hyper_params['clustering_of_clusters_threshold'],
+            clustering_of_clusters_threshold=hyper_params[
+                'clustering_of_clusters_threshold'],
             edge_cor_threshold=hyper_params['edge_corr_threshold'],
             experiment_path=experiment_path,
             expr_mat_time=expr_mat_time,
@@ -562,14 +567,20 @@ if __name__ == "__main__":
     best_ode_fit = fit_ode_to_two_datasets(
         my_ode,
         expr_mat_time,
-        nr_ode_iters=hyper_params['nr_ode_iters']
+        nr_ode_iters=hyper_params['nr_ode_iters'],
+        experiment_path=experiment_path
     )
 
-    with mlflow.start_run():
+    with mlflow.start_run(
+            description=config['experiment_data']['description']):
         mlflow.log_params(data_params)
         mlflow.log_params(hyper_params)
         mlflow.set_tags(config['experiment_data'])
         mlflow.log_artifacts(str(experiment_path))
-        # # TODO implement this for the figures
+        mlflow.log_metrics({'bic': best_ode_fit.sol.bic,
+                            'chi_sqr': best_ode_fit.sol.chisqr})
         # mlflow.log_image()
         # mlflow.register_model()
+
+if __name__ == "__main__":
+    main()
