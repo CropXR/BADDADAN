@@ -43,7 +43,7 @@ class OdeFitterMultipleDatasets:
         self.method = method
         self.has_been_fitted = False
         self.dataset = dataset
-
+        self.sol : MinimizerResult|None = None
         # Combine all OdeFitter objects
         self.all_fitters = []
         assert dataset.has_been_clustered

@@ -1,6 +1,7 @@
 import copy
 import logging
 from pathlib import Path
+import dill as pickle
 
 import numpy as np
 import pandas as pd
@@ -25,7 +26,11 @@ from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
 # pd.options.display.width = 0
 # GEOparse.logger.set_verbosity('INFO')
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO,
+                    handlers = [logging.FileHandler("log.log"),
+                                logging.StreamHandler()]
+                    )
+
 # logging.basicConfig(level=logging.DEBUG)
 
 mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
@@ -532,7 +537,6 @@ def main():
     data_params = config['data']
     hyper_params = config['hyperparams']
 
-    nr_clusters = hyper_params['nr_clusters']
     agg_method_dict = {'mean': AggregationMethod.MEAN,
                        'eigengene': AggregationMethod.EIGENGENE}
     hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
@@ -570,6 +574,9 @@ def main():
         nr_ode_iters=hyper_params['nr_ode_iters'],
         experiment_path=experiment_path
     )
+
+    with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
+        pickle.dump(best_ode_fit, f)
 
     with mlflow.start_run(
             description=config['experiment_data']['description']):
