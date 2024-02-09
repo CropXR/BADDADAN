@@ -28,19 +28,22 @@ def pipeline_from_atted_clustering(experiment_path: Path,
         log2_transform=do_log2,
         annotate_from_gpl=True
     )
+    expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.summary_method = agg_method
 
     aba_series = parse_metabolite_data(experiment_path, metabolites_path)
 
     expr_mat_time.add_phenotypes({'aba': aba_series})
+
     expr_mat_time.assign_clusters_from_linkage_matrix(atted_linkage_matrix,
                                                       nr_clusters,
                                                       atted_path=atted_path)
+    expr_mat_time.merge_biological_samples()
+
     # expr_mat_time.keep_n_most_deviating_genes(50)
     # expr_mat_time.do_hierachical_clustering(nr_clusters)
     expr_mat_time.plot_cluster_sizes(experiment_path / 'cluster_sizes.png')
-    expr_mat_time.column_parser = get_info_from_gse65046
-    expr_mat_time.merge_biological_samples()
+
     tf2_in_path = experiment_path / '01_tf2_input.txt'
     expr_mat_time.write_tf2_input_file(tf2_in_path)
     # expr_mat_time._do_random_clustering(nr_clusters)
@@ -86,8 +89,10 @@ def parse_metabolite_data(experiment_path: Path, metabolites_path: Path):
     # Start with ABA? -> Yes
     aba_series = metabolite_time_series.loc['Abscisic acid (ABA) ', :]
     aba_series = aba_series.reset_index()
-    sns.lineplot(data=aba_series, x='time', y='Abscisic acid (ABA) ',
+    aba_series['time_days'] = pd.to_timedelta(aba_series['time']).astype('timedelta64[D]')
+    sns.lineplot(data=aba_series, x='time_days', y='Abscisic acid (ABA) ',
                  hue='condition')
+    aba_series = aba_series.drop('time_days', axis=1)
     plt.savefig(experiment_path / 'aba_time_series.png')
     plt.close()
     return aba_series
