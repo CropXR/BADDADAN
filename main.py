@@ -21,15 +21,12 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries, AggregationMethod
 from analysis_pipelines import pipeline_from_atted_clustering, \
     local_clustering_on_atted_clusters
+from exploring_questions import save_local_distance_matrix
 from helpers import plot_y_and_y_hat, get_info_from_gse65046
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
 # pd.options.display.width = 0
 # GEOparse.logger.set_verbosity('INFO')
-logging.basicConfig(level=logging.INFO,
-                    handlers = [logging.FileHandler("log.log"),
-                                logging.StreamHandler()]
-                    )
 
 # logging.basicConfig(level=logging.DEBUG)
 
@@ -525,10 +522,13 @@ def camila_red_panda(soft_file_in_path: Path,
 
 def main():
     # ONLY EDIT THESE LINES
-    experiment_path = Path('data/experiments/02_threshold higher')
-    mlflow.set_experiment("/check-databricks-connection")
+    experiment_path = Path('data/experiments/03_summing_atted_with_local')
+    mlflow.set_experiment("/summing_atted_with_local")
 
     ##  This all shouldn't have to be changed ##
+    logging.basicConfig(level=logging.INFO,
+                        handlers=[logging.FileHandler(experiment_path / "log.log"),
+                                  logging.StreamHandler()])
     # Load the config file
     config_path = experiment_path / 'config.yaml'
     with config_path.open('r') as f:
@@ -540,6 +540,10 @@ def main():
     agg_method_dict = {'mean': AggregationMethod.MEAN,
                        'eigengene': AggregationMethod.EIGENGENE}
     hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
+
+    save_local_distance_matrix(Path(data_params['soft_path']),
+                               hyper_params['do_log2'],
+                               out_path=experiment_path / 'local_distance_matrix.pkl')
 
     expr_mat_time, module_module = pipeline_from_atted_clustering(
         soft_file_path=Path(data_params['soft_path']),

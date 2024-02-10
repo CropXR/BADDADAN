@@ -10,6 +10,23 @@ from data_wrangling import parse_go_enrichment_output
 from helpers import get_info_from_gse65046
 
 
+def save_local_distance_matrix(soft_file_path: Path, do_log_2: bool, out_path: Path):
+    """Calculate local pairwise distance matrix
+    
+    :param soft_file_path: Path to input gene expression file
+    :param do_log_2: If true, perform log2-transformation to gene expressions
+    :param out_path: Path to save distance matrix (should be .pkl file)
+    """
+    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
+        soft_file_path,
+        log2_transform=do_log_2,
+        annotate_from_gpl=True
+    )
+    expr_mat_time.column_parser = get_info_from_gse65046
+    expr_mat_time.merge_biological_samples()
+    expr_mat_time.save_distance_metric(out_path)
+
+
 def how_many_cignet_modules_tfbs_enriched(modules_path: Path, tf2_network_output: Path):
     """See how many of the input modules have a significant TFBS enrichment"""
     modules_df = pd.read_csv(modules_path, sep='\t')

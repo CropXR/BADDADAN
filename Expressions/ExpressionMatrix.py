@@ -12,6 +12,7 @@ from typing import Literal, Callable, Dict, List, Tuple
 import re
 import subprocess
 
+import dill as pickle
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -688,6 +689,12 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                 for cluster_id, genes
                 in self.df.groupby('cluster_id').groups.items()}
 
+    def save_distance_metric(self, out_path: Path):
+        """"""
+        dist = pdist(self.df, metric='correlation')
+        with out_path.open('wb') as f:
+            pickle.dump(dist, f)
+
     def do_hierachical_clustering(self, n_cluster: int,
                                   do_plotting: bool = False) -> None:
         """Hierarchically cluster genes based on correlation of expression,
@@ -957,8 +964,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         if self.has_been_clustered:
             clustering_list = self.df['cluster_id']
             self.df = self.df.drop('cluster_id', axis=1)
-        column_info = self.column_parser(self.df.columns)
 
+        column_info = self.column_parser(self.df.columns)
         column_tuples = list(zip(self.df.columns, *column_info.values()))
         # Ensure we do not accidentally modify the original dataframe
         temp_df = self.df.copy()
@@ -972,7 +979,10 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                         in my_grouping.groups.items()]
         merged_samples = my_grouping.mean()
         merged_samples.columns = sample_names
-        self.df = pd.concat([merged_samples, clustering_list], axis=1)
+        if self.has_been_clustered:
+            self.df = pd.concat([merged_samples, clustering_list], axis=1)
+        else:
+            self.df = merged_samples
 
     def get_clusters_expressions_with_time(
             self,
