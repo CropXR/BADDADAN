@@ -9,8 +9,8 @@ from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 from data_wrangling import parse_go_enrichment_output
 from helpers import get_info_from_gse65046
 
-
-def save_local_distance_matrix(soft_file_path: Path, do_log_2: bool, out_path: Path):
+def save_local_distance_matrix(soft_file_path: Path, do_log_2: bool,
+                               atted_path: Path, out_path: Path):
     """Calculate local pairwise distance matrix
     
     :param soft_file_path: Path to input gene expression file
@@ -24,7 +24,11 @@ def save_local_distance_matrix(soft_file_path: Path, do_log_2: bool, out_path: P
     )
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.merge_biological_samples()
-    expr_mat_time.save_distance_metric(out_path)
+    expr_mat_time.save_distance_matrix(out_path)
+    dist_local = expr_mat_time.get_distance_matrix()
+    print()
+
+
 
 
 def how_many_cignet_modules_tfbs_enriched(modules_path: Path, tf2_network_output: Path):

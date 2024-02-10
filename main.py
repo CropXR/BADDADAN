@@ -541,8 +541,9 @@ def main():
                        'eigengene': AggregationMethod.EIGENGENE}
     hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
 
-    save_local_distance_matrix(Path(data_params['soft_path']),
-                               hyper_params['do_log2'],
+    save_local_distance_matrix(soft_file_path=Path(data_params['soft_path']),
+                               do_log_2=hyper_params['do_log2'],
+                               atted_path=data_params['atted_path'],
                                out_path=experiment_path / 'local_distance_matrix.pkl')
 
     expr_mat_time, module_module = pipeline_from_atted_clustering(

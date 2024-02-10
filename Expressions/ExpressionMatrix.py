@@ -689,11 +689,17 @@ class ExpressionMatrixTraining(ExpressionMatrix):
                 for cluster_id, genes
                 in self.df.groupby('cluster_id').groups.items()}
 
-    def save_distance_metric(self, out_path: Path):
+    def save_distance_matrix(self, out_path: Path):
         """"""
+        dist = self.get_distance_matrix()
+        dist.to_pickle(out_path)
+
+    def get_distance_matrix(self) -> pd.DataFrame:
+        """Get correlation-based pairwise distance"""
         dist = pdist(self.df, metric='correlation')
-        with out_path.open('wb') as f:
-            pickle.dump(dist, f)
+        square_dist = squareform(dist)
+        dist_df = pd.DataFrame(square_dist, index=self.df.index, columns=self.df.index)
+        return dist_df
 
     def do_hierachical_clustering(self, n_cluster: int,
                                   do_plotting: bool = False) -> None:
