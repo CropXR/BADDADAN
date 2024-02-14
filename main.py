@@ -21,7 +21,8 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries, AggregationMethod
 from analysis_pipelines import pipeline_from_atted_clustering, \
     local_clustering_on_atted_clusters
-from exploring_questions import save_local_distance_matrix
+from exploring_questions import save_local_distance_matrix, \
+    sum_local_distance_and_atted
 from helpers import plot_y_and_y_hat, get_info_from_gse65046
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
@@ -540,6 +541,10 @@ def main():
     agg_method_dict = {'mean': AggregationMethod.MEAN,
                        'eigengene': AggregationMethod.EIGENGENE}
     hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
+
+    sum_local_distance_and_atted(local_dist_path=data_params['local_dist_path'],
+                                 atted_path=data_params['atted_path'],
+                                 out_path=None)
 
     save_local_distance_matrix(soft_file_path=Path(data_params['soft_path']),
                                do_log_2=hyper_params['do_log2'],

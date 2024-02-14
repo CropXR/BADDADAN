@@ -1,8 +1,14 @@
 import copy
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 from GEOparse import get_GEO
+from scipy.spatial.distance import squareform
+from scipy.stats import zscore
+from scipy.cluster.hierarchy import linkage
 
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
@@ -27,6 +33,67 @@ def save_local_distance_matrix(soft_file_path: Path, do_log_2: bool,
     expr_mat_time.save_distance_matrix(out_path)
     dist_local = expr_mat_time.get_distance_matrix()
     print()
+
+def sum_local_distance_and_atted(local_dist_path: Path, atted_path: Path,
+                                 out_path: Path):
+    """Get sum of local distances and atted_distances to
+    do distances simulatenously"""
+    atted_score = pd.read_parquet(atted_path)
+    atted_score = atted_score.set_index(atted_score.columns[0])
+    local_dist = pd.read_pickle(local_dist_path)
+
+    # toy_size = 5000
+    # atted_score = atted_score.iloc[:toy_size, :toy_size]
+    # local_dist = local_dist.iloc[:toy_size, :toy_size]
+
+    # get intersection
+    selected_genes = atted_score.index.intersection(local_dist.index)
+    # Shrink dataframes so match in size
+    local_dist = local_dist.loc[selected_genes, selected_genes]
+    atted_score = atted_score.loc[selected_genes, selected_genes]
+    # Higher score -> lower dist
+    atted_dist = atted_score.max().max() - atted_score
+    assert (local_dist.index.equals(
+        atted_dist.index) and local_dist.columns.equals(atted_dist.columns))
+
+    # Plot both distributions
+    local_dist_flat = squareform(local_dist)
+    atted_dist_flat = squareform(atted_dist, checks=False)
+
+    sns.histplot(local_dist_flat, binwidth=.2, element='step', fill=False)
+    sns.histplot(atted_dist_flat, binwidth=.2, element='step', fill=False)
+    plt.savefig(out_path / 'raw_input_distances.png')
+    plt.close()
+
+    # Convert into z-scores
+    local_dist_flat_norm = (local_dist_flat - np.mean(
+        local_dist_flat)) / np.std(local_dist_flat)
+    atted_dist_flat_norm = (atted_dist_flat - np.mean(
+        atted_dist_flat)) / np.std(atted_dist_flat)
+    sns.histplot(local_dist_flat_norm, binwidth=.2, element='step', fill=False)
+    sns.histplot(atted_dist_flat_norm, binwidth=.2, element='step', fill=False)
+    plt.savefig(out_path / 'normalised_distances.png')
+    plt.close()
+
+    summed_distances = local_dist_flat_norm + atted_dist_flat_norm
+
+    sns.histplot(summed_distances, binwidth=.2, element='step', fill=False)
+    plt.savefig(out_path / 'summed_distances.png')
+    plt.close()
+
+    square_summed_distances = squareform(summed_distances)
+    summed_dist_df = pd.DataFrame(data=square_summed_distances,
+                                  index=local_dist.index,
+                                  columns=local_dist.index)
+
+    summed_dist_df.to_parquet(out_path / 'atted_local_dist_summed.parquet.gzip',
+                              compression='gzip')
+
+    for method in ['complete', 'single', 'average']:
+        print(f'Performing {method} now')
+        linkage_matrix = linkage(summed_distances, method=method)
+        np_path = out_path / f'summed_distances_{method}_linkage.npy'
+        np.save(np_path, linkage_matrix)
 
 
 
