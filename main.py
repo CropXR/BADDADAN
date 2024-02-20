@@ -20,7 +20,7 @@ from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries, AggregationMethod
 from analysis_pipelines import pipeline_from_atted_clustering, \
-    local_clustering_on_atted_clusters
+    local_clustering_on_atted_clusters, pipeline_from_summed_clustering
 from exploring_questions import save_local_distance_matrix, \
     sum_local_distance_and_atted
 from helpers import plot_y_and_y_hat, get_info_from_gse65046
@@ -542,27 +542,26 @@ def main():
                        'eigengene': AggregationMethod.EIGENGENE}
     hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
 
-    sum_local_distance_and_atted(local_dist_path=data_params['local_dist_path'],
-                                 atted_path=data_params['atted_path'],
-                                 out_path=None)
-
-    save_local_distance_matrix(soft_file_path=Path(data_params['soft_path']),
-                               do_log_2=hyper_params['do_log2'],
-                               atted_path=data_params['atted_path'],
-                               out_path=experiment_path / 'local_distance_matrix.pkl')
-
-    expr_mat_time, module_module = pipeline_from_atted_clustering(
-        soft_file_path=Path(data_params['soft_path']),
-        atted_linkage_matrix=Path(data_params['linkage_path']),
-        atted_path=Path(data_params['atted_path']),
-        metabolites_path=Path(data_params['metabolite_path']),
+    expr_mat_time, module_module = pipeline_from_summed_clustering(
         experiment_path=experiment_path,
-        edge_cor_threshold=hyper_params['edge_corr_threshold'],
-        nr_clusters=hyper_params['nr_clusters'],
-        top_nr_clusters=hyper_params['top_nr_clusters'],
+        soft_file_path=Path(data_params['soft_path']),
+        agg_method=hyper_params['agg_method'],
         do_log2=hyper_params['do_log2'],
-        agg_method=hyper_params['agg_method']
+        summed_linkage_matrix=data_params['linkage_path'],
+        summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
+        nr_clusters=hyper_params['nr_clusters'],
     )
+
+    #     summed_dist_matrix_path=Path(),
+    #     atted_path=(),
+    #     metabolites_path=Path(data_params['metabolite_path']),
+    #     experiment_path=
+    #     edge_cor_threshold=hyper_params['edge_corr_threshold'],
+    #
+    #     top_nr_clusters=hyper_params['top_nr_clusters'],
+    #     do_log2=,
+    #     agg_method=
+    # )
 
     if hyper_params['do_atted_ii_clustering_of_clusters']:
         expr_mat_time, module_module = local_clustering_on_atted_clusters(

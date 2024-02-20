@@ -489,8 +489,17 @@ class ExpressionMatrix:
         clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
         # Make clustering be 0-based instead of 1-based
         clustering = clustering - 1
-        og_df = pd.read_csv(original_atted_matrix_path, usecols=[0], index_col=0)
+        if original_atted_matrix_path.name.endswith('.csv'):
+            og_df = pd.read_csv(original_atted_matrix_path, usecols=[0],
+                                index_col=0)
+        elif original_atted_matrix_path.name.endswith('.parquet.gzip'):
+            og_df = pd.read_parquet(original_atted_matrix_path)
+            og_df = og_df.iloc[:,0:1]
+        else:
+            raise NotImplementedError
         og_df = og_df.assign(cluster_id=clustering)
+        # Just making sure that we only keep the cluster ID column
+        og_df = og_df.iloc[:, og_df.columns == 'cluster_id']
 
         self._apply_cluster_mapping_from_df(og_df)
 

@@ -12,6 +12,31 @@ from helpers import get_info_from_gse65046
 # from main import fit_ode_to_two_datasets
 
 
+def pipeline_from_summed_clustering(experiment_path: Path,
+                                    soft_file_path: Path,
+                                    agg_method: AggregationMethod,
+                                    do_log2: bool,
+                                    summed_linkage_matrix: Path,
+                                    summed_dist_matrix_path: Path,
+                                    nr_clusters: int, ):
+    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
+        soft_file_path,
+        log2_transform=do_log2,
+        annotate_from_gpl=True
+    )
+    expr_mat_time.column_parser = get_info_from_gse65046
+    expr_mat_time.summary_method = agg_method
+    expr_mat_time.assign_clusters_from_linkage_matrix(summed_linkage_matrix,
+                                                      nr_clusters,
+                                                      atted_path=summed_dist_matrix_path)
+    expr_mat_time.merge_biological_samples()
+
+    expr_mat_time.plot_cluster_sizes(experiment_path / 'cluster_sizes.png')
+
+    tf2_in_path = experiment_path / '01_tf2_input.txt'
+    expr_mat_time.write_tf2_input_file(tf2_in_path)
+
+
 def pipeline_from_atted_clustering(experiment_path: Path,
                                    soft_file_path: Path,
                                    atted_linkage_matrix: Path,
