@@ -58,6 +58,7 @@ class OdeFitterMultipleDatasets:
         else:
             raise NotImplementedError
 
+        self.words_to_split_dataset = words_to_split_dataset
         for word in words_to_split_dataset:
             valid_index = expressions.columns.get_level_values(
                 'condition').isin(['zero', word])
@@ -170,6 +171,7 @@ class OdeFitterMultipleDatasets:
         """Calculate the solution of the ODEs for all conditions to which
         they were fitted
         """
+
         if not data_point_overlay:
             fig, axs = plt.subplots(len(self.all_fitters), 2, sharey='all')
             logging.debug([(i, j)
@@ -182,18 +184,26 @@ class OdeFitterMultipleDatasets:
                 ax = axs.flatten()[i:i+2]
                 pred = fitter.calculate_current_best_fit(fitter.time_points)
                 real = fitter.measured_data
+
                 plot_y_and_y_hat(real, fitter.time_points, pred, axs=ax)
         else:
             fig, axs = plt.subplots(1, len(self.all_fitters), sharey='all')
             for i, fitter in enumerate(self.all_fitters):
+                if use_err_bars:
+                    dataset = copy.deepcopy(self.dataset)
+                    keyword = self.words_to_split_dataset[i]
+                    dataset.keep_only_samples_with_string(keyword)
+                    errorbars = dataset.get_sem_per_cluster()
+                    # errorbars = dataset.get_std_per_cluster()
+                else:
+                    errorbars = None
                 ax = axs.flatten()[i]
                 pred = fitter.calculate_current_best_fit(fitter.time_points)
                 real = fitter.measured_data
-                if use_err_bars:
-                    err_bars = self.dataset.get_mean_to_sem_dict_per_cluster() #?
+
                 plot_y_and_y_hat(real, fitter.time_points, pred,
                                  axs=ax,
-                                 error_bars=err_bars,
+                                 error_bars=errorbars,
                                  data_point_overlay=True)
         plt.tight_layout()
         if out_path:

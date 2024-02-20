@@ -1385,3 +1385,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
     def get_sem_per_cluster(self):
         assert self.has_been_clustered
         return self.df.groupby('cluster_id').sem()
+
+    def get_std_per_cluster(self):
+        assert self.has_been_clustered
+        return self.df.groupby('cluster_id').std()

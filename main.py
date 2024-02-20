@@ -313,7 +313,8 @@ def fit_ode_to_two_datasets(
             aggregation_method=AggregationMethod.MEAN
         ) for _ in range(5)]
     best_fit = fit_multiple_fitters(multiple_fitters, nr_ode_iters)
-    best_fit.calculate_current_best_fits(data_point_overlay=False,
+    best_fit.calculate_current_best_fits(data_point_overlay=True,
+                                         use_err_bars=True,
                                          out_path=experiment_path / 'final_ode_fit.svg')
     return best_fit
     # multiple_fitter.fit(100)
@@ -523,8 +524,8 @@ def camila_red_panda(soft_file_in_path: Path,
 
 def main():
     # ONLY EDIT THESE LINES
-    experiment_path = Path('data/experiments/03_summing_atted_with_local')
-    mlflow.set_experiment("/summing_atted_with_local")
+    experiment_path = Path('data/experiments/02_threshold higher')
+    mlflow.set_experiment("/check-databricks-connection")
 
     ##  This all shouldn't have to be changed ##
     logging.basicConfig(level=logging.INFO,
@@ -542,39 +543,28 @@ def main():
                        'eigengene': AggregationMethod.EIGENGENE}
     hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
 
-    expr_mat_time, module_module = pipeline_from_summed_clustering(
-        experiment_path=experiment_path,
+    expr_mat_time, module_module = pipeline_from_atted_clustering(
         soft_file_path=Path(data_params['soft_path']),
-        agg_method=hyper_params['agg_method'],
-        do_log2=hyper_params['do_log2'],
-        summed_linkage_matrix=data_params['linkage_path'],
-        summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
+        atted_linkage_matrix=Path(data_params['linkage_path']),
+        atted_path=Path(data_params['atted_path']),
+        metabolites_path=Path(data_params['metabolite_path']),
+        experiment_path=experiment_path,
+        edge_cor_threshold=hyper_params['edge_corr_threshold'],
         nr_clusters=hyper_params['nr_clusters'],
         top_nr_clusters=hyper_params['top_nr_clusters'],
-        tf2_in_name=data_params['tf2_in_name'],
-        tf2_out_name=data_params['tf2_out_name'],
-        metabolite_path=Path(data_params['metabolite_path'])
+        do_log2=hyper_params['do_log2'],
+        agg_method=hyper_params['agg_method']
     )
 
-    #     summed_dist_matrix_path=Path(),
-    #     atted_path=(),
-    #     metabolites_path=Path(data_params['metabolite_path']),
-    #     experiment_path=
-    #     edge_cor_threshold=hyper_params['edge_corr_threshold'],
-    #
-    #     top_nr_clusters=hyper_params['top_nr_clusters'],
-    #     do_log2=,
-    #     agg_method=
-    # )
+    if hyper_params['do_atted_ii_clustering_of_clusters']:
+        expr_mat_time, module_module = local_clustering_on_atted_clusters(
+            clustering_of_clusters_threshold=hyper_params[
+                'clustering_of_clusters_threshold'],
+            edge_cor_threshold=hyper_params['edge_corr_threshold'],
+            experiment_path=experiment_path,
+            expr_mat_time=expr_mat_time,
+            top_nr_clusters=hyper_params['top_nr_clusters'])
 
-    # if hyper_params['do_atted_ii_clustering_of_clusters']:
-    #     expr_mat_time, module_module = local_clustering_on_atted_clusters(
-    #         clustering_of_clusters_threshold=hyper_params[
-    #             'clustering_of_clusters_threshold'],
-    #         edge_cor_threshold=hyper_params['edge_corr_threshold'],
-    #         experiment_path=experiment_path,
-    #         expr_mat_time=expr_mat_time,
-    #         top_nr_clusters=hyper_params['top_nr_clusters'])
 
     # Assure that data has already been clustered
     assert expr_mat_time.has_been_clustered
