@@ -9,6 +9,7 @@ from GEOparse import get_GEO
 from scipy.spatial.distance import squareform
 from scipy.stats import zscore
 from scipy.cluster.hierarchy import linkage
+from sklearn.metrics import adjusted_rand_score
 
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
@@ -96,6 +97,14 @@ def sum_local_distance_and_atted(local_dist_path: Path, atted_path: Path,
         np.save(np_path, linkage_matrix)
 
 
+def rand_index_both_clusterings(tf2_input_1, tf2_input_2):
+    df1 = pd.read_csv(tf2_input_1, sep=' ', names=['cluster_id_1', 'gene_name'])
+    df2 = pd.read_csv(tf2_input_2, sep=' ', names=['cluster_id_2', 'gene_name'])
+
+    merged_df = df1.merge(df2, on='gene_name', how='inner')
+    clustering_1 =merged_df['cluster_id_1'].tolist()
+    clustering_2 =merged_df['cluster_id_2'].tolist()
+    adjusted_rand_score(clustering_1, clustering_2)
 
 
 def how_many_cignet_modules_tfbs_enriched(modules_path: Path, tf2_network_output: Path):

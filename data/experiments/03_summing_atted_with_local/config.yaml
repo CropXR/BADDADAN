@@ -9,7 +9,7 @@ data:
 #  local_dist_path: 'data/preprocessed_data/gse65046/local_distance_matrix.pkl'
   metabolite_path: 'data/raw_data/expression_datasets/gse65046/plcell_v28_2_345_s1/TPC2015-00910-LSBR1_Supplemental_Data_sets_1_18.xlsx'
   tf2_in_name: '01_tf2_input.txt'
-  tf2_out_name: '02_tf2_output.txt'
+  tf2_out_name: '02_tf2network_output.tsv'
 #  new_tf2_in_name: '03_new_tf2_input.txt'
 #  new_tf2_out_name: '04_new_tf2_output.txt'
 hyperparams:
@@ -18,6 +18,6 @@ hyperparams:
   do_log2: True
 #  do_atted_ii_clustering_of_clusters: True
 #  clustering_of_clusters_threshold: 0.8
-#  edge_corr_threshold: .4
+  edge_corr_threshold: .3
   top_nr_clusters: 5
-#  nr_ode_iters: 2
+  nr_ode_iters: 300

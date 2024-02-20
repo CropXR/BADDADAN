@@ -256,7 +256,7 @@ def check_all_identical_lists(lists: List[List]) -> bool:
     return True
 
 
-def mean_bootstrap_error(in_df: pd.DataFrame, confidence_level: float) -> pd.Series:
+def mean_bootstrap_error(in_df: pd.DataFrame, confidence_level: float = .95) -> pd.Series:
     """From a dataframe, calculate the per-column mean bootstrap error"""
     in_df = in_df.drop('cluster_id', axis=1)
     x = in_df.to_numpy()

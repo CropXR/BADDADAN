@@ -19,6 +19,7 @@ def pipeline_from_summed_clustering(experiment_path: Path,
                                     summed_linkage_matrix: Path,
                                     summed_dist_matrix_path: Path,
                                     nr_clusters: int,
+                                    edge_cor_threshold: float,
                                     top_nr_clusters: int,
                                     tf2_in_name: str,
                                     tf2_out_name: str,
@@ -45,11 +46,22 @@ def pipeline_from_summed_clustering(experiment_path: Path,
     tf2_in_path = experiment_path / tf2_in_name
     # expr_mat_time.write_tf2_input_file(tf2_in_path)
     expr_mat_time.assign_clusters_from_tf2_input(tf2_in_path, overwrite=False)
-    expr_mat_time.keep_highest_z_clusters(top_nr_clusters, None)
+    tf2_out_path = experiment_path / tf2_out_name
+    expr_mat_time.keep_highest_z_clusters(top_nr_clusters, tf2_out_path)
     expr_mat_time.plot_clusters_over_time(split_by_condition=['control',
                                                               'drought'])
-    print()
+    module_module = module_network_from_tf2_output(
+        expr_mat_time, tf2_in_path,
+        tf2_out_path,
+        threshold=edge_cor_threshold,
+        module_plot_path=experiment_path / 'global_cluster_module_network.svg')
 
+    expr_mat_time.keep_only_modules_in_network(module_module)
+
+    expr_mat_time.plot_clusters_over_time(split_by_condition=['control', 'drought'],
+                                          out_path=experiment_path / 'global_cluster_expressions.svg')
+
+    return expr_mat_time, module_module
 
 
 def pipeline_from_atted_clustering(experiment_path: Path,
