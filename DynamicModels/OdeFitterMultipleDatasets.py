@@ -193,7 +193,8 @@ class OdeFitterMultipleDatasets:
                     dataset = copy.deepcopy(self.dataset)
                     keyword = self.words_to_split_dataset[i]
                     dataset.keep_only_samples_with_string(keyword)
-                    errorbars = dataset.get_sem_per_cluster()
+                    # errorbars = dataset.get_sem_per_cluster()
+                    errorbars = dataset.get_ci_per_cluster(confidence_level=.99)
                     # errorbars = dataset.get_std_per_cluster()
                 else:
                     errorbars = None

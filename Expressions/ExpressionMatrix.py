@@ -19,7 +19,7 @@ import seaborn as sns
 import GEOparse
 from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
-from scipy.stats import zscore
+from scipy.stats import zscore, bootstrap
 import qnorm
 from scipy.integrate._ivp.ivp import OdeResult
 from scipy.spatial.distance import pdist, squareform
@@ -28,7 +28,7 @@ from sklearn.metrics import mean_squared_error
 
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628, standardize, \
-    calculate_coefficient_of_variation, calculate_qcd, do_pca
+    calculate_coefficient_of_variation, calculate_qcd, do_pca, mean_bootstrap_error
 
 class AggregationMethod(Enum):
     """Used to set the type of aggregation methot that is used
@@ -1389,3 +1389,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
     def get_std_per_cluster(self):
         assert self.has_been_clustered
         return self.df.groupby('cluster_id').std()
+
+    def get_ci_per_cluster(self, confidence_level=.95):
+        """Get confidence interval per cluster at each time point"""
+        assert self.has_been_clustered
+        return self.df.groupby('cluster_id').apply(mean_bootstrap_error)

@@ -8,6 +8,7 @@ import numpy as np
 import seaborn as sns
 import pandas as pd
 from scipy.spatial.distance import euclidean
+from scipy.stats import bootstrap
 from lmfit import Parameters
 from matplotlib import pyplot as plt
 from scipy.integrate._ivp.ivp import OdeResult
@@ -253,3 +254,13 @@ def check_all_identical_lists(lists: List[List]) -> bool:
             return False
     # All sublists are identical
     return True
+
+
+def mean_bootstrap_error(in_df: pd.DataFrame, confidence_level: float) -> pd.Series:
+    """From a dataframe, calculate the per-column mean bootstrap error"""
+    in_df = in_df.drop('cluster_id', axis=1)
+    x = in_df.to_numpy()
+    all_bs = bootstrap((x,), np.mean,
+                       confidence_level=confidence_level).confidence_interval
+    bs_error = (all_bs.high - all_bs.low) / 2
+    return pd.Series(bs_error)
