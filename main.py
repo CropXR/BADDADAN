@@ -550,6 +550,10 @@ def main():
         summed_linkage_matrix=data_params['linkage_path'],
         summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
         nr_clusters=hyper_params['nr_clusters'],
+        top_nr_clusters=hyper_params['top_nr_clusters'],
+        tf2_in_name=data_params['tf2_in_name'],
+        tf2_out_name=data_params['tf2_out_name'],
+        metabolite_path=Path(data_params['metabolite_path'])
     )
 
     #     summed_dist_matrix_path=Path(),
@@ -563,14 +567,14 @@ def main():
     #     agg_method=
     # )
 
-    if hyper_params['do_atted_ii_clustering_of_clusters']:
-        expr_mat_time, module_module = local_clustering_on_atted_clusters(
-            clustering_of_clusters_threshold=hyper_params[
-                'clustering_of_clusters_threshold'],
-            edge_cor_threshold=hyper_params['edge_corr_threshold'],
-            experiment_path=experiment_path,
-            expr_mat_time=expr_mat_time,
-            top_nr_clusters=hyper_params['top_nr_clusters'])
+    # if hyper_params['do_atted_ii_clustering_of_clusters']:
+    #     expr_mat_time, module_module = local_clustering_on_atted_clusters(
+    #         clustering_of_clusters_threshold=hyper_params[
+    #             'clustering_of_clusters_threshold'],
+    #         edge_cor_threshold=hyper_params['edge_corr_threshold'],
+    #         experiment_path=experiment_path,
+    #         expr_mat_time=expr_mat_time,
+    #         top_nr_clusters=hyper_params['top_nr_clusters'])
 
     # Assure that data has already been clustered
     assert expr_mat_time.has_been_clustered
