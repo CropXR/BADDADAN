@@ -1,4 +1,5 @@
 import copy
+from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
@@ -11,38 +12,90 @@ from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries, \
 from helpers import get_info_from_gse65046
 # from main import fit_ode_to_two_datasets
 
+@dataclass
+class ClusteringArgs:
+    """Arguments to use for clustering with different linkage matrices"""
+    input_dist_name: str
+    linkage_matrix_path: Path | None
+    original_dist_path: Path | None
 
-def pipeline_from_summed_clustering(experiment_path: Path,
+def compare_clusterings_for_ode_use(experiment_path: Path,
                                     soft_file_path: Path,
                                     agg_method: AggregationMethod,
                                     do_log2: bool,
                                     summed_linkage_matrix: Path,
+                                    atted_linkage_matrix: Path,
+                                    atted_path: Path,
                                     summed_dist_matrix_path: Path,
                                     nr_clusters: int,
                                     edge_cor_threshold: float,
-                                    top_nr_clusters: int,
-                                    tf2_in_name: str,
-                                    tf2_out_name: str,
-                                    metabolite_path: Path):
+                                    top_nr_clusters: int, tf2_in_name: str,
+                                    tf2_out_name: str):
     expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
         soft_file_path,
         log2_transform=do_log2,
         annotate_from_gpl=True
     )
 
-    aba_series = parse_metabolite_data(experiment_path, metabolite_path)
-
-    expr_mat_time.add_phenotypes({'aba': aba_series})
-
+    # TODO implement these properly at some point
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.summary_method = agg_method
     expr_mat_time.merge_biological_samples()
-    # expr_mat_time.assign_clusters_from_linkage_matrix(summed_linkage_matrix,
-    #                                                   nr_clusters,
-    #                                                   atted_path=summed_dist_matrix_path)
-    #
+
+    clustering_arg_list = [
+        ClusteringArgs('atted_only', atted_linkage_matrix, atted_path),
+        ClusteringArgs('summed_dists', summed_linkage_matrix, summed_dist_matrix_path),
+        ClusteringArgs('local_dists', None, None),
+    ]
+    explained_var_df_list = []
+    for clustering_arg in clustering_arg_list:
+        expr_mat_time_copy = copy.deepcopy(expr_mat_time)
+        if clustering_arg.input_dist_name == 'local_dists':
+            expr_mat_time_copy.do_hierachical_clustering(nr_clusters)
+        else:
+            expr_mat_time_copy.assign_clusters_from_linkage_matrix(
+                clustering_arg.linkage_matrix_path,
+                nr_clusters,
+                atted_path=clustering_arg.original_dist_path
+            )
+        explained_vars = expr_mat_time_copy.get_all_explained_vars()
+        explained_vars = explained_vars.to_frame(name='explained_var')
+        explained_vars['input_dists'] = clustering_arg.input_dist_name
+        explained_var_df_list.append(explained_vars)
+        expr_mat_time_copy.write_tf2_input_file(
+            experiment_path / f'01_{clustering_arg.input_dist_name}_tf2input.txt')
+
+    vars_df = pd.concat(explained_var_df_list)
+    sns.boxplot(data=vars_df, y='explained_var', x='input_dists')
+    plt.savefig(experiment_path / 'explained_var_boxplot.svg')
+
+def pipeline_from_summed_clustering(experiment_path: Path,
+                                    soft_file_path: Path,
+                                    agg_method: AggregationMethod,
+                                    do_log2: bool, summed_linkage_matrix: Path,
+                                    summed_dist_matrix_path: Path,
+                                    nr_clusters: int,
+                                    edge_cor_threshold: float,
+                                    top_nr_clusters: int, tf2_in_name: str,
+                                    tf2_out_name: str):
+    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
+        soft_file_path,
+        log2_transform=do_log2,
+        annotate_from_gpl=True
+    )
+
+    # TODO implement these properly at some point
+    expr_mat_time.column_parser = get_info_from_gse65046
+    expr_mat_time.summary_method = agg_method
+    expr_mat_time.merge_biological_samples()
+    expr_mat_time.assign_clusters_from_linkage_matrix(summed_linkage_matrix,
+                                                      nr_clusters,
+                                                      atted_path=summed_dist_matrix_path)
+
+    explained_vars = expr_mat_time.get_all_explained_vars()
+
     # expr_mat_time.plot_cluster_sizes(experiment_path / 'cluster_sizes.png')
-    #
+
     tf2_in_path = experiment_path / tf2_in_name
     # expr_mat_time.write_tf2_input_file(tf2_in_path)
     expr_mat_time.assign_clusters_from_tf2_input(tf2_in_path, overwrite=False)
@@ -64,14 +117,10 @@ def pipeline_from_summed_clustering(experiment_path: Path,
     return expr_mat_time, module_module
 
 
-def pipeline_from_atted_clustering(experiment_path: Path,
-                                   soft_file_path: Path,
+def pipeline_from_atted_clustering(experiment_path: Path, soft_file_path: Path,
                                    atted_linkage_matrix: Path,
-                                   atted_path: Path,
-                                   metabolites_path: Path,
-                                   edge_cor_threshold: float,
-                                   nr_clusters: int,
-                                   top_nr_clusters: int,
+                                   atted_path: Path, edge_cor_threshold: float,
+                                   nr_clusters: int, top_nr_clusters: int,
                                    do_log2: bool,
                                    agg_method: AggregationMethod) \
         -> (ExpressionMatrixTimeSeries, ModuleRegulatoryNetwork):
@@ -82,10 +131,6 @@ def pipeline_from_atted_clustering(experiment_path: Path,
     )
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.summary_method = agg_method
-
-    aba_series = parse_metabolite_data(experiment_path, metabolites_path)
-
-    expr_mat_time.add_phenotypes({'aba': aba_series})
 
     expr_mat_time.assign_clusters_from_linkage_matrix(atted_linkage_matrix,
                                                       nr_clusters,

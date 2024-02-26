@@ -7,6 +7,7 @@ import pandas as pd
 from lmfit import Parameters, minimize, fit_report
 from lmfit.minimizer import MinimizerResult
 from matplotlib import pyplot as plt
+import seaborn as sns
 
 from DynamicModels.OdeFitter import OdeFitter
 from DynamicModels.OdeLocalParameters import OdeLocalParameters
@@ -171,7 +172,7 @@ class OdeFitterMultipleDatasets:
         """Calculate the solution of the ODEs for all conditions to which
         they were fitted
         """
-
+        sns.set_theme('whitegrid')
         if not data_point_overlay:
             fig, axs = plt.subplots(len(self.all_fitters), 2, sharey='all')
             logging.debug([(i, j)

@@ -20,7 +20,8 @@ from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries, AggregationMethod
 from analysis_pipelines import pipeline_from_atted_clustering, \
-    local_clustering_on_atted_clusters, pipeline_from_summed_clustering
+    local_clustering_on_atted_clusters, pipeline_from_summed_clustering, \
+    compare_clusterings_for_ode_use
 from exploring_questions import save_local_distance_matrix, \
     sum_local_distance_and_atted, rand_index_both_clusterings
 from helpers import plot_y_and_y_hat, get_info_from_gse65046
@@ -524,8 +525,8 @@ def camila_red_panda(soft_file_in_path: Path,
 
 def main():
     # ONLY EDIT THESE LINES
-    experiment_path = Path('data/experiments/03_summing_atted_with_local')
-    mlflow.set_experiment("/summing_atted_with_local")
+    experiment_path = Path('data/experiments/04_comparing_clusterings')
+    mlflow.set_experiment("/04_comparing_clusterings")
 
     ##  This all shouldn't have to be changed ##
     logging.basicConfig(level=logging.INFO,
@@ -543,30 +544,44 @@ def main():
                        'eigengene': AggregationMethod.EIGENGENE}
     hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
 
-    expr_mat_time, module_module = pipeline_from_summed_clustering(
+    compare_clusterings_for_ode_use(
         experiment_path=experiment_path,
         soft_file_path=Path(data_params['soft_path']),
-        agg_method=hyper_params['agg_method'],
-        do_log2=hyper_params['do_log2'],
+        agg_method=hyper_params['agg_method'], do_log2=hyper_params['do_log2'],
         summed_linkage_matrix=data_params['linkage_path'],
         summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
+        atted_linkage_matrix=Path(data_params['atted_linkage_matrix']),
+        atted_path=Path(data_params['atted_path']),
         nr_clusters=hyper_params['nr_clusters'],
+        edge_cor_threshold=hyper_params['edge_corr_threshold'],
         top_nr_clusters=hyper_params['top_nr_clusters'],
         tf2_in_name=data_params['tf2_in_name'],
         tf2_out_name=data_params['tf2_out_name'],
-        metabolite_path=Path(data_params['metabolite_path']),
-        edge_cor_threshold=hyper_params['edge_corr_threshold']
     )
 
-    #
-    # if hyper_params['do_atted_ii_clustering_of_clusters']:
-    #     expr_mat_time, module_module = local_clustering_on_atted_clusters(
-    #         clustering_of_clusters_threshold=hyper_params[
-    #             'clustering_of_clusters_threshold'],
-    #         edge_cor_threshold=hyper_params['edge_corr_threshold'],
-    #         experiment_path=experiment_path,
-    #         expr_mat_time=expr_mat_time,
-    #         top_nr_clusters=hyper_params['top_nr_clusters'])
+    with mlflow.start_run(
+            description=config['experiment_data']['description']):
+        mlflow.log_params(data_params)
+        mlflow.log_params(hyper_params)
+        mlflow.set_tags(config['experiment_data'])
+        mlflow.log_artifacts(str(experiment_path))
+        # mlflow.log_metrics({'bic': best_ode_fit.sol.bic,
+        #                     'chi_sqr': best_ode_fit.sol.chisqr})
+        # mlflow.log_image()
+        # mlflow.register_model()
+    # expr_mat_time, module_module, atted_stats = pipeline_from_atted_clustering(
+    #     experiment_path=experiment_path,
+    #     soft_file_path=Path(data_params['soft_path']),
+    #     atted_linkage_matrix=data_params['atted_linkage_matrix'],
+    #     atted_path=data_params['atted_path'],
+    #     edge_cor_threshold=hyper_params['edge_corr_threshold'],
+    #     nr_clusters=hyper_params['nr_clusters'],
+    #     top_nr_clusters=hyper_params['top_nr_clusters'],
+    #     do_log2=hyper_params['do_log2'],
+    #     agg_method=hyper_params['agg_method'])
+
+    # pipeline_only_local_clustering()
+
 
 
     # Assure that data has already been clustered
@@ -584,16 +599,7 @@ def main():
     with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
         pickle.dump(best_ode_fit, f)
 
-    with mlflow.start_run(
-            description=config['experiment_data']['description']):
-        mlflow.log_params(data_params)
-        mlflow.log_params(hyper_params)
-        mlflow.set_tags(config['experiment_data'])
-        mlflow.log_artifacts(str(experiment_path))
-        mlflow.log_metrics({'bic': best_ode_fit.sol.bic,
-                            'chi_sqr': best_ode_fit.sol.chisqr})
-        # mlflow.log_image()
-        # mlflow.register_model()
+
 
 if __name__ == "__main__":
     main()

@@ -495,6 +495,10 @@ class ExpressionMatrix:
         elif original_atted_matrix_path.name.endswith('.parquet.gzip'):
             og_df = pd.read_parquet(original_atted_matrix_path)
             og_df = og_df.iloc[:,0:1]
+            # Check if all indices are gene names
+            if og_df.index.dtype == 'int64':
+                og_df = og_df.set_index(og_df.columns[0])
+            assert all(og_df.index.str.startswith("AT")), "Could not infer gene names?!"
         else:
             raise NotImplementedError
         og_df = og_df.assign(cluster_id=clustering)
@@ -1394,3 +1398,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         """Get confidence interval per cluster at each time point"""
         assert self.has_been_clustered
         return self.df.groupby('cluster_id').apply(mean_bootstrap_error)
+
+    def get_all_explained_vars(self):
+        assert self.has_been_clustered == True
+        grouped_df = self.df.groupby('cluster_id')
+        return grouped_df.apply(self._get_eigengene_explained_var)
