@@ -2,7 +2,7 @@
 Creates expression annotation and expression matrix that can be used by
 other tests
 """
-import pickle
+import dill as pickle
 from pathlib import Path
 
 import networkx as nx
@@ -15,6 +15,7 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, ExpressionMatrixTimeS
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork, \
     EdgeRelation
 from DynamicModels.OdeModel import OdeModel
+from helpers import get_info_from_gse65046
 
 pd.options.display.width = 0
 # GEOparse.logger.set_verbosity('INFO')
@@ -32,8 +33,20 @@ def static_expression_two_temps_arabidopsis() -> ExpressionMatrix:
 def my_time_series_expressions() -> ExpressionMatrixTimeSeries:
     """Use this to skip the full creation of the object, and simply extract it
     from the pickle file that was created by the test above this one."""
-    with open('../data/time_series_datasets/GSE5628_family_ExpressionMatrixTime.pickle', 'rb') as f:
+    # # Preparatory work
+    # expr_mat_time = ExpressionMatrixTimeSeries.from_geo_file(
+    #     Path('../data/raw_data/expression_datasets/gse65046/GSE65046_family.soft'),
+    #     log2_transform=True,
+    #     annotate_from_gpl=True
+    # )
+    # expr_mat_time.df = expr_mat_time.df.iloc[:50,:]
+    # with open('test_data/GSE65046_family_test50_genes.pkl', 'wb') as f:
+    #     pickle.dump(expr_mat_time, f)
+    # print()
+    with open('test_data/GSE65046_family_test50_genes.pkl', 'rb') as f:
         expr_mat_time = pickle.load(f)
+    expr_mat_time.column_parser = get_info_from_gse65046
+    expr_mat_time.summary_method = 'mean'
     return expr_mat_time
 
 
