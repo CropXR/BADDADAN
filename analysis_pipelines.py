@@ -1,4 +1,5 @@
 import copy
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from matplotlib import pyplot as plt
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries, \
     AggregationMethod
+from exploring_questions import get_coex_from_tf2_output
 from helpers import get_info_from_gse65046
 # from main import fit_ode_to_two_datasets
 
@@ -48,26 +50,123 @@ def compare_clusterings_for_ode_use(experiment_path: Path,
         ClusteringArgs('local_dists', None, None),
     ]
     explained_var_df_list = []
+    tf_prod_df_list = []
+    tf_consistency_list = []
+    nr_tfs_between_modules_list = []
+    coex_score_list = []
     for clustering_arg in clustering_arg_list:
-        expr_mat_time_copy = copy.deepcopy(expr_mat_time)
-        if clustering_arg.input_dist_name == 'local_dists':
-            expr_mat_time_copy.do_hierachical_clustering(nr_clusters)
-        else:
-            expr_mat_time_copy.assign_clusters_from_linkage_matrix(
-                clustering_arg.linkage_matrix_path,
-                nr_clusters,
-                atted_path=clustering_arg.original_dist_path
-            )
-        explained_vars = expr_mat_time_copy.get_all_explained_vars()
-        explained_vars = explained_vars.to_frame(name='explained_var')
-        explained_vars['input_dists'] = clustering_arg.input_dist_name
-        explained_var_df_list.append(explained_vars)
-        expr_mat_time_copy.write_tf2_input_file(
-            experiment_path / f'01_{clustering_arg.input_dist_name}_tf2input.txt')
+        # logging.info(f'{clustering_arg.input_dist_name} analysis now')
+        #
+        # expr_mat_time_copy = copy.deepcopy(expr_mat_time)
+        # if clustering_arg.input_dist_name == 'local_dists':
+        #     expr_mat_time_copy.do_hierachical_clustering(nr_clusters)
+        # else:
+        #     expr_mat_time_copy.assign_clusters_from_linkage_matrix(
+        #         clustering_arg.linkage_matrix_path,
+        #         nr_clusters,
+        #         atted_path=clustering_arg.original_dist_path
+        #     )
+        #
+        # expr_mat_time_copy.check_enrichment_string_db()
+        #
+        # # Get coherence for each cluster
+        # explained_vars = expr_mat_time_copy.get_all_explained_vars()
+        # explained_vars = explained_vars.to_frame(name='explained_var')
+        # explained_vars['input_dists'] = clustering_arg.input_dist_name
+        # explained_var_df_list.append(explained_vars)
+        # expr_mat_time_copy.write_tf2_input_file(
+        #     experiment_path / f'01_{clustering_arg.input_dist_name}_tf2input.txt')
+
+        tf2_in_file = experiment_path / f'01_{clustering_arg.input_dist_name}_tf2input.txt'
+        tf2_out_file = experiment_path / f'02_{clustering_arg.input_dist_name}_tf2network_output.tsv'
+        coex_score = get_coex_from_tf2_output(tf2_out_file)
+        coex_score = coex_score.to_frame(name='coexpression_scores')
+        coex_score['input_dists'] = clustering_arg.input_dist_name
+        coex_score_list.append(coex_score)
+
+        # # For now just do this on all modules right?
+        # my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(tf2_out_file)
+        # my_grn.add_tf_module_mappings(tf2_in_file,
+        #                               from_tf2_input=True)
+        # my_grn.clean_up_network()
+        # my_grn.set_up_or_downregulation(expr_mat_time_copy,
+        #                                 threshold=0,
+        #                                 do_plotting=False)
+        # size_distribution = my_grn.see_how_many_tfs_between_modules()
+        # size_distribution['method'] = clustering_arg.input_dist_name
+        # nr_tfs_between_modules_list.append(size_distribution)
+        # consistency_at_threshold = my_grn.check_consistency_between_module_regulations()
+        # consistency_at_threshold.name = clustering_arg.input_dist_name
+        # tf_consistency_list.append(consistency_at_threshold)
+
+        ### Think can be removed
+        # TODO should this be here?
+        # my_grn.clean_up_network()
+        # my_grn.get_module_module_network()
+
+        # logging.info(f'{clustering_arg.input_dist_name} calculating correlations')
+        # # Keep all tfs, regardless of correlation strength
+        # correlations = my_grn.check_if_tfs_created_by_module(
+        #     expr_mat_time_copy,
+        #     do_plotting=False,
+        #     remove_low_corr=False,
+        #     assert_correlated=False)
+        # tf_production_corr_one_df = pd.DataFrame(correlations, columns=['tf_prod_module_cor'])
+        # tf_production_corr_one_df['input_dists'] = clustering_arg.input_dist_name
+        # print()
+        # # my_grn.keep_only_modules_of_interest(expr_mat_time)
+        # my_grn.clean_up_network()
+        #
+        # module_module = module_network_from_tf2_output()
+        #     expr_mat_time, tf2_in_file,
+        #     tf2_out_file,
+        #     module_plot_path=experiment_path / 'global_cluster_module_network.svg')
+
+
+    coex_df = pd.concat(coex_score_list)
+    sns.violinplot(data=coex_df, y='coexpression_scores', x='input_dists')
+    plt.show()
+
+    # Make the plots
+    nr_tfs_between_mods = pd.concat(nr_tfs_between_modules_list)
+    sns.set_style('white')
+    sns.histplot(data=nr_tfs_between_mods, x='nr_tfs_between_modules',
+                 hue='method', stat='percent',
+                 discrete=True, common_norm=False, multiple='dodge',
+                 shrink=.8)
+    sns.despine()
+    plt.show()
+
+    consistent_tf_df = pd.concat(tf_consistency_list, axis=1)
+    melted_consistent_tf_df = consistent_tf_df.reset_index().melt(
+        id_vars='index',
+        value_name='% agree',
+        var_name='input dists'
+    )
+    melted_consistent_tf_df = melted_consistent_tf_df.rename(
+        columns={'index': 'cutoff'})
+    sns.lineplot(data=melted_consistent_tf_df,
+                 x='cutoff',
+                 y='% agree',
+                 hue='input dists')
+    plt.show()
 
     vars_df = pd.concat(explained_var_df_list)
     sns.boxplot(data=vars_df, y='explained_var', x='input_dists')
+    plt.show()
+
+    sns.violinplot(data=vars_df, y='explained_var', x='input_dists')
+    plt.show()
+
     plt.savefig(experiment_path / 'explained_var_boxplot.svg')
+    plt.close()
+
+    tf_prod_df = pd.concat(tf_prod_df_list)
+    sns.boxplot(data=tf_prod_df, y='tf_prod_module_cor', x='input_dists')
+    plt.show()
+
+    plt.savefig(experiment_path / 'tf_prod_module_cor_boxplot.svg')
+    plt.close()
 
 def pipeline_from_summed_clustering(experiment_path: Path,
                                     soft_file_path: Path,

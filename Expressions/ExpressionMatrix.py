@@ -983,7 +983,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         if self.has_been_clustered:
             clustering_list = self.df['cluster_id']
             self.df = self.df.drop('cluster_id', axis=1)
-
+        assert self.column_parser is not None, "No column parsing function has been specified"
         column_info = self.column_parser(self.df.columns)
         column_tuples = list(zip(self.df.columns, *column_info.values()))
         # Ensure we do not accidentally modify the original dataframe

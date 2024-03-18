@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable, Generator, Literal
 
 import networkx as nx
+import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 import seaborn as sns
@@ -279,14 +280,15 @@ class ModuleRegulatoryNetwork:
                                        expressions: ExpressionMatrixTimeSeries,
                                        corr_cutoff: float = 0.3,
                                        do_plotting: bool = False,
-                                       remove_low_corr: bool = False):
+                                       remove_low_corr: bool = False,
+                                       assert_correlated: bool = True):
         """Check if TFs are 'created' by their module.
 
         To do this, we verify that the mean expression of the module is
         positively correlated with the transcription factor it produces.
         """
-        if remove_low_corr:
-            tfs_to_remove = set()
+
+        tfs_to_remove = set()
 
         debug_corrs = []
         all_module_tf_pairs = self.get_filtered_module_tf_edges(
@@ -300,9 +302,12 @@ class ModuleRegulatoryNetwork:
                                                tf_name_without_prefix,
                                                plot=False, method='pearson')
             debug_corrs.append(corr)
-            if not remove_low_corr:
-                assert corr > corr_cutoff, f'HUH?! Module {module_name} is not positively correlated ' \
-                                  f'with the TF ({tf_name}) it produces. Can be fixed by running this function with remove_low_corr=True'
+            if not remove_low_corr and assert_correlated:
+                assert corr > corr_cutoff, \
+                    (f'HUH?! Module {module_name} is not positively correlated '
+                     f'with the TF ({tf_name}) it produces. Can be fixed by '
+                     f'running this function with remove_low_corr=True '
+                     f'or assert_correlated=False')
             elif corr < corr_cutoff:
                 tfs_to_remove.add(tf_name)
             else:
@@ -322,7 +327,8 @@ class ModuleRegulatoryNetwork:
             sns.swarmplot(debug_corrs, color=sns.color_palette()[1])
             plt.ylim((-.5, 1))
             plt.show()
-        return True
+        return debug_corrs
+
 
     def set_up_or_downregulation(self,
                                  expressions: ExpressionMatrixTimeSeries,
@@ -343,6 +349,7 @@ class ModuleRegulatoryNetwork:
         all_tfs_and_binding_sites = self.get_filtered_module_tf_edges(
             edge_filter_id=EdgeRelation.BINDS_TO)
         for tf_name, module_name in all_tfs_and_binding_sites:
+
             # Remove the module and tf prefix
             module_without_prefix = module_name.removeprefix(
                 self.module_prefix)
@@ -356,13 +363,15 @@ class ModuleRegulatoryNetwork:
                                                tf_name_without_prefix,
                                                plot=False)
             debug_corrs.append(corr)
+
             if corr < -threshold:
                 direction = EdgeRelation.DOWNREGULATES
             elif corr > threshold:
                 direction = EdgeRelation.UPREGULATES
             else:
                 direction = EdgeRelation.UP_OR_DOWN
-            edge_attr_dict[(tf_name, module_name)] = {'origin': direction}
+            edge_attr_dict[(tf_name, module_name)] = {'origin': direction,
+                                                      'cor_strength': corr}
         nx.set_edge_attributes(self.graph, edge_attr_dict)
         if do_plotting:
             sns.set_style()
@@ -418,5 +427,60 @@ class ModuleRegulatoryNetwork:
 
         new_graph = nx.from_edgelist(valid_edges, nx.DiGraph)
         self.graph = new_graph
+
+    def get_intermodular_connection_df(self) -> pd.DataFrame:
+        """Return a dataframe that contains one row for each TF
+
+        Each row also contains the modules that it connects
+        (i.e. module in which it is produced, and module to
+        which it binds.
+        Finally, also return the strength of the correlation
+        between the TF and the module to which it binds.
+        """
+        out_list = []
+        for tf in self.get_tfs():
+            original_modules = list(self.graph.predecessors(tf))
+            assert len(original_modules) == 1
+            from_module = original_modules[0]
+            target_modules = list(self.graph.successors(tf))
+            for target_module in target_modules:
+                corr = self.graph.edges[tf, target_module]['cor_strength']
+                out_entry = [from_module, target_module, corr, tf]
+                out_list.append(out_entry)
+        df = pd.DataFrame.from_records(out_list, columns=['from', 'to', 'cor', 'tf'])
+        return df
+
+    def check_consistency_between_module_regulations(self) -> pd.Series:
+        """If more than 1 TF connects modules, see if they all agree (e.g. all up or downregulate)
+
+        To do this check if all connections are either above or below a various correlation thresholds, and return
+        the fraction of all connections in which the TFs agree.
+        """
+        df = self.get_intermodular_connection_df()
+        grouped_df = df.groupby(['from', 'to'])
+        at_least_double = grouped_df.filter(lambda x: len(x) > 1)
+        at_least_double_grpd = at_least_double.groupby(['from', 'to'])
+        # Get if they agree?
+        def check_agreement(x):
+            out = []
+            my_range = np.arange(0,1,0.1)
+            for cor_thresh in my_range:
+                is_consistent = all(x['cor'] > cor_thresh) or all(x['cor'] < cor_thresh)
+                out.append(is_consistent)
+            return pd.Series(out, index=my_range)
+        agrees_df = at_least_double_grpd.apply(check_agreement)
+        return agrees_df.mean()
+
+    def see_how_many_tfs_between_modules(self) -> pd.DataFrame:
+        """Get a distribution of how many TFs are between modules
+
+        Used for checking if TFs are always in agreement with one another
+        """
+
+        df = self.get_intermodular_connection_df()
+        grouped_df = df.groupby(['from', 'to'])
+        size_distribution = grouped_df.size()
+        size_distribution.name = 'nr_tfs_between_modules'
+        return size_distribution.reset_index()
 
 

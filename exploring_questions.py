@@ -1,4 +1,5 @@
 import copy
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -267,3 +268,10 @@ def exploratory_module_selection(input_file, modules_file):
     expr_mat_time.assign_clusters_from_cignet_file(cignet_modules, remove_dupes=True)
     expr_mat_time.show_characteristics_of_clusters()
 
+def get_coex_from_tf2_output(input_file):
+    """From TF2Network output, see the coexpression scores"""
+    df = pd.read_csv(input_file, sep='\t')
+    df_grp = df.groupby('GeneSet')
+    logging.info(f'input: {input_file}\n {df_grp.ngroups} groups\n')
+    mean_coex = df_grp['CO'].mean()
+    return mean_coex
