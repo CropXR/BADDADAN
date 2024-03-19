@@ -275,3 +275,32 @@ def get_coex_from_tf2_output(input_file):
     logging.info(f'input: {input_file}\n {df_grp.ngroups} groups\n')
     mean_coex = df_grp['CO'].mean()
     return mean_coex
+
+
+def compare_modules_to_local_modules_with_tfbs(expr_mat_dict, local_dists_tf2_output):
+    """For the modules that are found in local distance and have a TFBS enriched
+    See if they overlap with modules you find from other clusterings.
+    Could suggest that you only find these modules using local clustering
+     because they are highly specific to this stress and other clusterings
+     find modules that are present in other contexts (and thus cannot be
+     found through local clusterings,
+    """
+    local_df = expr_mat_dict['local_dists'].df
+    atted_df = expr_mat_dict['atted_only'].df
+    summed_dist_df = expr_mat_dict['summed_dists'].df
+    summed_dist_df = summed_dist_df.rename(
+        columns={'cluster_id': 'cluster_id_summed'})
+    tf2_out_local = pd.read_csv(
+        local_dists_tf2_output,
+        sep='\t')
+    has_tf_enriched_index = local_df['cluster_id'].isin(
+        tf2_out_local['GeneSet'])
+    local_df = local_df[has_tf_enriched_index]
+    merged_df = atted_df.join(local_df, how='inner', lsuffix='_atted',
+                              rsuffix='_local')
+    merged_df = merged_df.join(summed_dist_df, how='inner')
+    merged_df = merged_df.loc[:, merged_df.columns.str.contains('cluster_id')]
+    print(adjusted_rand_score(merged_df['cluster_id_atted'],
+                              merged_df['cluster_id_local']))
+    print(adjusted_rand_score(merged_df['cluster_id_summed'],
+                              merged_df['cluster_id_local']))

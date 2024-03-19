@@ -1,8 +1,6 @@
 import copy
-import logging
 from dataclasses import dataclass
 from pathlib import Path
-
 import dill as pickle
 import pandas as pd
 import seaborn as sns
@@ -11,7 +9,7 @@ from matplotlib import pyplot as plt
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries, \
     AggregationMethod
-from exploring_questions import get_coex_from_tf2_output
+from exploring_questions import compare_modules_to_local_modules_with_tfbs
 from helpers import get_info_from_gse65046
 # from main import fit_ode_to_two_datasets
 
@@ -51,30 +49,38 @@ def compare_clusterings_for_ode_use(experiment_path: Path,
         ClusteringArgs('local_dists', None, None),
     ]
 
-    out_dict = {}
-    for clustering_arg in clustering_arg_list:
-        logging.info(f'{clustering_arg.input_dist_name} analysis now')
+    # out_dict = {}
+    # for clustering_arg in clustering_arg_list:
+    #     logging.info(f'{clustering_arg.input_dist_name} analysis now')
+    #
+    #     expr_mat_time_copy = copy.deepcopy(expr_mat_time)
+    #     if clustering_arg.input_dist_name == 'local_dists':
+    #         expr_mat_time_copy.do_hierachical_clustering(nr_clusters)
+    #     else:
+    #         expr_mat_time_copy.assign_clusters_from_linkage_matrix(
+    #             clustering_arg.linkage_matrix_path,
+    #             nr_clusters,
+    #             atted_path=clustering_arg.original_dist_path
+    #         )
+    #     expr_mat_time_copy.write_tf2_input_file(
+    #         experiment_path / f'01_{clustering_arg.input_dist_name}_tf2input.txt')
+    #     out_dict[clustering_arg.input_dist_name] = expr_mat_time_copy
 
-        expr_mat_time_copy = copy.deepcopy(expr_mat_time)
-        if clustering_arg.input_dist_name == 'local_dists':
-            expr_mat_time_copy.do_hierachical_clustering(nr_clusters)
-        else:
-            expr_mat_time_copy.assign_clusters_from_linkage_matrix(
-                clustering_arg.linkage_matrix_path,
-                nr_clusters,
-                atted_path=clustering_arg.original_dist_path
-            )
-        expr_mat_time_copy.write_tf2_input_file(
-            experiment_path / f'01_{clustering_arg.input_dist_name}_tf2input.txt')
-        out_dict[clustering_arg.input_dist_name] = expr_mat_time_copy
 
+    # the modules in ATTED-II or not
+    # print()
+    # with open('data/experiments/04_comparing_clusterings/all_clusterings_expr_mat_dict.pkl',
+    #           'wb') as f:
+    #     pickle.dump(out_dict, f)
+
+    with open('data/experiments/04_comparing_clusterings/all_clusterings_expr_mat_dict.pkl',
+              'rb') as f:
+        out_dict = pickle.load(f)
 
     # Check if 56 modules with >0 TF in local dists have significant overlap
-    # the modules in ATTED-II or not
-    print()
-    with open('data/experiments/04_comparing_clusterings/all_clusterings_expr_mat_dict.pkl',
-              'wb') as f:
-        pickle.dump(out_dict, f)
+    compare_modules_to_local_modules_with_tfbs(
+        out_dict,
+        experiment_path / f'02_local_dists_tf2network_output.tsv')
 
     explained_var_df_list = []
     tf_prod_df_list = []
@@ -83,20 +89,20 @@ def compare_clusterings_for_ode_use(experiment_path: Path,
     coex_score_list = []
     for dist_name, expression_df in out_dict.items():
         # expr_mat_time_copy.check_enrichment_string_db()
-
-        # Get coherence for each cluster
-        explained_vars = expression_df.get_all_explained_vars()
-        explained_vars = explained_vars.to_frame(name='explained_var')
-        explained_vars['input_dists'] = dist_name
-        explained_var_df_list.append(explained_vars)
-
         tf2_in_file = experiment_path / f'01_{dist_name}_tf2input.txt'
         tf2_out_file = experiment_path / f'02_{dist_name}_tf2network_output.tsv'
 
-        coex_score = get_coex_from_tf2_output(tf2_out_file)
-        coex_score = coex_score.to_frame(name='coexpression_scores')
-        coex_score['input_dists'] = dist_name
-        coex_score_list.append(coex_score)
+        # # Get coherence for each cluster
+        # explained_vars = expression_df.get_all_explained_vars()
+        # explained_vars = explained_vars.to_frame(name='explained_var')
+        # explained_vars['input_dists'] = dist_name
+        # explained_var_df_list.append(explained_vars)
+        #
+        # # Get TF2 Coexpression score for each cluster
+        # coex_score = get_coex_from_tf2_output(tf2_out_file)
+        # coex_score = coex_score.to_frame(name='coexpression_scores')
+        # coex_score['input_dists'] = dist_name
+        # coex_score_list.append(coex_score)
 
         # # For now just do this on all modules right?
         my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(tf2_out_file)
@@ -106,6 +112,8 @@ def compare_clusterings_for_ode_use(experiment_path: Path,
         my_grn.set_up_or_downregulation(expression_df,
                                         threshold=0,
                                         do_plotting=False)
+        my_grn.get_intermodular_connection_df()
+
         size_distribution = my_grn.see_how_many_tfs_between_modules()
         size_distribution['method'] = dist_name
         nr_tfs_between_modules_list.append(size_distribution)
@@ -158,6 +166,7 @@ def compare_clusterings_for_ode_use(experiment_path: Path,
 
     plt.savefig(experiment_path / 'tf_prod_module_cor_boxplot.svg')
     plt.close()
+
 
 def pipeline_from_summed_clustering(experiment_path: Path,
                                     soft_file_path: Path,
