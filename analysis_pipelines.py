@@ -92,36 +92,49 @@ def compare_clusterings_for_ode_use(experiment_path: Path,
         tf2_in_file = experiment_path / f'01_{dist_name}_tf2input.txt'
         tf2_out_file = experiment_path / f'02_{dist_name}_tf2network_output.tsv'
 
-        # # Get coherence for each cluster
-        # explained_vars = expression_df.get_all_explained_vars()
-        # explained_vars = explained_vars.to_frame(name='explained_var')
-        # explained_vars['input_dists'] = dist_name
-        # explained_var_df_list.append(explained_vars)
-        #
+        # Get coherence for each cluster
+        explained_vars = expression_df.get_all_explained_vars()
+        explained_vars = explained_vars.to_frame(name='explained_var')
+        explained_vars['input_dists'] = dist_name
+        explained_var_df_list.append(explained_vars)
+
         # # Get TF2 Coexpression score for each cluster
         # coex_score = get_coex_from_tf2_output(tf2_out_file)
         # coex_score = coex_score.to_frame(name='coexpression_scores')
         # coex_score['input_dists'] = dist_name
         # coex_score_list.append(coex_score)
-
-        # # For now just do this on all modules right?
-        my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(tf2_out_file)
-        my_grn.add_tf_module_mappings(tf2_in_file,
-                                      from_tf2_input=True)
-        my_grn.clean_up_network()
-        my_grn.set_up_or_downregulation(expression_df,
-                                        threshold=0,
-                                        do_plotting=False)
-        my_grn.get_intermodular_connection_df()
-
-        size_distribution = my_grn.see_how_many_tfs_between_modules()
-        size_distribution['method'] = dist_name
-        nr_tfs_between_modules_list.append(size_distribution)
-        consistency_at_threshold = my_grn.check_consistency_between_module_regulations()
-        consistency_at_threshold.name = dist_name
-        tf_consistency_list.append(consistency_at_threshold)
+        #
+        # # # For now just do this on all modules right?
+        # my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(tf2_out_file)
+        # my_grn.add_tf_module_mappings(tf2_in_file,
+        #                               from_tf2_input=True)
+        # my_grn.clean_up_network()
+        # my_grn.set_up_or_downregulation(expression_df,
+        #                                 threshold=0,
+        #                                 do_plotting=False)
+        # my_grn.get_intermodular_connection_df()
+        #
+        # size_distribution = my_grn.see_how_many_tfs_between_modules()
+        # size_distribution['method'] = dist_name
+        # nr_tfs_between_modules_list.append(size_distribution)
+        # consistency_at_threshold = my_grn.check_consistency_between_module_regulations()
+        # consistency_at_threshold.name = dist_name
+        # tf_consistency_list.append(consistency_at_threshold)
 
     # Make the plots
+    robustness_df = pd.read_csv(experiment_path / 'robustness_30_jackknifes.csv')
+    sns.violinplot(data=robustness_df, x='input_dists', y='robustness')
+    plt.ylim([0, 0.35])
+    plt.savefig(experiment_path / 'robustness_violinplot.svg')
+    plt.close()
+
+    vars_df = pd.concat(explained_var_df_list)
+    sns.violinplot(data=vars_df, y='explained_var', x='input_dists')
+
+    plt.savefig(experiment_path / 'explained_var_violinplot.svg')
+    plt.close()
+
+
 
     coex_df = pd.concat(coex_score_list)
     sns.violinplot(data=coex_df, y='coexpression_scores', x='input_dists')
@@ -150,15 +163,7 @@ def compare_clusterings_for_ode_use(experiment_path: Path,
                  hue='input dists')
     plt.show()
 
-    vars_df = pd.concat(explained_var_df_list)
-    sns.boxplot(data=vars_df, y='explained_var', x='input_dists')
-    plt.show()
 
-    sns.violinplot(data=vars_df, y='explained_var', x='input_dists')
-    plt.show()
-
-    plt.savefig(experiment_path / 'explained_var_boxplot.svg')
-    plt.close()
 
     tf_prod_df = pd.concat(tf_prod_df_list)
     sns.boxplot(data=tf_prod_df, y='tf_prod_module_cor', x='input_dists')
