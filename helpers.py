@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import string
@@ -5,6 +6,7 @@ from pathlib import Path
 from typing import List
 
 import numpy as np
+import requests
 import seaborn as sns
 import pandas as pd
 from scipy.spatial.distance import euclidean
@@ -264,3 +266,112 @@ def mean_bootstrap_error(in_df: pd.DataFrame, confidence_level: float = .95) -> 
                        confidence_level=confidence_level).confidence_interval
     bs_error = (all_bs.high - all_bs.low) / 2
     return pd.Series(bs_error)
+
+def call_string_db(list_of_genes: list, species:int, method="ppi_enrichment",) -> dict:
+    """
+    Call stringdb to get the number of nodes, expected number of edges,
+    number of edges, and pvalue for a list of genes.
+    Requires internet connection.
+
+    Author: Jordi Alonso Esteve
+
+    Parameters
+    ----------
+    list_of_genes: list
+        List of genes to test
+    method: str
+        What to do, see stringdsb documentation
+    species: int
+        Species NCBI identifier (ATH: 3702, FLY: 7227)
+    Returns
+    -------
+    out_dict: dict
+        Dictionary with the following keys:
+            nn: number of nodes
+            e_ne: expected number of edges
+            ne: number of edges
+            pvalue: pvalue of the test
+    """
+    raise NotImplementedError
+    string_api_url = "https://string-db.org/api"
+    # remove "unknown" genes
+    list_of_genes = [x for x in list_of_genes if x != "unknown ID"]
+    params = {
+        "identifiers": "%0d".join(list_of_genes),  # your protein list
+        "species": species,  # species NCBI identifier **ARABIDOPSIS thaliana**
+        "caller_identity": "BADDADAN",  # your app name
+    }
+    if method == "ppi_enrichment":
+        output_format = "tsv-no-header"
+        request_url = "/".join([string_api_url, output_format, method])
+        try:
+            print("Calling stringdb...")
+            results = requests.post(request_url, data=params)
+            print(results)
+        except:
+            #time.sleep(1)
+            try:
+                results = requests.post(request_url, data=params)
+            except:
+                print("Error in stringdb")
+                return {"nn": 0, "e_ne": 0, "ne": 0, "pvalue": np.NAN}
+        for line in results.text.strip().split("\n"):
+            try:
+                nn, ne, a_nd, lcc, e_ne, pvalue = line.split("\t")
+            except:
+                # import pdb; pdb.set_trace()
+                print("Error in stringdb")
+                return {"nn": 0, "e_ne": 0, "ne": 0, "pvalue": np.NAN}
+        if float(pvalue) == 0.0:
+            pvalue = 1e-16
+        out_dict = {
+            "nn": nn,
+            "e_ne": e_ne,
+            "ne": ne,
+            "pvalue": pvalue,
+            "ne_ene": float(ne) / float(e_ne) if float(e_ne) != 0 else 0,
+        }
+        return out_dict
+    elif method == "enrichment":
+        output_format = "json"
+        request_url = "/".join([string_api_url, output_format, method])
+        params = {
+        "identifiers": "%0d".join(list_of_genes),  # your protein list
+        "species": species,  # species NCBI identifier **ARABIDOPSIS thaliana**
+        "caller_identity": "BADDADAN",  # your app name
+        }
+        response = requests.post(request_url, data=params)
+        ##
+        ## Read and parse the results
+        ##
+        data = json.loads(response.text)
+        results = {}
+        for row in data:
+            term = row["term"]
+            #preferred_names = ",".join(row["preferredNames"])
+            fdr = float(row["fdr"])
+            description = row["description"]
+            category = row["category"]
+            pvalue = float(row["p_value"])
+            if fdr < 0.01:
+                results[term] = {
+                    #"preferred_names": preferred_names,
+                    "fdr": fdr,
+                    "p_value": pvalue,
+                    "description": description,
+                    "category": category,
+                }
+        # If empty retunr one just with the column names
+        if len(results) == 0:
+            results["None_found"] = {
+                #"preferred_names": "None found",
+                "fdr": 0,
+                "p_value": 0,
+                "description": "None found",
+                "category": "None found",
+            }
+            # make a df
+        results = pd.DataFrame(results).T
+        # order by pvalue
+        results = results.sort_values(by="fdr", ascending=True)
+        return results

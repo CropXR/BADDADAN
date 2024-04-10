@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import random
 from enum import Enum
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -1403,3 +1404,10 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         assert self.has_been_clustered == True
         grouped_df = self.df.groupby('cluster_id')
         return grouped_df.apply(self._get_eigengene_explained_var)
+
+    def check_enrichment_string_db(self):
+        raise NotImplementedError
+        # Sample 30 modules
+        random.choice(self.df['cluster_id'].unique())
+        self.df.groupby('cluster_id')
+        pass
