@@ -103,6 +103,28 @@ def get_info_from_gse5628(sample_names: list[str] | pd.Index | pd.DataFrame) -> 
         out_dict['rep_nr'].append(rep_nr)
     return out_dict
 
+def get_info_from_emtab375(sample_names):
+    """Handle sample names from the EMTAB375 samples"""
+    out_dict = {'time': [],
+                'condition': [],
+                'light': []}
+    for sample in sample_names:
+        if ';' in sample:
+            # handle edge case (i.e. the first sample)
+            time = '0'
+            temp = '21'
+            light = 'normal light (150 uE)'
+        else:
+            time = re.search(r'\d+$', sample).group()
+            temp = re.search(r'^\d+', sample).group()
+            # Get the middle bit
+            light = re.search(r'(?<=\d\s).+(?=\s\d+$)', sample).group()
+        time = pd.to_timedelta(time + ' minutes')
+        out_dict['time'].append(time)
+        out_dict['condition'].append(temp)
+        out_dict['light'].append(light)
+    return out_dict
+
 def de_print_fun(xk, convergence=None):
     """Logs the convergence value during differential evolution.
 

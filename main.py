@@ -21,10 +21,11 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries, AggregationMethod
 from analysis_pipelines import pipeline_from_atted_clustering, \
     local_clustering_on_atted_clusters, pipeline_from_summed_clustering, \
-    compare_clusterings_for_ode_use
+    compare_clusterings_for_ode_use, pipeline_emtab_375_full
 from exploring_questions import save_local_distance_matrix, \
     sum_local_distance_and_atted, rand_index_both_clusterings
-from helpers import plot_y_and_y_hat, get_info_from_gse65046
+from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
+    get_info_from_emtab375
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
 # pd.options.display.width = 0
@@ -525,8 +526,9 @@ def camila_red_panda(soft_file_in_path: Path,
 
 def main():
     # ONLY EDIT THESE LINES
-    experiment_path = Path('data/experiments/04_comparing_clusterings')
-    mlflow.set_experiment("/04_comparing_clusterings")
+    name = '05_doing_new_dataset'
+    experiment_path = Path(f'data/experiments') / name
+    mlflow.set_experiment(name)
 
     ##  This all shouldn't have to be changed ##
     logging.basicConfig(level=logging.INFO,
@@ -543,6 +545,19 @@ def main():
     agg_method_dict = {'mean': AggregationMethod.MEAN,
                        'eigengene': AggregationMethod.EIGENGENE}
     hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
+
+    pipeline_emtab_375_full(experiment_path=experiment_path,
+                            in_file_path=Path(data_params['soft_path']),
+                            gpl_id=data_params['gpl_id'],
+                            sample_name_parser_func=get_info_from_emtab375,
+                            atted_linkage_matrix=None,
+                            atted_path=None,
+                            edge_cor_threshold=None,
+                            nr_clusters=None,
+                            top_nr_clusters=None,
+                            do_log2=hyper_params['do_log2'],
+                            agg_method=hyper_params['agg_method'])
+
 
     compare_clusterings_for_ode_use(
         experiment_path=experiment_path,

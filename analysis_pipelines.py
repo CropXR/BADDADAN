@@ -1,6 +1,8 @@
 import copy
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
+
 import dill as pickle
 import pandas as pd
 import seaborn as sns
@@ -221,6 +223,39 @@ def pipeline_from_summed_clustering(experiment_path: Path,
     return expr_mat_time, module_module
 
 
+def pipeline_emtab_375_full(experiment_path: Path, in_file_path: Path,
+                            sample_name_parser_func: Callable,
+
+                            atted_linkage_matrix: Path,
+                            atted_path: Path, edge_cor_threshold: float,
+                            nr_clusters: int, top_nr_clusters: int,
+                            do_log2: bool,
+                            agg_method: AggregationMethod,
+                            gpl_id: str = None, ):
+    if in_file_path.suffix == '.csv':
+        expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
+            in_file_path,
+            log2_transform=do_log2,
+            gpl_id=gpl_id,
+        )
+    else:
+        raise NotImplementedError
+    expr_mat_time.keep_only_samples_with_string('normal light')
+    expr_mat_time.summary_method = agg_method
+    expr_mat_time.condition_names = ['21', '32']
+    expr_mat_time.column_parser = sample_name_parser_func
+    expr_mat_time.keep_n_most_deviating_genes(200)
+    expr_mat_time.do_hierachical_clustering(5)
+    expr_mat_time.plot_cluster_sizes()
+    # expr_mat_time.keep_highest_z_clusters(4, None)
+    # expr_mat_time.plot_clusters_over_time()
+    plt.show()
+    tf2_in_path = experiment_path / '01_tf2_input.txt'
+    tf2_out_path = experiment_path / '02_tf2network_output.tsv'
+    expr_mat_time.post_to_tf2network(tf2_in_path, tf2_out_path)
+    # expr_mat_time.write_tf2_input_file(tf2_in_path)
+    print()
+
 def pipeline_from_atted_clustering(experiment_path: Path, soft_file_path: Path,
                                    atted_linkage_matrix: Path,
                                    atted_path: Path, edge_cor_threshold: float,
@@ -228,10 +263,9 @@ def pipeline_from_atted_clustering(experiment_path: Path, soft_file_path: Path,
                                    do_log2: bool,
                                    agg_method: AggregationMethod) \
         -> (ExpressionMatrixTimeSeries, ModuleRegulatoryNetwork):
-    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
+    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
         soft_file_path,
-        log2_transform=do_log2,
-        annotate_from_gpl=True
+        log2_transform=do_log2
     )
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.summary_method = agg_method

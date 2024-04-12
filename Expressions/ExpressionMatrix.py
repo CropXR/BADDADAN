@@ -6,6 +6,8 @@ from __future__ import annotations
 import copy
 import logging
 import random
+import time
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -16,8 +18,12 @@ import subprocess
 import dill as pickle
 import numpy as np
 import pandas as pd
+import requests
 import seaborn as sns
 import GEOparse
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.stats import zscore, bootstrap
@@ -63,6 +69,7 @@ class ExpressionMatrix:
         self.scale_before_pca = True
         # Can be mean or eigengene
         self.aggregation_method: AggregationMethod = AggregationMethod.MEAN
+        self.condition_names = None
 
     def __repr__(self):
         return (f'ExpressionMatrix with {len(self.df)} genes'
@@ -70,10 +77,22 @@ class ExpressionMatrix:
 
     @classmethod
     def from_csv(cls, file_path: Path, log2_transform: bool = False,
-                 sep: str = ','):
+                 sep: str = ',', gpl_id: str = None):
+        """Create ExpressionMatrix from csv with genes in row and expression per sample in col
+
+        :param file_path: path to csv
+        :param log2_transform: if true, do log2 transform
+        :param sep: csv separator
+        :param gpl_id: ID of gene expression omnibus platform. If provided, use this to convert probe names to gene IDs
+        e.g. for Affymetrix ATH1 array, use 'GPL198'
+        """
         df = pd.read_csv(file_path, sep=sep, index_col=0)
         if log2_transform:
             df = np.log2(df)
+        if gpl_id:
+            gpl = GEOparse.get_GEO(gpl_id, silent=True)
+            translation_table = gpl.table
+            df = cls._do_gpl_annotation(translation_table, df)
         return cls(df)
 
     @classmethod
@@ -114,16 +133,7 @@ class ExpressionMatrix:
             # Take first (and only) value from dict
             gpl_object = sorted(gse.gpls.values())[0]
             gpl_table = gpl_object.table
-            # Probe ID must be uppercase
-            gpl_table['ID'] = gpl_table['ID'].str.upper()
-            df = df.merge(gpl_table[['ID', 'ORF']], left_index=True, right_on='ID')
-            # Drop NA mappings
-            logging.info(f'{len(df)} Probe IDs at start')
-            df = df.dropna(subset='ORF')
-            logging.info(f'{len(df)} genes mapped to probe IDs')
-            df = df.set_index('ORF')
-            # Remove old probe ID column
-            df = df.drop('ID', axis=1)
+            df = cls._do_gpl_annotation(gpl_table, df)
 
         elif array_annotation:
             # Get gene names based on ExpressionAnnotation object
@@ -148,6 +158,26 @@ class ExpressionMatrix:
         better_name_dict = gse.phenotype_data.title.to_dict()
         df.columns = [better_name_dict[old_col] for old_col in df.columns]
         return cls(df)
+
+    @classmethod
+    def _do_gpl_annotation(cls, gpl_table, df):
+
+        # Probe IDs must be uppercase
+        gpl_table['ID'] = gpl_table['ID'].str.upper()
+        df.index = df.index.str.upper()
+        if 'AGI' in gpl_table.columns:
+            true_name_col_name = 'AGI'
+        else:
+            true_name_col_name = "ORF"
+        df = df.merge(gpl_table[['ID', true_name_col_name]], left_index=True, right_on='ID')
+        # Drop NA mappings
+        logging.info(f'{len(df)} Probe IDs at start')
+        df = df.dropna(subset=true_name_col_name)
+        logging.info(f'{len(df)} genes mapped to probe IDs')
+        df = df.set_index(true_name_col_name)
+        # Remove old probe ID column
+        df = df.drop('ID', axis=1)
+        return df
 
     def concat_to_expression_matrix(
             self, new_expression_matrix: ExpressionMatrix,
@@ -619,7 +649,8 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         eigen_values_through_time = pd.Series(eigen_values_through_time)
         updated_indices = pd.DataFrame(
             self.column_parser(one_group_df.columns))
-        updated_indices = updated_indices.drop('rep_nr', axis=1)
+        if 'rep_nr' in updated_indices:
+            updated_indices = updated_indices.drop('rep_nr', axis=1)
         eigen_values_through_time.index = pd.MultiIndex.from_frame(updated_indices)
         return eigen_values_through_time
 
@@ -636,7 +667,8 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         expressions = one_group_df.mean()
         updated_indices = pd.DataFrame(
             self.column_parser(expressions.index))
-        updated_indices = updated_indices.drop('rep_nr', axis=1)
+        if 'rep_nr' in updated_indices:
+            updated_indices = updated_indices.drop('rep_nr', axis=1)
         expressions.index = pd.MultiIndex.from_frame(
             updated_indices)
         return expressions
@@ -786,7 +818,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
     def plot_clusters_over_time(self,
                                 plot_units: bool = False,
                                 title=None,
-                                split_by_condition: List[str] = None,
                                 out_path: Path|None = None) -> None:
         """Plot expression of clusters over time.
 
@@ -824,15 +855,15 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                 case _:
                     raise NotImplementedError
 
-            some_df['time (days)'] = some_df['time'].dt.days
+            some_df['time (days)'] = some_df['time'] / pd.to_timedelta(1, unit='D')
             nr_hues = some_df['cluster_id'].nunique()
-            if split_by_condition is None:
+            if self.condition_names is None:
                 sns.lineplot(data=some_df, x='time (days)', y='expression',
                              hue='cluster_id',
                              palette=sns.color_palette(n_colors=nr_hues),
                              errorbar='se')
             else:
-                for word in split_by_condition:
+                for word in self.condition_names:
                     selected_df = some_df[some_df['condition'].isin(
                         ['zero', word])]
                     sns.lineplot(data=selected_df, x='time (days)',
@@ -918,6 +949,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         column_info = self.column_parser(df_no_cluster_column)
         column_tuples = list(zip(df_no_cluster_column, *column_info.values()))
         # Ensure we do not accidentally modify the original dataframe
+        #
         df_no_cluster_column.columns = pd.MultiIndex.from_tuples(
             column_tuples, names=['sample_name', 'time', 'condition', 'replicate'])
         stacked_df = df_no_cluster_column.stack(level=['time', 'replicate'])
@@ -1096,7 +1128,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         # Otherwise cannot calculate correlation
         updated_indices = pd.DataFrame(
             self.column_parser(tf_expressions.index))
-        updated_indices = updated_indices.drop('rep_nr', axis=1)
+        if 'rep_nr' in updated_indices:
+            updated_indices = updated_indices.drop('rep_nr', axis=1)
         tf_expressions.index = pd.MultiIndex.from_frame(updated_indices)
 
         if plot:
@@ -1154,7 +1187,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         characteristics_dict = {
             'explained_var': self._get_eigengene_explained_var,
             'size': len,
-            'corr_to_phenotype': self._corr_to_phenotypes,
+            #'corr_to_phenotype': self._corr_to_phenotypes,
             'mean_pairwise_abs_cor': self._mean_pairwise_abs_cor,
             'var_through_time': self._get_eigengene_variation_over_time,
             'difference_between_conditions': self._get_difference_between_conditions,
@@ -1193,12 +1226,24 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                 expressions = self._get_mean_over_time(one_group_df)
             case _:
                 raise NotImplementedError
+        expressions.name = 'expressions'
         # Split into drought and control time series
+        assert len(self.condition_names) == 2, (f'Can only calculate difference '
+                                                f'between two conditions.'
+                                                f' Now provides with'
+                                                f' {len(self.condition_names)}'
+                                                f'conditions: {self.condition_names}.'
+                                                f'Specify self.condition_names to get this workin properly.')
         control_series = expressions[expressions.index.get_level_values(
-            'condition').isin(['zero', 'control'])]
+            'condition').isin(['zero', self.condition_names[0]])].reset_index()
         drought_series = expressions[expressions.index.get_level_values(
-            'condition').isin(['zero', 'drought'])]
-        return mean_squared_error(control_series, drought_series)
+            'condition').isin(['zero', self.condition_names[1]])].reset_index()
+        # Ensure that in similar order and everything matches
+        merged = control_series.merge(drought_series, on='time',
+                                      suffixes=['_control', '_condition'])
+
+        return mean_squared_error(merged['expressions_control'],
+                                  merged['expressions_condition'])
 
     @staticmethod
     def _mean_pairwise_abs_cor(one_group_df: pd.Dataframe) -> float | np.floating:
@@ -1252,7 +1297,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                                                subset: Tuple[str] = (
                                                    'explained_var',
                                                    'difference_between_conditions',
-                                                   'corr_to_phenotype',
+                                                   #'corr_to_phenotype',
                                                    'mean_expression',
                                                    'tfbs_present')
                                                ) -> pd.DataFrame:
@@ -1411,3 +1456,61 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         random.choice(self.df['cluster_id'].unique())
         self.df.groupby('cluster_id')
         pass
+
+    def post_to_tf2network(self, tf2_in_path: Path, tf2_out_path: Path):
+        """Automatically post gene clustering to TF2Network"""
+        assert tf2_in_path.parent == tf2_out_path.parent, "At the moment only having TF2 in and ouput in the same folder is supported"
+        # Remove old file
+        tf2_out_path.unlink(missing_ok=True)
+        self.write_tf2_input_file(tf2_in_path)
+        url = 'http://bioinformatics.psb.ugent.be/webtools/TF2Network/'
+        chrome_options = Options()
+        # chrome_options.add_argument('--headless')
+        # chrome_options.add_argument('--no-sandbox')
+        # chrome_options.add_argument('--remote-debugging-pipe')
+
+        # ensure chrome and the chromedriver are installed and compatible
+        # with each other
+
+        chrome_options.add_argument("--disable-web-security")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--accept-insecure-certs")
+        chrome_options.add_argument("--ignore-certificate-errors")
+        prefs = {
+            "download.default_directory": str(tf2_in_path.parent.resolve())}
+        chrome_options.add_experimental_option("prefs", prefs)
+
+        driver = webdriver.Chrome(options=chrome_options)
+
+        # # Disable https redirect
+        # driver.get('chrome://net-internals/#hsts')
+        # url_input = driver.find_element(By.ID, value='domain-security-policy-view-delete-input')
+        # url_input.send_keys(url)
+        # delete_button = driver.find_element(By.ID, value='domain-security-policy-view-delete-submit')
+        # delete_button.click()
+        #
+        # driver.get('chrome://settings/clearBrowserData')
+        # clear_button = driver.find_element(By.XPATH, value='//*[@id="clearBrowsingDataConfirm"]')
+        # clear_button.click()
+
+        driver.get(url)
+        logging.warning('MANUALLY MOVE TO THE HTTP WEBSITE')
+        with tf2_in_path.open('r') as f:
+            input_text = f.read()
+        file_input = driver.find_element(By.NAME, value='gene_set')
+        file_input.send_keys(input_text)
+
+        direct_check_box = driver.find_element(By.NAME, value='direct')
+        direct_check_box.click()
+
+        submit_button = driver.find_element(by=By.NAME, value="submit")
+        submit_button.click()
+        tick = datetime.now()
+        interval_time = 10
+        while not (tf2_out_path.parent / 'tf2network_output.tsv').exists():
+            time.sleep(interval_time)
+            total_time = datetime.now() - tick
+            logging.info(f'Waited {total_time.total_seconds():.0f} s for download of TF2Network now')
+
+        (tf2_out_path.parent / 'tf2network_output.tsv').rename(tf2_out_path.with_name(tf2_out_path.name))
+        print()
