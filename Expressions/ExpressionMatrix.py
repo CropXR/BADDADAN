@@ -77,20 +77,21 @@ class ExpressionMatrix:
 
     @classmethod
     def from_csv(cls, file_path: Path, log2_transform: bool = False,
-                 sep: str = ',', gpl_id: str = None):
+                 sep: str = ',', gpl_path: str = None):
         """Create ExpressionMatrix from csv with genes in row and expression per sample in col
 
         :param file_path: path to csv
         :param log2_transform: if true, do log2 transform
         :param sep: csv separator
-        :param gpl_id: ID of gene expression omnibus platform. If provided, use this to convert probe names to gene IDs
-        e.g. for Affymetrix ATH1 array, use 'GPL198'
+        :param gpl_path: Path of gene expression omnibus platform.
+        If provided, use this to convert probe names to gene IDs.
+        Download from e.g. https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL198
         """
         df = pd.read_csv(file_path, sep=sep, index_col=0)
         if log2_transform:
             df = np.log2(df)
-        if gpl_id:
-            gpl = GEOparse.get_GEO(gpl_id, silent=True)
+        if gpl_path:
+            gpl = GEOparse.get_GEO(filepath=gpl_path, silent=True)
             translation_table = gpl.table
             df = cls._do_gpl_annotation(translation_table, df)
         return cls(df)

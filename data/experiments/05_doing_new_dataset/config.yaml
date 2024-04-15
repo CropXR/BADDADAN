@@ -4,7 +4,7 @@ experiment_data:
   summary_of_result: ""
 data:
   soft_path: 'data/raw_data/expression_datasets/emtab375/TP/processed_data_raw.csv'
-  gpl_id: 'GPL198'
+  gpl_path: 'data/resources/GPL198.txt'
 #  linkage_path: 'data/preprocessed_data/summed_atted_gse65046/summed_dist_no_negative_dists/summed_distances_complete_linkage.npy'
 #  dist_matrix_path: 'data/preprocessed_data/summed_atted_gse65046/summed_dist_no_negative_dists/atted_local_dist_summed_no_negative.parquet.gzip'
 #  atted_linkage_matrix: 'data/preprocessed_data/atted_ii/linkage_matrices/all_cor_one_matrix_renamed_complete_linkage.npy'
