@@ -11,7 +11,8 @@ from matplotlib import pyplot as plt
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries, \
     AggregationMethod
-from exploring_questions import compare_modules_to_local_modules_with_tfbs
+from exploring_questions import compare_modules_to_local_modules_with_tfbs, \
+    sum_local_distance_and_atted
 from helpers import get_info_from_gse65046
 # from main import fit_ode_to_two_datasets
 
@@ -225,18 +226,16 @@ def pipeline_from_summed_clustering(experiment_path: Path,
 
 def pipeline_emtab_375_full(experiment_path: Path, in_file_path: Path,
                             sample_name_parser_func: Callable,
-
-                            atted_linkage_matrix: Path,
-                            atted_path: Path, edge_cor_threshold: float,
-                            nr_clusters: int, top_nr_clusters: int,
-                            do_log2: bool,
+                            atted_linkage_matrix: Path, atted_path: Path,
+                            edge_cor_threshold: float, nr_clusters: int,
+                            top_nr_clusters: int, do_log2: bool,
                             agg_method: AggregationMethod,
-                            gpl_id: str = None, ):
+                            gpl_path: str = None):
     if in_file_path.suffix == '.csv':
         expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
             in_file_path,
             log2_transform=do_log2,
-            gpl_id=gpl_id,
+            gpl_path=gpl_path,
         )
     else:
         raise NotImplementedError
@@ -244,17 +243,22 @@ def pipeline_emtab_375_full(experiment_path: Path, in_file_path: Path,
     expr_mat_time.summary_method = agg_method
     expr_mat_time.condition_names = ['21', '32']
     expr_mat_time.column_parser = sample_name_parser_func
-    expr_mat_time.keep_n_most_deviating_genes(200)
-    expr_mat_time.do_hierachical_clustering(5)
-    expr_mat_time.plot_cluster_sizes()
-    # expr_mat_time.keep_highest_z_clusters(4, None)
-    # expr_mat_time.plot_clusters_over_time()
-    plt.show()
-    tf2_in_path = experiment_path / '01_tf2_input.txt'
-    tf2_out_path = experiment_path / '02_tf2network_output.tsv'
-    expr_mat_time.post_to_tf2network(tf2_in_path, tf2_out_path)
-    # expr_mat_time.write_tf2_input_file(tf2_in_path)
-    print()
+    local_path = experiment_path / 'local_dists.pkl'
+    expr_mat_time.save_distance_matrix(local_path)
+    sum_local_distance_and_atted(local_path, atted_path, experiment_path)
+
+
+    # expr_mat_time.keep_n_most_deviating_genes(200)
+    # expr_mat_time.do_hierachical_clustering(5)
+    # expr_mat_time.plot_cluster_sizes()
+    # # expr_mat_time.keep_highest_z_clusters(4, None)
+    # # expr_mat_time.plot_clusters_over_time()
+    # plt.show()
+    # tf2_in_path = experiment_path / '01_tf2_input.txt'
+    # tf2_out_path = experiment_path / '02_tf2network_output.tsv'
+    # expr_mat_time.post_to_tf2network(tf2_in_path, tf2_out_path)
+    # # expr_mat_time.write_tf2_input_file(tf2_in_path)
+    # print()
 
 def pipeline_from_atted_clustering(experiment_path: Path, soft_file_path: Path,
                                    atted_linkage_matrix: Path,

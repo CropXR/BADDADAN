@@ -528,7 +528,7 @@ def main():
     # ONLY EDIT THESE LINES
     name = '05_doing_new_dataset'
     experiment_path = Path(f'data/experiments') / name
-    mlflow.set_experiment(name)
+    # mlflow.set_experiment(name)
 
     ##  This all shouldn't have to be changed ##
     logging.basicConfig(level=logging.INFO,
@@ -548,38 +548,36 @@ def main():
 
     pipeline_emtab_375_full(experiment_path=experiment_path,
                             in_file_path=Path(data_params['soft_path']),
-                            gpl_id=data_params['gpl_id'],
                             sample_name_parser_func=get_info_from_emtab375,
-                            atted_linkage_matrix=None,
-                            atted_path=None,
-                            edge_cor_threshold=None,
-                            nr_clusters=None,
+                            atted_linkage_matrix=None, atted_path=data_params['atted_path'],
+                            edge_cor_threshold=None, nr_clusters=None,
                             top_nr_clusters=None,
                             do_log2=hyper_params['do_log2'],
-                            agg_method=hyper_params['agg_method'])
+                            agg_method=hyper_params['agg_method'],
+                            gpl_path=data_params['gpl_path'])
 
 
-    compare_clusterings_for_ode_use(
-        experiment_path=experiment_path,
-        soft_file_path=Path(data_params['soft_path']),
-        agg_method=hyper_params['agg_method'], do_log2=hyper_params['do_log2'],
-        summed_linkage_matrix=data_params['linkage_path'],
-        summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
-        atted_linkage_matrix=Path(data_params['atted_linkage_matrix']),
-        atted_path=Path(data_params['atted_path']),
-        nr_clusters=hyper_params['nr_clusters'],
-        edge_cor_threshold=hyper_params['edge_corr_threshold'],
-        top_nr_clusters=hyper_params['top_nr_clusters'],
-        tf2_in_name=data_params['tf2_in_name'],
-        tf2_out_name=data_params['tf2_out_name'],
-    )
-
-    with mlflow.start_run(
-            description=config['experiment_data']['description']):
-        mlflow.log_params(data_params)
-        mlflow.log_params(hyper_params)
-        mlflow.set_tags(config['experiment_data'])
-        mlflow.log_artifacts(str(experiment_path))
+    # compare_clusterings_for_ode_use(
+    #     experiment_path=experiment_path,
+    #     soft_file_path=Path(data_params['soft_path']),
+    #     agg_method=hyper_params['agg_method'], do_log2=hyper_params['do_log2'],
+    #     summed_linkage_matrix=data_params['linkage_path'],
+    #     summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
+    #     atted_linkage_matrix=Path(data_params['atted_linkage_matrix']),
+    #     atted_path=Path(data_params['atted_path']),
+    #     nr_clusters=hyper_params['nr_clusters'],
+    #     edge_cor_threshold=hyper_params['edge_corr_threshold'],
+    #     top_nr_clusters=hyper_params['top_nr_clusters'],
+    #     tf2_in_name=data_params['tf2_in_name'],
+    #     tf2_out_name=data_params['tf2_out_name'],
+    # )
+    #
+    # with mlflow.start_run(
+    #         description=config['experiment_data']['description']):
+    #     mlflow.log_params(data_params)
+    #     mlflow.log_params(hyper_params)
+    #     mlflow.set_tags(config['experiment_data'])
+    #     mlflow.log_artifacts(str(experiment_path))
         # mlflow.log_metrics({'bic': best_ode_fit.sol.bic,
         #                     'chi_sqr': best_ode_fit.sol.chisqr})
         # mlflow.log_image()
@@ -598,24 +596,24 @@ def main():
 
     # pipeline_only_local_clustering()
 
-
-
-    # Assure that data has already been clustered
-    assert expr_mat_time.has_been_clustered
-    my_ode = OdeModel.construct_from_regulatory_network(module_module,
-                                                        nonlinear=True)
-
-    best_ode_fit = fit_ode_to_two_datasets(
-        my_ode,
-        expr_mat_time,
-        nr_ode_iters=hyper_params['nr_ode_iters'],
-        experiment_path=experiment_path
-    )
-
-    with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
-        pickle.dump(best_ode_fit, f)
-
-
+    #
+    #
+    # # Assure that data has already been clustered
+    # assert expr_mat_time.has_been_clustered
+    # my_ode = OdeModel.construct_from_regulatory_network(module_module,
+    #                                                     nonlinear=True)
+    #
+    # best_ode_fit = fit_ode_to_two_datasets(
+    #     my_ode,
+    #     expr_mat_time,
+    #     nr_ode_iters=hyper_params['nr_ode_iters'],
+    #     experiment_path=experiment_path
+    # )
+    #
+    # with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
+    #     pickle.dump(best_ode_fit, f)
+    #
+    #
 
 if __name__ == "__main__":
     main()
