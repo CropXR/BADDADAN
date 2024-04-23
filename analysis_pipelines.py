@@ -1,7 +1,8 @@
 import copy
+import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Dict
 
 import dill as pickle
 import pandas as pd
@@ -23,7 +24,8 @@ class ClusteringArgs:
     linkage_matrix_path: Path | None
     original_dist_path: Path | None
 
-def compare_clusterings_for_ode_use(experiment_path: Path,
+def compare_clusterings_for_ode_use(expr_mat_time: ExpressionMatrixTimeSeries,
+        experiment_path: Path,
                                     soft_file_path: Path,
                                     agg_method: AggregationMethod,
                                     do_log2: bool,
@@ -31,27 +33,22 @@ def compare_clusterings_for_ode_use(experiment_path: Path,
                                     atted_linkage_matrix: Path,
                                     atted_path: Path,
                                     summed_dist_matrix_path: Path,
+                                    gpl_path: str,
                                     nr_clusters: int,
+                                    sample_name_parser: Callable,
                                     edge_cor_threshold: float,
                                     top_nr_clusters: int, tf2_in_name: str,
                                     tf2_out_name: str):
-    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
-        soft_file_path,
-        log2_transform=do_log2,
-        annotate_from_gpl=True
-    )
 
-    # TODO implement these properly at some point
-    expr_mat_time.column_parser = get_info_from_gse65046
-    expr_mat_time.summary_method = agg_method
-    expr_mat_time.merge_biological_samples()
 
-    clustering_arg_list = [
-        ClusteringArgs('atted_only', atted_linkage_matrix, atted_path),
-        ClusteringArgs('summed_dists', summed_linkage_matrix, summed_dist_matrix_path),
-        ClusteringArgs('local_dists', None, None),
-    ]
 
+
+    # clustering_arg_list = [
+    #     ClusteringArgs('atted_only', atted_linkage_matrix, atted_path),
+    #     ClusteringArgs('summed_dists', summed_linkage_matrix, summed_dist_matrix_path),
+    #     ClusteringArgs('local_dists', None, None),
+    # ]
+    #
     # out_dict = {}
     # for clustering_arg in clustering_arg_list:
     #     logging.info(f'{clustering_arg.input_dist_name} analysis now')
@@ -65,25 +62,25 @@ def compare_clusterings_for_ode_use(experiment_path: Path,
     #             nr_clusters,
     #             atted_path=clustering_arg.original_dist_path
     #         )
-    #     expr_mat_time_copy.write_tf2_input_file(
-    #         experiment_path / f'01_{clustering_arg.input_dist_name}_tf2input.txt')
+    # #     expr_mat_time_copy.write_tf2_input_file(
+    # #         experiment_path / f'01_{clustering_arg.input_dist_name}_tf2input.txt')
     #     out_dict[clustering_arg.input_dist_name] = expr_mat_time_copy
-
-
-    # the modules in ATTED-II or not
-    # print()
-    # with open('data/experiments/04_comparing_clusterings/all_clusterings_expr_mat_dict.pkl',
+    #
+    #
+    # # the modules in ATTED-II or not
+    # # print()
+    # with open(experiment_path / 'all_clusterings_expr_mat_dict.pkl',
     #           'wb') as f:
     #     pickle.dump(out_dict, f)
 
-    with open('data/experiments/04_comparing_clusterings/all_clusterings_expr_mat_dict.pkl',
+    with open(experiment_path / 'all_clusterings_expr_mat_dict.pkl',
               'rb') as f:
-        out_dict = pickle.load(f)
+        out_dict: Dict[str: ExpressionMatrixTimeSeries] = pickle.load(f)
 
-    # Check if 56 modules with >0 TF in local dists have significant overlap
-    compare_modules_to_local_modules_with_tfbs(
-        out_dict,
-        experiment_path / f'02_local_dists_tf2network_output.tsv')
+    # # Check if 56 modules with >0 TF in local dists have significant overlap
+    # compare_modules_to_local_modules_with_tfbs(
+    #     out_dict,
+    #     experiment_path / f'02_local_dists_tf2network_output.tsv')
 
     explained_var_df_list = []
     tf_prod_df_list = []
@@ -97,8 +94,12 @@ def compare_clusterings_for_ode_use(experiment_path: Path,
 
         # Get coherence for each cluster
         explained_vars = expression_df.get_all_explained_vars()
+        sizes = expression_df.get_module_sizes()
         explained_vars = explained_vars.to_frame(name='explained_var')
         explained_vars['input_dists'] = dist_name
+        explained_vars['size'] = sizes
+        stdevs = expression_df.get_std_per_cluster(mean_over_all_samples=True)
+        explained_vars['stdev'] = stdevs
         explained_var_df_list.append(explained_vars)
 
         # # Get TF2 Coexpression score for each cluster
@@ -124,6 +125,24 @@ def compare_clusterings_for_ode_use(experiment_path: Path,
         # consistency_at_threshold.name = dist_name
         # tf_consistency_list.append(consistency_at_threshold)
 
+    vars_df = pd.concat(explained_var_df_list)
+    sns.scatterplot(data=vars_df, x='size', y='explained_var', hue='stdev')
+    plt.xscale('log')
+    plt.show()
+
+    sns.jointplot(data=vars_df, x='size', y='explained_var', hue='input_dists')
+    plt.xscale('log')
+    plt.show()
+
+    sns.scatterplot(data=vars_df, x='stdev', y='explained_var', hue='size')
+    plt.show()
+
+    sns.violinplot(data=vars_df, y='explained_var', x='input_dists')
+    plt.savefig(experiment_path / 'explained_var_violinplot.svg')
+    plt.close()
+
+
+
     # Make the plots
     robustness_df = pd.read_csv(experiment_path / 'robustness_30_jackknifes.csv')
     sns.violinplot(data=robustness_df, x='input_dists', y='robustness')
@@ -131,11 +150,7 @@ def compare_clusterings_for_ode_use(experiment_path: Path,
     plt.savefig(experiment_path / 'robustness_violinplot.svg')
     plt.close()
 
-    vars_df = pd.concat(explained_var_df_list)
-    sns.violinplot(data=vars_df, y='explained_var', x='input_dists')
 
-    plt.savefig(experiment_path / 'explained_var_violinplot.svg')
-    plt.close()
 
 
 
@@ -243,17 +258,17 @@ def pipeline_emtab_375_full(experiment_path: Path, in_file_path: Path,
     expr_mat_time.summary_method = agg_method
     expr_mat_time.condition_names = ['21', '32']
     expr_mat_time.column_parser = sample_name_parser_func
-    local_path = experiment_path / 'local_dists.pkl'
-    expr_mat_time.save_distance_matrix(local_path)
-    sum_local_distance_and_atted(local_path, atted_path, experiment_path)
 
+    # local_path = experiment_path / 'local_dists.pkl'
+    # expr_mat_time.save_distance_matrix(local_path)
+    # sum_local_distance_and_atted(local_path, atted_path, experiment_path)
 
     # expr_mat_time.keep_n_most_deviating_genes(200)
-    # expr_mat_time.do_hierachical_clustering(5)
-    # expr_mat_time.plot_cluster_sizes()
-    # # expr_mat_time.keep_highest_z_clusters(4, None)
-    # # expr_mat_time.plot_clusters_over_time()
-    # plt.show()
+    expr_mat_time.do_hierachical_clustering(nr_clusters)
+    expr_mat_time.plot_cluster_sizes()
+    expr_mat_time.keep_highest_z_clusters(4, None)
+    expr_mat_time.plot_clusters_over_time()
+    plt.show()
     # tf2_in_path = experiment_path / '01_tf2_input.txt'
     # tf2_out_path = experiment_path / '02_tf2network_output.tsv'
     # expr_mat_time.post_to_tf2network(tf2_in_path, tf2_out_path)

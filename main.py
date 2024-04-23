@@ -22,6 +22,7 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, \
 from analysis_pipelines import pipeline_from_atted_clustering, \
     local_clustering_on_atted_clusters, pipeline_from_summed_clustering, \
     compare_clusterings_for_ode_use, pipeline_emtab_375_full
+from data_wrangling import expr_mat_from_emexp
 from exploring_questions import save_local_distance_matrix, \
     sum_local_distance_and_atted, rand_index_both_clusterings
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
@@ -528,7 +529,7 @@ def main():
     # ONLY EDIT THESE LINES
     name = '05_doing_new_dataset'
     experiment_path = Path(f'data/experiments') / name
-    # mlflow.set_experiment(name)
+    mlflow.set_experiment(name)
 
     ##  This all shouldn't have to be changed ##
     logging.basicConfig(level=logging.INFO,
@@ -546,38 +547,53 @@ def main():
                        'eigengene': AggregationMethod.EIGENGENE}
     hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
 
-    pipeline_emtab_375_full(experiment_path=experiment_path,
-                            in_file_path=Path(data_params['soft_path']),
-                            sample_name_parser_func=get_info_from_emtab375,
-                            atted_linkage_matrix=None, atted_path=data_params['atted_path'],
-                            edge_cor_threshold=None, nr_clusters=None,
-                            top_nr_clusters=None,
-                            do_log2=hyper_params['do_log2'],
-                            agg_method=hyper_params['agg_method'],
-                            gpl_path=data_params['gpl_path'])
 
 
-    # compare_clusterings_for_ode_use(
-    #     experiment_path=experiment_path,
-    #     soft_file_path=Path(data_params['soft_path']),
-    #     agg_method=hyper_params['agg_method'], do_log2=hyper_params['do_log2'],
-    #     summed_linkage_matrix=data_params['linkage_path'],
-    #     summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
-    #     atted_linkage_matrix=Path(data_params['atted_linkage_matrix']),
-    #     atted_path=Path(data_params['atted_path']),
-    #     nr_clusters=hyper_params['nr_clusters'],
-    #     edge_cor_threshold=hyper_params['edge_corr_threshold'],
-    #     top_nr_clusters=hyper_params['top_nr_clusters'],
-    #     tf2_in_name=data_params['tf2_in_name'],
-    #     tf2_out_name=data_params['tf2_out_name'],
-    # )
+    expr_mat_time = expr_mat_from_emexp(in_path=Path(data_params['soft_path']),
+                                        do_log2=hyper_params['do_log2'],
+                                        gpl_path=data_params['gpl_path'],
+                                        agg_method=hyper_params['agg_method'],
+                                        sample_name_parser=get_info_from_emtab375)
+
+    # pipeline_emtab_375_full(experiment_path=experiment_path,
+    #                         in_file_path=,
+    #                         sample_name_parser_func=,
+    #                         atted_linkage_matrix=None, atted_path=data_params['atted_path'],
+    #                         edge_cor_threshold=None, nr_clusters=hyper_params['nr_clusters'],
+    #                         top_nr_clusters=None,
+    #                         do_log2=,
+    #                         agg_method=,
+    #                         gpl_path=)
+
+    compare_clusterings_for_ode_use(expr_mat_time,
+        experiment_path=experiment_path,
+        soft_file_path=Path(data_params['soft_path']),
+        agg_method=hyper_params['agg_method'],
+        do_log2=hyper_params['do_log2'],
+        sample_name_parser=get_info_from_emtab375,
+        summed_linkage_matrix=data_params['linkage_path'],
+        summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
+        atted_linkage_matrix=Path(data_params['atted_linkage_matrix']),
+        atted_path=Path(data_params['atted_path']),
+        nr_clusters=hyper_params['nr_clusters'],
+        edge_cor_threshold=None,
+        top_nr_clusters=None,
+        tf2_in_name=None,
+        tf2_out_name=None,
+        gpl_path=data_params['gpl_path']
+    )
     #
-    # with mlflow.start_run(
-    #         description=config['experiment_data']['description']):
-    #     mlflow.log_params(data_params)
-    #     mlflow.log_params(hyper_params)
-    #     mlflow.set_tags(config['experiment_data'])
-    #     mlflow.log_artifacts(str(experiment_path))
+    with mlflow.start_run(
+            description=config['experiment_data']['description']):
+        mlflow.log_params(data_params)
+        mlflow.log_params(hyper_params)
+        mlflow.set_tags(config['experiment_data'])
+        for file in experiment_path.iterdir():
+
+            if not file.suffix in ['.npy', '.pkl', '.gzip']:
+                mlflow.log_artifact(str(file))
+
+        # mlflow.log_artifacts(str(experiment_path))
         # mlflow.log_metrics({'bic': best_ode_fit.sol.bic,
         #                     'chi_sqr': best_ode_fit.sol.chisqr})
         # mlflow.log_image()

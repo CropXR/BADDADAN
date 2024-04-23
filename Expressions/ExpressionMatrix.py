@@ -290,6 +290,10 @@ class ExpressionMatrix:
                        yticklabels=False, xticklabels=False, standard_scale=standard_scale)
         plt.show()
 
+    def get_module_sizes(self):
+        assert self.has_been_clustered
+        return self.df.groupby('cluster_id').apply(len)
+
     def plot_cluster_sizes(self, out_path: Path|None = None):
         sns.histplot(self.df.cluster_id.value_counts())
         plt.xlabel('Cluster size')
@@ -1437,13 +1441,26 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         assert self.has_been_clustered
         return self.df.groupby('cluster_id').sem()
 
-    def get_std_per_cluster(self):
+    def get_std_per_cluster(self, mean_over_all_samples=False):
+        """Standard deviation of each cluster
+
+        :param mean_over_all_samples: If true, return the mean std over all samples
+        If false, return a separate std for each module for each sample
+        """
         assert self.has_been_clustered
-        return self.df.groupby('cluster_id').std()
+        # Standard deviations for each module for each sample
+        stdevs = self.df.groupby('cluster_id').std()
+        if mean_over_all_samples:
+            # Average the mean over all samples
+            return stdevs.mean(axis=1)
+        else:
+            return stdevs
+
 
     def get_ci_per_cluster(self, confidence_level=.95):
         """Get confidence interval per cluster at each time point"""
         assert self.has_been_clustered
+        logging.warning(f'Setting {confidence_level=} currently not passed to underlying method')
         return self.df.groupby('cluster_id').apply(mean_bootstrap_error)
 
     def get_all_explained_vars(self):

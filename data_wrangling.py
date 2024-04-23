@@ -7,6 +7,8 @@ import pandas as pd
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import squareform
 
+from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
+
 
 def merge_ath_annotation_for_goatools(in_path: Path, out_path: Path):
     """Take go annotation from TAIR, and transform it so it can be read by GOATOOLS
@@ -114,3 +116,15 @@ def calculate_linkage_matrix_from_atted_ii(in_path: Path, out_dir: Path):
         linkage_matrix = linkage(dense_dist, method=method)
         out_path = out_dir / f'{in_path.stem}_{method}_linkage.npy'
         np.save(out_path, linkage_matrix)
+
+def expr_mat_from_emexp(in_path, do_log2, gpl_path, agg_method, sample_name_parser):
+    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
+        in_path,
+        log2_transform=do_log2,
+        gpl_path=gpl_path
+    )
+    expr_mat_time.keep_only_samples_with_string('normal light')
+    expr_mat_time.summary_method = agg_method
+    expr_mat_time.condition_names = ['21', '32']
+    expr_mat_time.column_parser = sample_name_parser
+    return expr_mat_time
