@@ -493,20 +493,20 @@ class ExpressionMatrix:
     def assign_clusters_from_linkage_matrix(self,
                                             linkage_matrix_path: Path,
                                             nr_clusters: int,
-                                            atted_path: Path):
+                                            distance_matrix_path: Path):
         """Used when you have a precalculated linkage matrix in a .npy file
         and get clusters
 
         :param linkage_matrix_path: Path to linkage matrix
                                     output by scipy linkage
         :param nr_clusters: Nr of clusters
-        :param atted_path: Path to matrix containing atted correlations. Matrix
+        :param distance_matrix_path: Path to matrix containing correlations. Matrix
                            should contain gene names, and be the matrix from
                            which the linkage matrix was calculated. It is used
                            to link the linkage matrix back to the gene names
         """
         linkage_matrix = np.load(linkage_matrix_path)
-        self._cluster_from_linkage_matrix(linkage_matrix, nr_clusters, atted_path)
+        self._cluster_from_linkage_matrix(linkage_matrix, nr_clusters, distance_matrix_path)
 
     def _cluster_from_linkage_matrix(self, linkage_matrix: np.ndarray,
                                      n_cluster: int,
@@ -1209,12 +1209,20 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
         if tf2_output:
             tf2_df = pd.read_csv(tf2_output, sep='\t')
-            has_tfbs = summary_df.index.isin(tf2_df['GeneSet']).astype(int)
+            # This used to be binary, now changing it to total nr of tfbs
+            # Old yes/no implementation here
+            # tfbs_score = summary_df.index.isin(tf2_df['GeneSet']).astype(int)
+            # New implementation here
+            tfbs_score = []
+            nr_tfbs_per_module_dict = tf2_df['GeneSet'].value_counts().to_dict()
+            for module_idx in summary_df.index:
+                nr_tfbs = nr_tfbs_per_module_dict.get(module_idx, 0)
+                tfbs_score.append(nr_tfbs)
         else:
             logging.info('No tf2output provided, z-scoring will assume that '
                          'none of the modules have a tfbs.')
-            has_tfbs = 0
-        summary_df = summary_df.assign(tfbs_present=has_tfbs)
+            tfbs_score = 0
+        summary_df = summary_df.assign(tfbs_present=tfbs_score)
         return summary_df
 
     def _get_difference_between_conditions(self, one_group_df: pd.DataFrame):
@@ -1318,6 +1326,10 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         summary_df = summary_df[list(subset)]
         # summary_df = summary_df.drop(['size',
         #                               'mean_pairwise_abs_cor'], axis=1)
+
+        # Log transform number of tfbs to get more normal distribution
+        summary_df['tfbs_present'] = np.log(summary_df['tfbs_present'] + 1)
+        new_scores = np.log(summary_df['tfbs_present'] + 1)
         # Get Z scores
         z_scores = summary_df.apply(zscore)
         stouffler_z = z_scores.sum(axis=1) / np.sqrt(len(z_scores.columns))
@@ -1326,26 +1338,41 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
         if plotting:
             # Is higher better for all? Or how can we make it that way?
-            sns.histplot(z_scores, kde=True, element='step')
+            sns.histplot(z_scores, kde=True, element='step', common_norm=False)
             plt.show()
             # sns.boxplot(z_scores.sum(axis=1))
             # plt.show()
         return z_scores
 
     def keep_highest_z_clusters(self, nr_clusters: int,
-                                tf2_output_path: Path | None
+                                tf2_output_path: Path | None,
+                                plotting: bool =False
                                 ) -> pd.DataFrame:
         """Only keep clusters with highest z_scores. Modifies object in-place.
 
+        :param plotting: If True, show plots of z_scores
         :param nr_clusters: Top number of clusters to select
         :param tf2_output_path: Path to TF2Output, used to determine if module
                                 contains TFBS (which has positive
                                 impact on z-score).
         :return: Dataframe of z-scores of the best clusters
         """
-        z_scores = self.get_z_score_of_cluster_characteristics(tf2_output_path)
+        z_scores = self.get_z_score_of_cluster_characteristics(tf2_output_path,
+                                                               plotting=plotting)
+
+        worst_clusters =  z_scores.sort_values(
+            'z_sum', ascending=True).head(nr_clusters)
         best_clusters = z_scores.sort_values(
             'z_sum', ascending=False).head(nr_clusters)
+        if plotting:
+            sns.heatmap(z_scores.sort_values('z_sum', ascending=False))
+            plt.xticks(rotation=30, ha='right')
+            plt.tight_layout()
+            plt.show()
+            sns.heatmap(best_clusters, cmap='vlag', center=0)
+            plt.xticks(rotation=30, ha='right')
+            plt.tight_layout()
+            plt.show()
         self.df = self.df[self.df['cluster_id'].isin(best_clusters.index)]
         return best_clusters
 

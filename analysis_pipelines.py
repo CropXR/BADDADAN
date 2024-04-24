@@ -200,6 +200,7 @@ def pipeline_from_summed_clustering(experiment_path: Path,
                                     edge_cor_threshold: float,
                                     top_nr_clusters: int, tf2_in_name: str,
                                     tf2_out_name: str):
+    """For the drought dataset, do all processing start to end"""
     expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
         soft_file_path,
         log2_transform=do_log2,
@@ -209,22 +210,25 @@ def pipeline_from_summed_clustering(experiment_path: Path,
     # TODO implement these properly at some point
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.summary_method = agg_method
+    expr_mat_time.condition_names = ['control', 'drought']
     expr_mat_time.merge_biological_samples()
     expr_mat_time.assign_clusters_from_linkage_matrix(summed_linkage_matrix,
                                                       nr_clusters,
-                                                      atted_path=summed_dist_matrix_path)
+                                                      distance_matrix_path=summed_dist_matrix_path)
 
-    explained_vars = expr_mat_time.get_all_explained_vars()
+    # explained_vars = expr_mat_time.get_all_explained_vars()
 
-    # expr_mat_time.plot_cluster_sizes(experiment_path / 'cluster_sizes.png')
+    expr_mat_time.plot_cluster_sizes(experiment_path / 'cluster_sizes.png')
 
     tf2_in_path = experiment_path / tf2_in_name
-    # expr_mat_time.write_tf2_input_file(tf2_in_path)
-    expr_mat_time.assign_clusters_from_tf2_input(tf2_in_path, overwrite=False)
     tf2_out_path = experiment_path / tf2_out_name
-    expr_mat_time.keep_highest_z_clusters(top_nr_clusters, tf2_out_path)
-    expr_mat_time.plot_clusters_over_time(split_by_condition=['control',
-                                                              'drought'])
+
+    if not tf2_out_path.exists():
+        expr_mat_time.write_tf2_input_file(tf2_in_path)
+        expr_mat_time.post_to_tf2network(tf2_in_path, tf2_out_path)
+    # expr_mat_time.assign_clusters_from_tf2_input(tf2_in_path, overwrite=False)
+    expr_mat_time.keep_highest_z_clusters(top_nr_clusters, tf2_out_path, plotting=True)
+    expr_mat_time.plot_clusters_over_time()
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
         tf2_out_path,
@@ -233,8 +237,7 @@ def pipeline_from_summed_clustering(experiment_path: Path,
 
     expr_mat_time.keep_only_modules_in_network(module_module)
 
-    expr_mat_time.plot_clusters_over_time(split_by_condition=['control', 'drought'],
-                                          out_path=experiment_path / 'global_cluster_expressions.svg')
+    expr_mat_time.plot_clusters_over_time(out_path=experiment_path / 'global_cluster_expressions.svg')
 
     return expr_mat_time, module_module
 
@@ -291,7 +294,7 @@ def pipeline_from_atted_clustering(experiment_path: Path, soft_file_path: Path,
 
     expr_mat_time.assign_clusters_from_linkage_matrix(atted_linkage_matrix,
                                                       nr_clusters,
-                                                      atted_path=atted_path)
+                                                      distance_matrix_path=atted_path)
     expr_mat_time.merge_biological_samples()
 
     # expr_mat_time.keep_n_most_deviating_genes(50)
