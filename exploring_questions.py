@@ -2,6 +2,7 @@ import copy
 import logging
 from pathlib import Path
 
+import dill as pickle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -16,6 +17,23 @@ from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 from data_wrangling import parse_go_enrichment_output
 from helpers import get_info_from_gse65046
+
+
+def plot_module_size_distributions(pkl_path: Path):
+    with pkl_path.open('rb') as f:
+        cluster_dict = pickle.load(f)
+    records = []
+    for dist, expr_mat in cluster_dict.items():
+        sizes = expr_mat.df.cluster_id.value_counts()
+        for size in sizes:
+            records.append((dist, size))
+    df = pd.DataFrame.from_records(records, columns=['method', 'size'])
+    sns.boxplot(data=df, y='size', x='method')
+    plt.title(pkl_path.name.split('_')[0])
+    plt.yscale('log')
+    plt.ylabel('Module size')
+    plt.show()
+    df.groupby('method')['size'].sum()
 
 def save_local_distance_matrix(soft_file_path: Path, do_log_2: bool,
                                atted_path: Path, out_path: Path):

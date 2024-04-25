@@ -24,7 +24,8 @@ from analysis_pipelines import pipeline_from_atted_clustering, \
     compare_clusterings_for_ode_use, pipeline_emtab_375_full
 from data_wrangling import expr_mat_from_emexp
 from exploring_questions import save_local_distance_matrix, \
-    sum_local_distance_and_atted, rand_index_both_clusterings
+    sum_local_distance_and_atted, rand_index_both_clusterings, \
+    plot_module_size_distributions
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
     get_info_from_emtab375
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
@@ -527,7 +528,7 @@ def camila_red_panda(soft_file_in_path: Path,
 
 def main():
     # ONLY EDIT THESE LINES
-    name = '06_drought_data_end_to_end'
+    name = '07_module_size_distribution'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -535,6 +536,16 @@ def main():
     logging.basicConfig(level=logging.INFO,
                         handlers=[logging.FileHandler(experiment_path / "log.log"),
                                   logging.StreamHandler()])
+    for file in experiment_path.iterdir():
+        if file.name.endswith('expr_mat_dict.pkl'):
+            plot_module_size_distributions(file)
+
+    with mlflow.start_run():
+        for file in experiment_path.iterdir():
+            mlflow.log_artifact(str(file))
+            # if not file.suffix in ['.npy', '.pkl', '.gzip']:
+            #     mlflow.log_artifact(str(file))
+
     # Load the config file
     config_path = experiment_path / 'config.yaml'
     with config_path.open('r') as f:
@@ -613,15 +624,15 @@ def main():
     #     gpl_path=data_params['gpl_path']
     # )
     #
-    with mlflow.start_run(
-            description=config['experiment_data']['description']):
-        mlflow.log_params(data_params)
-        mlflow.log_params(hyper_params)
-        mlflow.set_tags(config['experiment_data'])
-        for file in experiment_path.iterdir():
-            mlflow.log_artifact(str(file))
-            # if not file.suffix in ['.npy', '.pkl', '.gzip']:
-            #     mlflow.log_artifact(str(file))
+    # with mlflow.start_run(
+    #         description=config['experiment_data']['description']):
+    #     mlflow.log_params(data_params)
+    #     mlflow.log_params(hyper_params)
+    #     mlflow.set_tags(config['experiment_data'])
+    #     for file in experiment_path.iterdir():
+    #         mlflow.log_artifact(str(file))
+    #         # if not file.suffix in ['.npy', '.pkl', '.gzip']:
+    #         #     mlflow.log_artifact(str(file))
 
         # mlflow.log_artifacts(str(experiment_path))
         # mlflow.log_metrics({'bic': best_ode_fit.sol.bic,
