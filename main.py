@@ -561,9 +561,11 @@ def main():
         tf2_out_name=data_params['tf2_out_name']
     )
 
-
+    with (experiment_path / 'module_network.pkl').open('wb') as f:
+        pickle.dump(module_module, f)
     # Assure that data has already been clustered
     assert expr_mat_time.has_been_clustered
+    expr_mat_time.get_genes_per_cluster()[328]
     my_ode = OdeModel.construct_from_regulatory_network(module_module,
                                                         nonlinear=True)
 
@@ -617,8 +619,9 @@ def main():
         mlflow.log_params(hyper_params)
         mlflow.set_tags(config['experiment_data'])
         for file in experiment_path.iterdir():
-            if not file.suffix in ['.npy', '.pkl', '.gzip']:
-                mlflow.log_artifact(str(file))
+            mlflow.log_artifact(str(file))
+            # if not file.suffix in ['.npy', '.pkl', '.gzip']:
+            #     mlflow.log_artifact(str(file))
 
         # mlflow.log_artifacts(str(experiment_path))
         # mlflow.log_metrics({'bic': best_ode_fit.sol.bic,

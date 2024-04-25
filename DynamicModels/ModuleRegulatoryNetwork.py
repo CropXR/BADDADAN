@@ -215,11 +215,14 @@ class ModuleRegulatoryNetwork:
                         continue
                     # If edge not already in candidate edges dict, add it
                     if not (original_module, target_module) in candidate_edges:
-                        candidate_edges[(original_module, target_module)] = dict(origin=regulation_type)
+                        candidate_edges[(original_module, target_module)] = {'origin': regulation_type,
+                        'tf_name': [tf]}
                     # Check if edge agrees with existing edge
                     elif candidate_edges[(original_module, target_module)]['origin'] == regulation_type:
                         logging.debug(f'Found agreement between regulatory '
                                       f'direction of {original_module} -> {target_module}')
+                        # Also add additional transcription factors
+                        candidate_edges[(original_module, target_module)]['tf_name'].append(tf)
                         continue
                     else:
                         raise ValueError('Disagreement between regulatory directions'

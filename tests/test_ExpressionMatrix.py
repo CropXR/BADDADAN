@@ -23,7 +23,7 @@ def test_assign_clusters_from_linkage_matrix(my_time_series_expressions):
     my_time_series_expressions.assign_clusters_from_linkage_matrix(
         linkage_matrix_path=Path('../data/preprocessed_data/summed_atted_gse65046/summed_dist_no_negative_dists/summed_distances_complete_linkage.npy'),
         nr_clusters=2,
-        atted_path=Path('../data/preprocessed_data/summed_atted_gse65046/summed_dist_no_negative_dists/atted_local_dist_summed_no_negative.parquet.gzip')
+        distance_matrix_path=Path('../data/preprocessed_data/summed_atted_gse65046/summed_dist_no_negative_dists/atted_local_dist_summed_no_negative.parquet.gzip')
     )
     assert my_time_series_expressions.has_been_clustered
 
