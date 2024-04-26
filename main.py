@@ -1,12 +1,10 @@
 import copy
 import logging
 from pathlib import Path
-import dill as pickle
 
 import numpy as np
 import pandas as pd
 import typer
-import yaml
 from lmfit import create_params, Parameters
 from matplotlib import pyplot as plt
 from sklearn.metrics import adjusted_rand_score
@@ -19,15 +17,9 @@ from DynamicModels.OdeLocalParameters import OdeLocalParameters
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries, AggregationMethod
-from analysis_pipelines import pipeline_from_atted_clustering, \
-    local_clustering_on_atted_clusters, pipeline_from_summed_clustering, \
-    compare_clusterings_for_ode_use, pipeline_emtab_375_full
-from data_wrangling import expr_mat_from_emexp
-from exploring_questions import save_local_distance_matrix, \
-    sum_local_distance_and_atted, rand_index_both_clusterings, \
-    plot_module_size_distributions
-from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
-    get_info_from_emtab375
+from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
+    heat_data_pipeline_setup
+from helpers import plot_y_and_y_hat, get_info_from_gse65046
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
 # pd.options.display.width = 0
@@ -528,7 +520,7 @@ def camila_red_panda(soft_file_in_path: Path,
 
 def main():
     # ONLY EDIT THESE LINES
-    name = '07_module_size_distribution'
+    name = '08_making_fig_2_again'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -536,76 +528,26 @@ def main():
     logging.basicConfig(level=logging.INFO,
                         handlers=[logging.FileHandler(experiment_path / "log.log"),
                                   logging.StreamHandler()])
-    for file in experiment_path.iterdir():
-        if file.name.endswith('expr_mat_dict.pkl'):
-            plot_module_size_distributions(file)
+    match name:
+        case '04_comparing_clusterings':
+            # Full compare clustering
+            ...
+        case '05_doing_new_dataset':
+            heat_data_pipeline_setup(experiment_path)
+        case '06_drought_data_end_to_end':
+            # Full pipeline for drought
+            drought_data_e2e_pipeline(experiment_path)
+        case '07_module_size_distribution':
+            # FUll module size distributions
+            module_size_pipeline(experiment_path)
+        case '08_making_fig_2_again':
+            ...
+        case _:
+            # Full pipeline for heat
+            raise NotImplementedError
 
-    with mlflow.start_run():
-        for file in experiment_path.iterdir():
-            mlflow.log_artifact(str(file))
-            # if not file.suffix in ['.npy', '.pkl', '.gzip']:
-            #     mlflow.log_artifact(str(file))
 
-    # Load the config file
-    config_path = experiment_path / 'config.yaml'
-    with config_path.open('r') as f:
-        config = yaml.safe_load(f)
 
-    data_params = config['data']
-    hyper_params = config['hyperparams']
-
-    agg_method_dict = {'mean': AggregationMethod.MEAN,
-                       'eigengene': AggregationMethod.EIGENGENE}
-    hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
-
-    expr_mat_time, module_module = pipeline_from_summed_clustering(
-        experiment_path=experiment_path,
-        soft_file_path=data_params['soft_path'],
-        agg_method=hyper_params['agg_method'],
-        do_log2=hyper_params['do_log2'],
-        summed_linkage_matrix=data_params['linkage_path'],
-        summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
-        nr_clusters=hyper_params['nr_clusters'],
-        edge_cor_threshold=hyper_params['edge_corr_threshold'],
-        top_nr_clusters=hyper_params['top_nr_clusters'],
-        tf2_in_name=data_params['tf2_in_name'],
-        tf2_out_name=data_params['tf2_out_name']
-    )
-
-    with (experiment_path / 'module_network.pkl').open('wb') as f:
-        pickle.dump(module_module, f)
-    # Assure that data has already been clustered
-    assert expr_mat_time.has_been_clustered
-    expr_mat_time.get_genes_per_cluster()[328]
-    my_ode = OdeModel.construct_from_regulatory_network(module_module,
-                                                        nonlinear=True)
-
-    best_ode_fit = fit_ode_to_two_datasets(
-        my_ode,
-        expr_mat_time,
-        nr_ode_iters=hyper_params['nr_ode_iters'],
-        experiment_path=experiment_path
-    )
-
-    with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
-        pickle.dump(best_ode_fit, f)
-
-    # expr_mat_time = expr_mat_from_emexp(in_path=Path(data_params['soft_path']),
-    #                                     do_log2=hyper_params['do_log2'],
-    #                                     gpl_path=data_params['gpl_path'],
-    #                                     agg_method=hyper_params['agg_method'],
-    #                                     sample_name_parser=get_info_from_emtab375)
-
-    # pipeline_emtab_375_full(experiment_path=experiment_path,
-    #                         in_file_path=,
-    #                         sample_name_parser_func=,
-    #                         atted_linkage_matrix=None, atted_path=data_params['atted_path'],
-    #                         edge_cor_threshold=None, nr_clusters=hyper_params['nr_clusters'],
-    #                         top_nr_clusters=None,
-    #                         do_log2=,
-    #                         agg_method=,
-    #                         gpl_path=)
-    #
     # compare_clusterings_for_ode_use(expr_mat_time,
     #     experiment_path=experiment_path,
     #     soft_file_path=Path(data_params['soft_path']),
@@ -639,18 +581,6 @@ def main():
         #                     'chi_sqr': best_ode_fit.sol.chisqr})
         # mlflow.log_image()
         # mlflow.register_model()
-
-    # expr_mat_time, module_module, atted_stats = pipeline_from_atted_clustering(
-    #     experiment_path=experiment_path,
-    #     soft_file_path=Path(data_params['soft_path']),
-    #     atted_linkage_matrix=data_params['atted_linkage_matrix'],
-    #     atted_path=data_params['atted_path'],
-    #     edge_cor_threshold=hyper_params['edge_corr_threshold'],
-    #     nr_clusters=hyper_params['nr_clusters'],
-    #     top_nr_clusters=hyper_params['top_nr_clusters'],
-    #     do_log2=hyper_params['do_log2'],
-    #     agg_method=hyper_params['agg_method'])
-
 
 
 if __name__ == "__main__":

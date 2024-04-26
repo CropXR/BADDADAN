@@ -141,8 +141,6 @@ def compare_clusterings_for_ode_use(expr_mat_time: ExpressionMatrixTimeSeries,
     plt.savefig(experiment_path / 'explained_var_violinplot.svg')
     plt.close()
 
-
-
     # Make the plots
     robustness_df = pd.read_csv(experiment_path / 'robustness_30_jackknifes.csv')
     sns.violinplot(data=robustness_df, x='input_dists', y='robustness')
@@ -244,7 +242,7 @@ def pipeline_from_summed_clustering(experiment_path: Path,
 
 def pipeline_emtab_375_full(experiment_path: Path, in_file_path: Path,
                             sample_name_parser_func: Callable,
-                            atted_linkage_matrix: Path, atted_path: Path,
+                            summed_linkage_matrix: Path, summed_dist_matrix_path: Path,
                             edge_cor_threshold: float, nr_clusters: int,
                             top_nr_clusters: int, do_log2: bool,
                             agg_method: AggregationMethod,
@@ -265,9 +263,13 @@ def pipeline_emtab_375_full(experiment_path: Path, in_file_path: Path,
     # local_path = experiment_path / 'local_dists.pkl'
     # expr_mat_time.save_distance_matrix(local_path)
     # sum_local_distance_and_atted(local_path, atted_path, experiment_path)
-
+    expr_mat_time.assign_clusters_from_linkage_matrix(summed_linkage_matrix,
+                                                      nr_clusters,
+                                                      distance_matrix_path=summed_dist_matrix_path)
     # expr_mat_time.keep_n_most_deviating_genes(200)
     expr_mat_time.do_hierachical_clustering(nr_clusters)
+    # TODO TF2Network enrichment
+
     expr_mat_time.plot_cluster_sizes()
     expr_mat_time.keep_highest_z_clusters(4, None)
     expr_mat_time.plot_clusters_over_time()
