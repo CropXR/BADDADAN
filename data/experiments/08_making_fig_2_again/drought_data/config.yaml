@@ -1,6 +1,6 @@
 experiment_data:
-  name: 'Comparing clustering'
-  description: "Want to find out how the clusters compare to each other, and which are most useful for our ODE approach."
+  name: 'Doing full robustness and coherence on all clusterings for all datasets'
+  description: "Robustness was already performed on the server, just switch that to this local implementation now"
   summary_of_result: ""
 data:
   soft_path: 'data/raw_data/expression_datasets/gse65046/GSE65046_family.soft'
@@ -8,7 +8,7 @@ data:
   dist_matrix_path: 'data/preprocessed_data/summed_atted_gse65046/summed_dist_no_negative_dists/atted_local_dist_summed_no_negative.parquet.gzip'
   atted_linkage_matrix: 'data/preprocessed_data/atted_ii/linkage_matrices/all_cor_one_matrix_renamed_complete_linkage.npy'
   atted_path: 'data/raw_data/atted_ii/all_cor_one_matrix_renamed.parquet.gzip'
-#  local_dist_path: 'data/preprocessed_data/gse65046/local_distance_matrix.pkl'
+  robustness_csv: 'data/preprocessed_data/robustness_from_server/drought_robustness_30_jackknifes.csv'
   tf2_in_name: '01_tf2_input.txt'
   tf2_out_name: '02_tf2network_output.tsv'
 hyperparams:

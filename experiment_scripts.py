@@ -1,17 +1,86 @@
 from pathlib import Path
+from typing import Dict
 
 import dill as pickle
 import mlflow
+import pandas as pd
 import yaml
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
+from DynamicModels.OdeLocalParameters import OdeLocalParameters
 
 from DynamicModels.OdeModel import OdeModel
-from Expressions.ExpressionMatrix import AggregationMethod
+from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
+from Expressions.ExpressionMatrix import AggregationMethod, \
+    ExpressionMatrixTimeSeries
 from analysis_pipelines import pipeline_from_summed_clustering, \
-    pipeline_emtab_375_full
+    pipeline_emtab_375_full, compare_clusterings_for_ode_use
+from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 
 from exploring_questions import plot_module_size_distributions
 from helpers import get_info_from_emtab375
-from main import fit_ode_to_two_datasets
+
+
+def figure_2_pipeline(experiment_path):
+    for folder in experiment_path.iterdir():
+        if not folder.name.endswith('_data'):
+            continue
+        data_params, hyper_params = config_preprocess(folder)
+        robustness_csv_path = Path(data_params['robustness_csv'])
+        robustness_df = pd.read_csv(robustness_csv_path)
+        sns.violinplot(data=robustness_df, x='input_dists', y='robustness')
+        plt.ylim([0, 0.35])
+        dataset_name = robustness_csv_path.name.split('_')[0]
+        plt.title(dataset_name.capitalize())
+        plt.savefig(folder.parent / 'figures' / f'{dataset_name}_robustness_violinplot.svg')
+        plt.close()
+
+        if folder.name.startswith('drought'):
+            expr_mat_time = expr_mat_from_drought(
+                soft_file_path=data_params['soft_path'],
+                agg_method=hyper_params['agg_method'],
+                do_log2=hyper_params['do_log2']
+            )
+        elif folder.name.startswith('heat'):
+            expr_mat_time = expr_mat_from_emexp(
+                in_path=data_params['soft_path'],
+                agg_method=hyper_params['agg_method'],
+                do_log2=hyper_params['do_log2'],
+                gpl_path=data_params['gpl_path']
+            )
+        else:
+            raise NotImplementedError
+
+        compare_clusterings_for_ode_use(
+            expr_mat_time,
+            experiment_path=experiment_path,
+            summed_linkage_matrix=data_params['linkage_path'],
+            atted_linkage_matrix=Path(data_params['atted_linkage_matrix']),
+            atted_path=Path(data_params['atted_path']),
+            summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
+            nr_clusters=hyper_params['nr_clusters'],
+            edge_cor_threshold=None,
+            top_nr_clusters=None,
+            tf2_in_name=None,
+            tf2_out_name=None)
+
+    with mlflow.start_run(
+            description=config['experiment_data']['description']):
+        # mlflow.log_params(data_params)
+        # mlflow.log_params(hyper_params)
+        mlflow.set_tags(config['experiment_data'])
+        for file in experiment_path.iterdir():
+            mlflow.log_artifact(str(file))
+            # if not file.suffix in ['.npy', '.pkl', '.gzip']:
+            #     mlflow.log_artifact(str(file))
+
+        # mlflow.log_artifacts(str(experiment_path))
+        # mlflow.log_metrics({'bic': best_ode_fit.sol.bic,
+        #                     'chi_sqr': best_ode_fit.sol.chisqr})
+        # mlflow.log_image()
+        # mlflow.register_model()
 
 
 def module_size_pipeline(experiment_path):
@@ -85,3 +154,69 @@ def heat_data_pipeline_setup(experiment_path):
                             do_log2=hyper_params['do_log2'],
                             agg_method=hyper_params['agg_method'],
                             gpl_path=data_params['gpl_path'])
+
+
+def fit_ode_to_two_datasets(
+        my_ode: OdeModel,
+        my_time_series_expressions: ExpressionMatrixTimeSeries,
+        nr_ode_iters: int,
+        experiment_path: Path|None = None,
+        ):
+
+    # These are parameters that are different between the two datasets
+    # They are the initial values, and the drought treatment (i.e. u_t function)
+    custom_params = dict()
+    small_constant = 1
+    control_name = 'control'
+    drought_name = 'drought'
+    condition_names = [control_name, drought_name]
+    # custom_params[drought_name] = OdeLocalParameters(
+    #      u_t=(lambda t: small_constant*(100 - t * (100 - 20) / (13 * 24))))
+    #
+    # custom_params[control_name] = OdeLocalParameters(
+    #      u_t=(lambda t: small_constant*(90 - t * 0)))
+
+
+    custom_params[control_name] = OdeLocalParameters(
+         u_t=(lambda t: 0))
+    custom_params[drought_name] = OdeLocalParameters(
+         u_t=(lambda t: small_constant * t / (13*24)))
+
+    # Step uno
+    # my_fitter = OdeFitterMultipleDatasets(
+    #         my_ode, my_time_series_expressions, condition_names,
+    #         custom_params,
+    #         param_limit=.5, aggregation_method=AggregationMethod.MEAN)
+
+    # # Make the =0 params where we think is appropriate
+    # new_params = Parameters()
+    # for param_name in my_fitter.master_params:
+    #     if 'k_' in param_name:
+    #         new_params.add(param_name, value=22)
+    #     # elif 'delta' in param_name:
+    #     #     new_params.add(param_name, value=0, vary=True)
+    #     elif param_name in ['gamma_1', 'gamma_2']:
+    #         new_params.add(param_name, value=0, vary=False)
+    #     elif param_name == 'gamma_0':
+    #         new_params.add(param_name, value=0.005, vary=False)
+    #
+    # my_fitter.master_params = new_params
+
+    # my_fitter.fit(max_iter=500)
+    # my_fitter.calculate_current_best_fits()
+    # my_fitter.all_fitters[0].plot_hill_equation_range()
+    # Step uno
+    multiple_fitters = [
+        OdeFitterMultipleDatasets(
+            my_ode, my_time_series_expressions, condition_names,
+            custom_params,
+            param_limit=.1,
+            aggregation_method=AggregationMethod.MEAN
+        ) for _ in range(5)]
+    best_fit = fit_multiple_fitters(multiple_fitters, nr_ode_iters)
+    best_fit.calculate_current_best_fits(data_point_overlay=True,
+                                         use_err_bars=True,
+                                         out_path=experiment_path / 'final_ode_fit.svg')
+    return best_fit
+    # multiple_fitter.fit(100)
+    # best_fits = multiple_fitter.calculate_current_best_fits()

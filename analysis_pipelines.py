@@ -12,10 +12,8 @@ from matplotlib import pyplot as plt
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries, \
     AggregationMethod
-from exploring_questions import compare_modules_to_local_modules_with_tfbs, \
-    sum_local_distance_and_atted
+from data_wrangling import expr_mat_from_drought, expr_mat_from_emexp
 from helpers import get_info_from_gse65046
-# from main import fit_ode_to_two_datasets
 
 @dataclass
 class ClusteringArgs:
@@ -25,53 +23,44 @@ class ClusteringArgs:
     original_dist_path: Path | None
 
 def compare_clusterings_for_ode_use(expr_mat_time: ExpressionMatrixTimeSeries,
-        experiment_path: Path,
-                                    soft_file_path: Path,
-                                    agg_method: AggregationMethod,
-                                    do_log2: bool,
+                                    experiment_path: Path,
                                     summed_linkage_matrix: Path,
                                     atted_linkage_matrix: Path,
                                     atted_path: Path,
                                     summed_dist_matrix_path: Path,
-                                    gpl_path: str,
                                     nr_clusters: int,
-                                    sample_name_parser: Callable,
                                     edge_cor_threshold: float,
-                                    top_nr_clusters: int, tf2_in_name: str,
+                                    top_nr_clusters: int,
+                                    tf2_in_name: str,
                                     tf2_out_name: str):
 
+    clustering_arg_list = [
+        ClusteringArgs('atted_only', atted_linkage_matrix, atted_path),
+        ClusteringArgs('summed_dists', summed_linkage_matrix, summed_dist_matrix_path),
+        ClusteringArgs('local_dists', None, None),
+    ]
 
+    out_dict = {}
+    for clustering_arg in clustering_arg_list:
+        logging.info(f'{clustering_arg.input_dist_name} analysis now')
 
+        expr_mat_time_copy = copy.deepcopy(expr_mat_time)
+        if clustering_arg.input_dist_name == 'local_dists':
+            expr_mat_time_copy.do_hierachical_clustering(nr_clusters)
+        else:
+            expr_mat_time_copy.assign_clusters_from_linkage_matrix(
+                clustering_arg.linkage_matrix_path,
+                nr_clusters,
+                distance_matrix_path=clustering_arg.original_dist_path
+            )
+    #     expr_mat_time_copy.write_tf2_input_file(
+    #         experiment_path / f'01_{clustering_arg.input_dist_name}_tf2input.txt')
+        out_dict[clustering_arg.input_dist_name] = expr_mat_time_copy
 
-    # clustering_arg_list = [
-    #     ClusteringArgs('atted_only', atted_linkage_matrix, atted_path),
-    #     ClusteringArgs('summed_dists', summed_linkage_matrix, summed_dist_matrix_path),
-    #     ClusteringArgs('local_dists', None, None),
-    # ]
-    #
-    # out_dict = {}
-    # for clustering_arg in clustering_arg_list:
-    #     logging.info(f'{clustering_arg.input_dist_name} analysis now')
-    #
-    #     expr_mat_time_copy = copy.deepcopy(expr_mat_time)
-    #     if clustering_arg.input_dist_name == 'local_dists':
-    #         expr_mat_time_copy.do_hierachical_clustering(nr_clusters)
-    #     else:
-    #         expr_mat_time_copy.assign_clusters_from_linkage_matrix(
-    #             clustering_arg.linkage_matrix_path,
-    #             nr_clusters,
-    #             atted_path=clustering_arg.original_dist_path
-    #         )
-    # #     expr_mat_time_copy.write_tf2_input_file(
-    # #         experiment_path / f'01_{clustering_arg.input_dist_name}_tf2input.txt')
-    #     out_dict[clustering_arg.input_dist_name] = expr_mat_time_copy
-    #
-    #
-    # # the modules in ATTED-II or not
-    # # print()
-    # with open(experiment_path / 'all_clusterings_expr_mat_dict.pkl',
-    #           'wb') as f:
-    #     pickle.dump(out_dict, f)
+    # print()
+    with open(experiment_path / 'all_clusterings_expr_mat_dict.pkl',
+              'wb') as f:
+        pickle.dump(out_dict, f)
 
     with open(experiment_path / 'all_clusterings_expr_mat_dict.pkl',
               'rb') as f:
@@ -141,16 +130,6 @@ def compare_clusterings_for_ode_use(expr_mat_time: ExpressionMatrixTimeSeries,
     plt.savefig(experiment_path / 'explained_var_violinplot.svg')
     plt.close()
 
-    # Make the plots
-    robustness_df = pd.read_csv(experiment_path / 'robustness_30_jackknifes.csv')
-    sns.violinplot(data=robustness_df, x='input_dists', y='robustness')
-    plt.ylim([0, 0.35])
-    plt.savefig(experiment_path / 'robustness_violinplot.svg')
-    plt.close()
-
-
-
-
 
     coex_df = pd.concat(coex_score_list)
     sns.violinplot(data=coex_df, y='coexpression_scores', x='input_dists')
@@ -199,17 +178,7 @@ def pipeline_from_summed_clustering(experiment_path: Path,
                                     top_nr_clusters: int, tf2_in_name: str,
                                     tf2_out_name: str):
     """For the drought dataset, do all processing start to end"""
-    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
-        soft_file_path,
-        log2_transform=do_log2,
-        annotate_from_gpl=True
-    )
-
-    # TODO implement these properly at some point
-    expr_mat_time.column_parser = get_info_from_gse65046
-    expr_mat_time.summary_method = agg_method
-    expr_mat_time.condition_names = ['control', 'drought']
-    expr_mat_time.merge_biological_samples()
+    expr_mat_time = expr_mat_from_drought(soft_file_path, agg_method, do_log2)
     expr_mat_time.assign_clusters_from_linkage_matrix(summed_linkage_matrix,
                                                       nr_clusters,
                                                       distance_matrix_path=summed_dist_matrix_path)
@@ -247,18 +216,12 @@ def pipeline_emtab_375_full(experiment_path: Path, in_file_path: Path,
                             top_nr_clusters: int, do_log2: bool,
                             agg_method: AggregationMethod,
                             gpl_path: str = None):
+
     if in_file_path.suffix == '.csv':
-        expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
-            in_file_path,
-            log2_transform=do_log2,
-            gpl_path=gpl_path,
-        )
+        expr_mat_time = expr_mat_from_emexp(in_file_path, agg_method, do_log2,
+                                            gpl_path)
     else:
         raise NotImplementedError
-    expr_mat_time.keep_only_samples_with_string('normal light')
-    expr_mat_time.summary_method = agg_method
-    expr_mat_time.condition_names = ['21', '32']
-    expr_mat_time.column_parser = sample_name_parser_func
 
     # local_path = experiment_path / 'local_dists.pkl'
     # expr_mat_time.save_distance_matrix(local_path)
