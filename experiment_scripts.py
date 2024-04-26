@@ -25,9 +25,10 @@ from helpers import get_info_from_emtab375
 
 def figure_2_pipeline(experiment_path):
     for folder in experiment_path.iterdir():
-        if not folder.name.endswith('_data'):
+        if not folder.name.endswith('_data') or folder.name.startswith('drought'):
             continue
-        data_params, hyper_params = config_preprocess(folder)
+        data_params, hyper_params, experiment_params = config_preprocess(folder)
+
         robustness_csv_path = Path(data_params['robustness_csv'])
         robustness_df = pd.read_csv(robustness_csv_path)
         sns.violinplot(data=robustness_df, x='input_dists', y='robustness')
@@ -55,7 +56,7 @@ def figure_2_pipeline(experiment_path):
 
         compare_clusterings_for_ode_use(
             expr_mat_time,
-            experiment_path=experiment_path,
+            experiment_path=folder,
             summed_linkage_matrix=data_params['linkage_path'],
             atted_linkage_matrix=Path(data_params['atted_linkage_matrix']),
             atted_path=Path(data_params['atted_path']),
@@ -66,11 +67,10 @@ def figure_2_pipeline(experiment_path):
             tf2_in_name=None,
             tf2_out_name=None)
 
-    with mlflow.start_run(
-            description=config['experiment_data']['description']):
+    with mlflow.start_run(description=experiment_params['description']):
         # mlflow.log_params(data_params)
         # mlflow.log_params(hyper_params)
-        mlflow.set_tags(config['experiment_data'])
+        mlflow.set_tags(experiment_params)
         for file in experiment_path.iterdir():
             mlflow.log_artifact(str(file))
             # if not file.suffix in ['.npy', '.pkl', '.gzip']:
@@ -96,7 +96,7 @@ def module_size_pipeline(experiment_path):
 
 def drought_data_e2e_pipeline(experiment_path):
     # Load the config file
-    data_params, hyper_params = config_preprocess(experiment_path)
+    data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
 
     expr_mat_time, module_module = pipeline_from_summed_clustering(
         experiment_path=experiment_path,
@@ -134,14 +134,15 @@ def config_preprocess(experiment_path):
         config = yaml.safe_load(f)
     data_params = config['data']
     hyper_params = config['hyperparams']
+    experiment_params = config['experiment_data']
     agg_method_dict = {'mean': AggregationMethod.MEAN,
                        'eigengene': AggregationMethod.EIGENGENE}
     hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
-    return data_params, hyper_params
+    return data_params, hyper_params, experiment_params
 
 
 def heat_data_pipeline_setup(experiment_path):
-    data_params, hyper_params = config_preprocess(experiment_path)
+    data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
     pipeline_emtab_375_full(experiment_path=experiment_path,
                             in_file_path=Path(data_params['soft_path']),
                             sample_name_parser_func=get_info_from_emtab375,

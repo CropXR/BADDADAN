@@ -115,21 +115,27 @@ def compare_clusterings_for_ode_use(expr_mat_time: ExpressionMatrixTimeSeries,
         # tf_consistency_list.append(consistency_at_threshold)
 
     vars_df = pd.concat(explained_var_df_list)
-    sns.scatterplot(data=vars_df, x='size', y='explained_var', hue='stdev')
-    plt.xscale('log')
-    plt.show()
+    # sns.scatterplot(data=vars_df, x='size', y='explained_var', hue='stdev')
+    # plt.xscale('log')
+    # plt.show()
 
     sns.jointplot(data=vars_df, x='size', y='explained_var', hue='input_dists')
     plt.xscale('log')
-    plt.show()
+    plt.savefig(experiment_path / 'explained_var_jointplot.svg')
+    plt.close()
 
-    sns.scatterplot(data=vars_df, x='stdev', y='explained_var', hue='size')
-    plt.show()
+    sns.scatterplot(data=vars_df, x='stdev',
+                    y='explained_var',
+                    hue='size',
+                    style='input_dists')
+    plt.savefig(experiment_path / 'explained_var_scatterplot.svg')
+    plt.close()
 
     sns.violinplot(data=vars_df, y='explained_var', x='input_dists')
     plt.savefig(experiment_path / 'explained_var_violinplot.svg')
     plt.close()
 
+    return
 
     coex_df = pd.concat(coex_score_list)
     sns.violinplot(data=coex_df, y='coexpression_scores', x='input_dists')
