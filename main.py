@@ -18,7 +18,7 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
 from analysis_pipelines import compare_clusterings_for_ode_use
 from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
-    heat_data_pipeline_setup, figure_2_pipeline
+    exploratory_heat_data_scripts, figure_2_pipeline
 from helpers import plot_y_and_y_hat, get_info_from_gse65046
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
@@ -468,7 +468,7 @@ def main():
             pass
             # compare_clusterings_for_ode_use(experiment_path)
         case '05_doing_new_dataset':
-            heat_data_pipeline_setup(experiment_path)
+            exploratory_heat_data_scripts(experiment_path)
         case '06_drought_data_end_to_end':
             # Full pipeline for drought
             drought_data_e2e_pipeline(experiment_path)
@@ -477,8 +477,9 @@ def main():
             module_size_pipeline(experiment_path)
         case '08_making_fig_2_again':
             figure_2_pipeline(experiment_path)
-        case _:
-            # Full pipeline for heat
+        case '09_heat_data_end_to_end':
+            # Full pipeline for heat should turn up here
+            heat_data_e2e_pipeline(experiment_path)
             raise NotImplementedError
 
 

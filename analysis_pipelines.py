@@ -174,20 +174,20 @@ def compare_clusterings_for_ode_use(expr_mat_time: ExpressionMatrixTimeSeries,
     plt.close()
 
 
-def pipeline_from_summed_clustering(experiment_path: Path,
-                                    soft_file_path: Path,
-                                    agg_method: AggregationMethod,
-                                    do_log2: bool, summed_linkage_matrix: Path,
-                                    summed_dist_matrix_path: Path,
-                                    nr_clusters: int,
-                                    edge_cor_threshold: float,
-                                    top_nr_clusters: int, tf2_in_name: str,
-                                    tf2_out_name: str):
-    """For the drought dataset, do all processing start to end"""
-    expr_mat_time = expr_mat_from_drought(soft_file_path, agg_method, do_log2)
-    expr_mat_time.assign_clusters_from_linkage_matrix(summed_linkage_matrix,
-                                                      nr_clusters,
-                                                      distance_matrix_path=summed_dist_matrix_path)
+def assign_clusters_and_infer_intermodular_network(
+        experiment_path: Path, expr_mat_time,
+        summed_linkage_matrix: Path,
+        summed_dist_matrix_path: Path,
+        nr_clusters: int,
+        edge_cor_threshold: float,
+        top_nr_clusters: int,
+        tf2_in_name: str,
+        tf2_out_name: str):
+    """Cluster expression matrix, and infer intermodular network"""
+    expr_mat_time.assign_clusters_from_linkage_matrix(
+        summed_linkage_matrix,
+        nr_clusters,
+        distance_matrix_path=summed_dist_matrix_path)
 
     # explained_vars = expr_mat_time.get_all_explained_vars()
 
@@ -200,7 +200,9 @@ def pipeline_from_summed_clustering(experiment_path: Path,
         expr_mat_time.write_tf2_input_file(tf2_in_path)
         expr_mat_time.post_to_tf2network(tf2_in_path, tf2_out_path)
     # expr_mat_time.assign_clusters_from_tf2_input(tf2_in_path, overwrite=False)
-    expr_mat_time.keep_highest_z_clusters(top_nr_clusters, tf2_out_path, plotting=True)
+    expr_mat_time.keep_highest_z_clusters(top_nr_clusters,
+                                          tf2_out_path,
+                                          plotting=True)
     expr_mat_time.plot_clusters_over_time()
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
@@ -210,18 +212,19 @@ def pipeline_from_summed_clustering(experiment_path: Path,
 
     expr_mat_time.keep_only_modules_in_network(module_module)
 
-    expr_mat_time.plot_clusters_over_time(out_path=experiment_path / 'global_cluster_expressions.svg')
+    expr_mat_time.plot_clusters_over_time(
+        out_path=experiment_path / 'global_cluster_expressions.svg')
 
     return expr_mat_time, module_module
 
 
-def pipeline_emtab_375_full(experiment_path: Path, in_file_path: Path,
-                            sample_name_parser_func: Callable,
-                            summed_linkage_matrix: Path, summed_dist_matrix_path: Path,
-                            edge_cor_threshold: float, nr_clusters: int,
-                            top_nr_clusters: int, do_log2: bool,
-                            agg_method: AggregationMethod,
-                            gpl_path: str = None):
+def explore_emtab_375(experiment_path: Path, in_file_path: Path,
+                      sample_name_parser_func: Callable,
+                      summed_linkage_matrix: Path, summed_dist_matrix_path: Path,
+                      edge_cor_threshold: float, nr_clusters: int,
+                      top_nr_clusters: int, do_log2: bool,
+                      agg_method: AggregationMethod,
+                      gpl_path: str = None):
 
     if in_file_path.suffix == '.csv':
         expr_mat_time = expr_mat_from_emexp(in_file_path, agg_method, do_log2,
@@ -248,6 +251,10 @@ def pipeline_emtab_375_full(experiment_path: Path, in_file_path: Path,
     # expr_mat_time.post_to_tf2network(tf2_in_path, tf2_out_path)
     # # expr_mat_time.write_tf2_input_file(tf2_in_path)
     # print()
+
+def pipeline_emtab_375_full():
+    ...
+
 
 def pipeline_from_atted_clustering(experiment_path: Path, soft_file_path: Path,
                                    atted_linkage_matrix: Path,

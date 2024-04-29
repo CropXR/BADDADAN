@@ -15,8 +15,8 @@ from DynamicModels.OdeModel import OdeModel
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 from Expressions.ExpressionMatrix import AggregationMethod, \
     ExpressionMatrixTimeSeries
-from analysis_pipelines import pipeline_from_summed_clustering, \
-    pipeline_emtab_375_full, compare_clusterings_for_ode_use
+from analysis_pipelines import assign_clusters_and_infer_intermodular_network, \
+    explore_emtab_375, compare_clusterings_for_ode_use, pipeline_emtab_375_full
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 
 from exploring_questions import plot_module_size_distributions
@@ -97,36 +97,54 @@ def module_size_pipeline(experiment_path):
 def drought_data_e2e_pipeline(experiment_path):
     # Load the config file
     data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
+    expr_mat_time = expr_mat_from_drought(data_params['soft_path'],
+                                          hyper_params['agg_method'],
+                                          hyper_params['do_log2'])
 
-    expr_mat_time, module_module = pipeline_from_summed_clustering(
+    expr_mat_time, module_module = assign_clusters_and_infer_intermodular_network(
         experiment_path=experiment_path,
-        soft_file_path=data_params['soft_path'],
-        agg_method=hyper_params['agg_method'],
-        do_log2=hyper_params['do_log2'],
+        expr_mat_time=expr_mat_time,
         summed_linkage_matrix=data_params['linkage_path'],
         summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
         nr_clusters=hyper_params['nr_clusters'],
         edge_cor_threshold=hyper_params['edge_corr_threshold'],
         top_nr_clusters=hyper_params['top_nr_clusters'],
         tf2_in_name=data_params['tf2_in_name'],
-        tf2_out_name=data_params['tf2_out_name']
-    )
+        tf2_out_name=data_params['tf2_out_name'])
     with (experiment_path / 'module_network.pkl').open('wb') as f:
         pickle.dump(module_module, f)
     # Assure that data has already been clustered
     assert expr_mat_time.has_been_clustered
-    expr_mat_time.get_genes_per_cluster()[328]
+    # expr_mat_time.get_genes_per_cluster()[328]
     my_ode = OdeModel.construct_from_regulatory_network(module_module,
                                                         nonlinear=True)
+
+    # These are parameters that are different between the two datasets
+    # They are the initial values, and the drought treatment (i.e. u_t function)
+    custom_params = dict()
+    small_constant = 1
+    control_name = 'control'
+    drought_name = 'drought'
+    # custom_params[drought_name] = OdeLocalParameters(
+    #      u_t=(lambda t: small_constant*(100 - t * (100 - 20) / (13 * 24))))
+    #
+    # custom_params[control_name] = OdeLocalParameters(
+    #      u_t=(lambda t: small_constant*(90 - t * 0)))
+
+    custom_params[control_name] = OdeLocalParameters(
+        u_t=(lambda t: 0))
+    custom_params[drought_name] = OdeLocalParameters(
+        u_t=(lambda t: small_constant * t / (13 * 24)))
+
     best_ode_fit = fit_ode_to_two_datasets(
         my_ode,
         expr_mat_time,
+        custom_params=custom_params,
         nr_ode_iters=hyper_params['nr_ode_iters'],
         experiment_path=experiment_path
     )
     with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
         pickle.dump(best_ode_fit, f)
-
 
 def config_preprocess(experiment_path):
     config_path = experiment_path / 'config.yaml'
@@ -141,47 +159,77 @@ def config_preprocess(experiment_path):
     return data_params, hyper_params, experiment_params
 
 
-def heat_data_pipeline_setup(experiment_path):
+def exploratory_heat_data_scripts(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
-    pipeline_emtab_375_full(experiment_path=experiment_path,
-                            in_file_path=Path(data_params['soft_path']),
-                            sample_name_parser_func=get_info_from_emtab375,
-                            summed_linkage_matrix=data_params['linkage_path'],
-                            summed_dist_matrix_path=Path(
+    explore_emtab_375(experiment_path=experiment_path,
+                      in_file_path=Path(data_params['soft_path']),
+                      sample_name_parser_func=get_info_from_emtab375,
+                      summed_linkage_matrix=data_params['linkage_path'],
+                      summed_dist_matrix_path=Path(
                                 data_params['dist_matrix_path']),
-                            edge_cor_threshold=None,
-                            nr_clusters=hyper_params['nr_clusters'],
-                            top_nr_clusters=None,
-                            do_log2=hyper_params['do_log2'],
-                            agg_method=hyper_params['agg_method'],
-                            gpl_path=data_params['gpl_path'])
+                      edge_cor_threshold=None,
+                      nr_clusters=hyper_params['nr_clusters'],
+                      top_nr_clusters=None,
+                      do_log2=hyper_params['do_log2'],
+                      agg_method=hyper_params['agg_method'],
+                      gpl_path=data_params['gpl_path'])
+
+
+def heat_data_e2e_pipeline(experiment_path):
+    data_params, hyper_params, experiment_params = config_preprocess(
+        experiment_path)
+    expr_mat_time = expr_mat_from_emexp(data_params['soft_path'],
+                                        hyper_params['agg_method'],
+                                        hyper_params['do_log2'],
+                                        data_params['gpl_path'])
+    expr_mat_time, module_module =  assign_clusters_and_infer_intermodular_network(
+        experiment_path=experiment_path,
+        expr_mat_time=expr_mat_time,
+        summed_linkage_matrix=data_params['linkage_path'],
+        summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
+        nr_clusters=hyper_params['nr_clusters'],
+        edge_cor_threshold=hyper_params['edge_corr_threshold'],
+        top_nr_clusters=hyper_params['top_nr_clusters'],
+        tf2_in_name=data_params['tf2_in_name'],
+        tf2_out_name=data_params['tf2_out_name'])
+
+    with (experiment_path / 'module_network.pkl').open('wb') as f:
+        pickle.dump(module_module, f)
+    # Assure that data has already been clustered
+    assert expr_mat_time.has_been_clustered
+    # expr_mat_time.get_genes_per_cluster()[328]
+    my_ode = OdeModel.construct_from_regulatory_network(module_module,
+                                                        nonlinear=True)
+
+    # These are parameters that are different between the two datasets
+    custom_params = dict()
+    control_name =  '21'
+    treatment_name = '32'
+
+    custom_params[control_name] = OdeLocalParameters(
+        u_t=(lambda t: 0))
+    custom_params[treatment_name] = OdeLocalParameters(
+        u_t=(lambda t: 1))
+
+    best_ode_fit = fit_ode_to_two_datasets(
+        my_ode,
+        expr_mat_time,
+        custom_params=custom_params,
+        nr_ode_iters=hyper_params['nr_ode_iters'],
+        experiment_path=experiment_path
+    )
+    with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
+        pickle.dump(best_ode_fit, f)
 
 
 def fit_ode_to_two_datasets(
         my_ode: OdeModel,
         my_time_series_expressions: ExpressionMatrixTimeSeries,
         nr_ode_iters: int,
+        custom_params: Dict,
         experiment_path: Path|None = None,
         ):
 
-    # These are parameters that are different between the two datasets
-    # They are the initial values, and the drought treatment (i.e. u_t function)
-    custom_params = dict()
-    small_constant = 1
-    control_name = 'control'
-    drought_name = 'drought'
-    condition_names = [control_name, drought_name]
-    # custom_params[drought_name] = OdeLocalParameters(
-    #      u_t=(lambda t: small_constant*(100 - t * (100 - 20) / (13 * 24))))
-    #
-    # custom_params[control_name] = OdeLocalParameters(
-    #      u_t=(lambda t: small_constant*(90 - t * 0)))
-
-
-    custom_params[control_name] = OdeLocalParameters(
-         u_t=(lambda t: 0))
-    custom_params[drought_name] = OdeLocalParameters(
-         u_t=(lambda t: small_constant * t / (13*24)))
 
     # Step uno
     # my_fitter = OdeFitterMultipleDatasets(
@@ -207,6 +255,7 @@ def fit_ode_to_two_datasets(
     # my_fitter.calculate_current_best_fits()
     # my_fitter.all_fitters[0].plot_hill_equation_range()
     # Step uno
+    condition_names = list(custom_params.keys())
     multiple_fitters = [
         OdeFitterMultipleDatasets(
             my_ode, my_time_series_expressions, condition_names,
