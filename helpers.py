@@ -157,8 +157,8 @@ def plot_y_and_y_hat(y_real: np.ndarray, t_real: np.ndarray | list,
     line_type = '.' if data_point_overlay else '-'
     colours = sns.color_palette(n_colors=len(y_real))
     for i, row in enumerate(y_real):
-        selected_errors = error_bars.iloc[i,:].tolist()
         if error_bars is not None:
+            selected_errors = error_bars.iloc[i, :].tolist()
             ax1.errorbar(t_real, row, yerr=selected_errors,
                          fmt=line_type, label=f'Module{i}', color=colours[i])
         else:
