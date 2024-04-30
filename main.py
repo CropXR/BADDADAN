@@ -18,7 +18,8 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
 from analysis_pipelines import compare_clusterings_for_ode_use
 from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
-    exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline
+    exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline, \
+    config_preprocess
 from helpers import plot_y_and_y_hat, get_info_from_gse65046
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
@@ -482,6 +483,22 @@ def main():
             heat_data_e2e_pipeline(experiment_path)
             raise NotImplementedError
 
+    _, _, experiment_params = config_preprocess(
+        experiment_path)
+    with mlflow.start_run(description=experiment_params['description']):
+        # mlflow.log_params(data_params)
+        # mlflow.log_params(hyper_params)
+        mlflow.set_tags(experiment_params)
+        for file in experiment_path.iterdir():
+            mlflow.log_artifact(str(file))
+            # if not file.suffix in ['.npy', '.pkl', '.gzip']:
+            #     mlflow.log_artifact(str(file))
+
+        # mlflow.log_artifacts(str(experiment_path))
+        # mlflow.log_metrics({'bic': best_ode_fit.sol.bic,
+        #                     'chi_sqr': best_ode_fit.sol.chisqr})
+        # mlflow.log_image()
+        # mlflow.register_model()
 
 if __name__ == "__main__":
     main()

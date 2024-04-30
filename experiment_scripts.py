@@ -67,20 +67,7 @@ def figure_2_pipeline(experiment_path):
             tf2_in_name=None,
             tf2_out_name=None)
 
-    with mlflow.start_run(description=experiment_params['description']):
-        # mlflow.log_params(data_params)
-        # mlflow.log_params(hyper_params)
-        mlflow.set_tags(experiment_params)
-        for file in experiment_path.iterdir():
-            mlflow.log_artifact(str(file))
-            # if not file.suffix in ['.npy', '.pkl', '.gzip']:
-            #     mlflow.log_artifact(str(file))
 
-        # mlflow.log_artifacts(str(experiment_path))
-        # mlflow.log_metrics({'bic': best_ode_fit.sol.bic,
-        #                     'chi_sqr': best_ode_fit.sol.chisqr})
-        # mlflow.log_image()
-        # mlflow.register_model()
 
 
 def module_size_pipeline(experiment_path):
@@ -214,7 +201,7 @@ def heat_data_e2e_pipeline(experiment_path):
         custom_params=custom_params,
         nr_ode_iters=hyper_params['nr_ode_iters'],
         experiment_path=experiment_path,
-        param_limit=data_params.get('param_limit')
+        param_limit=hyper_params.get('param_limit')
     )
     with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
         pickle.dump(best_ode_fit, f)
