@@ -465,7 +465,7 @@ def main():
     match name:
         case '04_comparing_clusterings':
             # Full compare clustering
-            pass
+            raise NotImplementedError
             # compare_clusterings_for_ode_use(experiment_path)
         case '05_doing_new_dataset':
             exploratory_heat_data_scripts(experiment_path)

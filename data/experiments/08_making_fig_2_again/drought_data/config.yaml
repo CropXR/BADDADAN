@@ -18,3 +18,4 @@ hyperparams:
   edge_corr_threshold: .3
   top_nr_clusters: 5
   nr_ode_iters: 300
+  param_limit: .1

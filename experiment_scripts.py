@@ -213,7 +213,8 @@ def heat_data_e2e_pipeline(experiment_path):
         expr_mat_time,
         custom_params=custom_params,
         nr_ode_iters=hyper_params['nr_ode_iters'],
-        experiment_path=experiment_path
+        experiment_path=experiment_path,
+        param_limit=data_params.get('param_limit')
     )
     with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
         pickle.dump(best_ode_fit, f)
@@ -225,14 +226,17 @@ def fit_ode_to_two_datasets(
         nr_ode_iters: int,
         custom_params: Dict,
         experiment_path: Path|None = None,
+        param_limit: float = .1
         ):
 
-
-    # Step uno
-    # my_fitter = OdeFitterMultipleDatasets(
-    #         my_ode, my_time_series_expressions, condition_names,
-    #         custom_params,
-    #         param_limit=.5, aggregation_method=AggregationMethod.MEAN)
+    # condition_names = list(custom_params.keys())
+    # # Step uno
+    # my_fitter = OdeFitterMultipleDatasets(my_ode,
+    #                                       my_time_series_expressions,
+    #                                       custom_params,
+    #                                       param_limit=param_limit)
+    # my_fitter.fit(max_iter=400)
+    # my_fitter.calculate_current_best_fits()
 
     # # Make the =0 params where we think is appropriate
     # new_params = Parameters()
@@ -251,15 +255,14 @@ def fit_ode_to_two_datasets(
     # my_fitter.fit(max_iter=500)
     # my_fitter.calculate_current_best_fits()
     # my_fitter.all_fitters[0].plot_hill_equation_range()
-    # Step uno
-    condition_names = list(custom_params.keys())
+
     multiple_fitters = [
         OdeFitterMultipleDatasets(
-            my_ode, my_time_series_expressions, condition_names,
+            my_ode, my_time_series_expressions,
             custom_params,
-            param_limit=.1,
-            aggregation_method=AggregationMethod.MEAN
+            param_limit=param_limit,
         ) for _ in range(5)]
+
     best_fit = fit_multiple_fitters(multiple_fitters, nr_ode_iters)
     best_fit.calculate_current_best_fits(data_point_overlay=True,
                                          use_err_bars=True,

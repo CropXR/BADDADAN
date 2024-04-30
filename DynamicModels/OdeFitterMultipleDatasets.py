@@ -21,14 +21,12 @@ class OdeFitterMultipleDatasets:
     """Class for fitting to multiple datasets"""
     def __init__(self, ode_model: OdeModel,
                  dataset: ExpressionMatrixTimeSeries,
-                 words_to_split_dataset: List[str],
                  custom_params_per_dataset: Dict[str,
                                                  OdeLocalParameters],
                  param_limit: float = 800.,
                  method: Literal['lbfgs', 'bfgs',
                                  'differential_evolution',
-                                 'basinhopping', 'shgo'] = 'lbfgs',
-                 aggregation_method: AggregationMethod = AggregationMethod.MEAN,
+                                 'basinhopping', 'shgo'] = 'lbfgs'
                  ):
         """
         :param ode_model: The ODE model used for fitting.
@@ -45,27 +43,33 @@ class OdeFitterMultipleDatasets:
         self.has_been_fitted = False
         self.dataset = dataset
         self.sol : MinimizerResult|None = None
+        self.words_to_split_dataset = dataset.condition_names
         # Combine all OdeFitter objects
         self.all_fitters = []
         assert dataset.has_been_clustered
-        if aggregation_method == AggregationMethod.EIGENGENE:
+        if dataset.aggregation_method == AggregationMethod.EIGENGENE:
             expressions: pd.DataFrame = dataset.df.groupby('cluster_id').apply(
                             dataset._get_eigengene_over_time)
             # Add constant value to eigengenes
             expressions = abs(expressions.min().min()) + expressions
-        elif aggregation_method == AggregationMethod.MEAN:
+        elif dataset.aggregation_method == AggregationMethod.MEAN:
             expressions: pd.DataFrame = dataset.df.groupby('cluster_id').apply(
                 dataset._get_mean_over_time)
         else:
             raise NotImplementedError
 
-        self.words_to_split_dataset = words_to_split_dataset
-        for word in words_to_split_dataset:
+        for word in self.words_to_split_dataset:
+            # Deepcopy first?
+            # dataset.keep_only_samples_with_string(word)
             valid_index = expressions.columns.get_level_values(
                 'condition').isin(['zero', word])
             data = expressions.loc[:, valid_index]
-            time = data.columns.get_level_values('time').astype('timedelta64[h]')
+            # Ensure that time is increasing
+            data = data.sort_index(axis=1, level='time')
+            # Convert time into hours
+            time = data.columns.get_level_values('time') / pd.to_timedelta(1, unit='h')
             assert len(data.columns) == len(time)
+
             data = data.to_numpy()
             time = time.to_numpy()
             u_t_for_dataset = custom_params_per_dataset[word].u_t

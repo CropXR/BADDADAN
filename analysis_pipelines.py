@@ -203,7 +203,7 @@ def assign_clusters_and_infer_intermodular_network(
     expr_mat_time.keep_highest_z_clusters(top_nr_clusters,
                                           tf2_out_path,
                                           plotting=True)
-    expr_mat_time.plot_clusters_over_time()
+    # expr_mat_time.plot_clusters_over_time()
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
         tf2_out_path,
