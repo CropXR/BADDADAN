@@ -18,7 +18,7 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
 from analysis_pipelines import compare_clusterings_for_ode_use
 from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
-    exploratory_heat_data_scripts, figure_2_pipeline
+    exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline
 from helpers import plot_y_and_y_hat, get_info_from_gse65046
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
@@ -454,7 +454,7 @@ def camila_red_panda(soft_file_in_path: Path,
 
 def main():
     # ONLY EDIT THESE LINES
-    name = '08_making_fig_2_again'
+    name = '09_heat_data_end_to_end'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 

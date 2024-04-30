@@ -219,11 +219,9 @@ def assign_clusters_and_infer_intermodular_network(
 
 
 def explore_emtab_375(experiment_path: Path, in_file_path: Path,
-                      sample_name_parser_func: Callable,
-                      summed_linkage_matrix: Path, summed_dist_matrix_path: Path,
-                      edge_cor_threshold: float, nr_clusters: int,
-                      top_nr_clusters: int, do_log2: bool,
-                      agg_method: AggregationMethod,
+                      summed_linkage_matrix: Path,
+                      summed_dist_matrix_path: Path, nr_clusters: int,
+                      do_log2: bool, agg_method: AggregationMethod,
                       gpl_path: str = None):
 
     if in_file_path.suffix == '.csv':
@@ -251,10 +249,6 @@ def explore_emtab_375(experiment_path: Path, in_file_path: Path,
     # expr_mat_time.post_to_tf2network(tf2_in_path, tf2_out_path)
     # # expr_mat_time.write_tf2_input_file(tf2_in_path)
     # print()
-
-def pipeline_emtab_375_full():
-    ...
-
 
 def pipeline_from_atted_clustering(experiment_path: Path, soft_file_path: Path,
                                    atted_linkage_matrix: Path,

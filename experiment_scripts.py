@@ -16,7 +16,7 @@ from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 from Expressions.ExpressionMatrix import AggregationMethod, \
     ExpressionMatrixTimeSeries
 from analysis_pipelines import assign_clusters_and_infer_intermodular_network, \
-    explore_emtab_375, compare_clusterings_for_ode_use, pipeline_emtab_375_full
+    explore_emtab_375, compare_clusterings_for_ode_use
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 
 from exploring_questions import plot_module_size_distributions
@@ -163,13 +163,10 @@ def exploratory_heat_data_scripts(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
     explore_emtab_375(experiment_path=experiment_path,
                       in_file_path=Path(data_params['soft_path']),
-                      sample_name_parser_func=get_info_from_emtab375,
                       summed_linkage_matrix=data_params['linkage_path'],
                       summed_dist_matrix_path=Path(
-                                data_params['dist_matrix_path']),
-                      edge_cor_threshold=None,
+                          data_params['dist_matrix_path']),
                       nr_clusters=hyper_params['nr_clusters'],
-                      top_nr_clusters=None,
                       do_log2=hyper_params['do_log2'],
                       agg_method=hyper_params['agg_method'],
                       gpl_path=data_params['gpl_path'])
