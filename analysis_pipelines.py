@@ -202,7 +202,7 @@ def assign_clusters_and_infer_intermodular_network(
     # expr_mat_time.assign_clusters_from_tf2_input(tf2_in_path, overwrite=False)
     expr_mat_time.keep_highest_z_clusters(top_nr_clusters,
                                           tf2_out_path,
-                                          plotting=True)
+                                          plotting_path=experiment_path)
     # expr_mat_time.plot_clusters_over_time()
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
@@ -213,7 +213,8 @@ def assign_clusters_and_infer_intermodular_network(
     expr_mat_time.keep_only_modules_in_network(module_module)
 
     expr_mat_time.plot_clusters_over_time(
-        out_path=experiment_path / 'global_cluster_expressions.svg')
+        out_path=experiment_path / 'global_cluster_expressions.svg',
+        timescale='hours')
 
     return expr_mat_time, module_module
 

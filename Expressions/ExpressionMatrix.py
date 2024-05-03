@@ -823,16 +823,19 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
     def plot_clusters_over_time(self,
                                 plot_units: bool = False,
                                 title=None,
-                                out_path: Path|None = None) -> None:
+                                out_path: Path|None = None,
+                                timescale: str = 'days') -> None:
+
         """Plot expression of clusters over time.
 
         :param split_by_condition: If multiple conditions in dataframe,
             split into different plots using these keywords
         :param plot_units: If true, plot line for each gene individually.
                             If false, plot mean of all genes in a cluster.
+        :param timescale: If 'days', plot time in days, if 'hours' plot time in hours
         """
         sns.set_theme()
-
+        time_name = f'time ({timescale})'
         if plot_units:
             # sns.relplot(data=some_df, x='time (days)', y='expression',
             #             kind='line',
@@ -842,7 +845,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             some_df = self._get_gene_expression_long_form()
             some_df['time (days)'] = some_df['time'].dt.days
             nr_hues = some_df['replicate'].nunique()
-            sns.relplot(data=some_df, x='time (days)', y='expression',
+            sns.relplot(data=some_df, x=time_name, y='expression',
                         kind='line',
                         hue='replicate', col='cluster_id',
                         palette=sns.color_palette(n_colors=nr_hues),
@@ -861,9 +864,11 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                     raise NotImplementedError
 
             some_df['time (days)'] = some_df['time'] / pd.to_timedelta(1, unit='D')
+            some_df['time (hours)'] = some_df['time'] / pd.to_timedelta(1,
+                                                                       unit='h')
             nr_hues = some_df['cluster_id'].nunique()
             if self.condition_names is None:
-                sns.lineplot(data=some_df, x='time (days)', y='expression',
+                sns.lineplot(data=some_df, x=time_name, y='expression',
                              hue='cluster_id',
                              palette=sns.color_palette(n_colors=nr_hues),
                              errorbar='se')
@@ -871,7 +876,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                 for word in self.condition_names:
                     selected_df = some_df[some_df['condition'].isin(
                         ['zero', word])]
-                    sns.lineplot(data=selected_df, x='time (days)',
+                    sns.lineplot(data=selected_df, x=time_name,
                                  y='expression',
                                  hue='cluster_id',
                                  palette=sns.color_palette(n_colors=nr_hues),
@@ -1306,14 +1311,12 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
 
     def get_z_score_of_cluster_characteristics(self, tf2_output: Path | None,
-                                               plotting=False,
                                                subset: Tuple[str] = (
-                                                   'explained_var',
-                                                   'difference_between_conditions',
-                                                   #'corr_to_phenotype',
-                                                   'mean_expression',
-                                                   'tfbs_present')
-                                               ) -> pd.DataFrame:
+                                                       'explained_var',
+                                                       'difference_between_conditions',
+                                                       # 'corr_to_phenotype',
+                                                       'mean_expression',
+                                                       'tfbs_present')) -> pd.DataFrame:
         """For clusters, get their sum of z-scores to find out which is the
            most interesting to look at
 
@@ -1336,43 +1339,52 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         z_scores = z_scores.assign(z_sum=stouffler_z)
         summary_df = summary_df.assign(z_sum=stouffler_z)
 
-        if plotting:
-            # Is higher better for all? Or how can we make it that way?
-            sns.histplot(z_scores, kde=True, element='step', common_norm=False)
-            plt.show()
-            # sns.boxplot(z_scores.sum(axis=1))
-            # plt.show()
         return z_scores
 
     def keep_highest_z_clusters(self, nr_clusters: int,
                                 tf2_output_path: Path | None,
-                                plotting: bool =False
+                                plotting_path: Path | None = None
                                 ) -> pd.DataFrame:
         """Only keep clusters with highest z_scores. Modifies object in-place.
 
-        :param plotting: If True, show plots of z_scores
+        :param plotting_path: If True, show plots of z_scores
         :param nr_clusters: Top number of clusters to select
         :param tf2_output_path: Path to TF2Output, used to determine if module
                                 contains TFBS (which has positive
                                 impact on z-score).
         :return: Dataframe of z-scores of the best clusters
         """
-        z_scores = self.get_z_score_of_cluster_characteristics(tf2_output_path,
-                                                               plotting=plotting)
+        z_scores = self.get_z_score_of_cluster_characteristics(tf2_output_path)
 
         worst_clusters =  z_scores.sort_values(
             'z_sum', ascending=True).head(nr_clusters)
         best_clusters = z_scores.sort_values(
             'z_sum', ascending=False).head(nr_clusters)
-        if plotting:
+        if plotting_path:
+            # Is higher better for all? Or how can we make it that way?
+            sns.histplot(z_scores, kde=True, element='step',
+                         common_norm=False)
+            plt.savefig(plotting_path / 'all_z_scores_hist.svg')
+            plt.close()
+
+            sns.histplot(z_scores['z_sum'])
+            plt.savefig(plotting_path / 'summed_z_hist.svg')
+            plt.close()
+            # sns.boxplot(z_scores.sum(axis=1))
+            # plt.show()
+
             sns.heatmap(z_scores.sort_values('z_sum', ascending=False))
             plt.xticks(rotation=30, ha='right')
             plt.tight_layout()
-            plt.show()
+            plt.savefig(plotting_path / 'heatmap_z_score_all_clusters.svg')
+            plt.close()
+
             sns.heatmap(best_clusters, cmap='vlag', center=0)
             plt.xticks(rotation=30, ha='right')
             plt.tight_layout()
-            plt.show()
+            plt.savefig(plotting_path / 'heatmap_z_score_best_clusters.svg')
+            plt.close()
+
         self.df = self.df[self.df['cluster_id'].isin(best_clusters.index)]
         return best_clusters
 
