@@ -1,0 +1,20 @@
+experiment_data:
+  name: 'For drought dataset, smoothly do the full analysis. Also include hyperparameter to remove lowest 25% of all 
+  genes'
+  description: ""
+  summary_of_result: ""
+data:
+  soft_path: 'data/raw_data/expression_datasets/gse65046/GSE65046_family.soft'
+  linkage_path: 'data/preprocessed_data/summed_atted_gse65046/summed_dist_no_negative_dists/summed_distances_complete_linkage.npy'
+  dist_matrix_path: 'data/preprocessed_data/summed_atted_gse65046/summed_dist_no_negative_dists/atted_local_dist_summed_no_negative.parquet.gzip'
+  tf2_in_name: '01_tf2_input.txt'
+  tf2_out_name: '02_summed_dists_tf2network_output.tsv'
+hyperparams:
+  de_quartile_cutoff: .25
+  nr_clusters: 500
+  agg_method: 'mean'
+  do_log2: True
+  edge_corr_threshold: .3
+  top_nr_clusters: 5
+  nr_ode_iters: 300
+  param_limit: .1

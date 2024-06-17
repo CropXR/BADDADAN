@@ -1,0 +1,23 @@
+experiment_data:
+  name: 'For drought dataset, only filter DE(?) genes'
+  description: ""
+  summary_of_result: ""
+data:
+  drought_path: 'data/raw_data/expression_datasets/gse65046/GSE65046_family.soft'
+  heat_path: 'data/raw_data/expression_datasets/emtab375/TP/processed_data_raw.csv'
+  heat_gpl_path: 'data/resources/GPL198.txt'
+  limma_drought_out_path: 'limma_de_selection/drought_expr_matrix.csv'
+  limma_heat_out_path: 'limma_de_selection/heat_expr_matrix.csv'
+  linkage_path: 'data/preprocessed_data/summed_atted_gse65046/summed_dist_no_negative_dists/summed_distances_complete_linkage.npy'
+  dist_matrix_path: 'data/preprocessed_data/summed_atted_gse65046/summed_dist_no_negative_dists/atted_local_dist_summed_no_negative.parquet.gzip'
+  tf2_in_name: '01_tf2_input.txt'
+  tf2_out_name: '02_summed_dists_tf2network_output.tsv'
+hyperparams:
+  nr_clusters: 500
+  agg_method: 'mean'
+  do_log2_drought: True
+  do_log2_heat: False
+  edge_corr_threshold: .3
+  top_nr_clusters: 5
+  nr_ode_iters: 300
+  param_limit: .1

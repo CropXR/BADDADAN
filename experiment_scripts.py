@@ -23,6 +23,78 @@ from exploring_questions import plot_module_size_distributions
 from helpers import get_info_from_emtab375
 
 
+def prefilter_genes_experiment(experiment_path):
+
+    data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
+    expr_mat_time_drought = expr_mat_from_drought(
+        data_params['drought_path'],
+        hyper_params['agg_method'],
+        hyper_params['do_log2_drought'],
+        out_path = data_params['limma_drought_out_path'])
+    expr_mat_time_heat = expr_mat_from_emexp(
+        data_params['heat_path'],
+        hyper_params['agg_method'],
+        hyper_params['do_log2_heat'],
+        data_params['heat_gpl_path'],
+        out_path = data_params['limma_heat_out_path']
+    )
+
+    cv_list = []
+    df_list = []
+
+    for expr_mat_time, condition_name in zip(
+            [expr_mat_time_drought, expr_mat_time_heat],
+            ['drought', 'heat']
+    ):
+        expr_mat_time.scatterplot_of_two_per_gene_stats(
+            'std', 'cond_rmsd',
+            plotting_func=sns.jointplot,
+            title = f'{condition_name} _std_rmsd_no cutoff ({len(expr_mat_time.df)} genes)',
+            out_path=experiment_path /  f'{condition_name}_no_cutoff.png')
+
+        # expr_mat_time.scatterplot_of_two_per_gene_stats(
+        #     'mean', 'std',
+        #     plotting_func=sns.jointplot,
+        #     title = f'{condition_name} no cutoff ({len(expr_mat_time.df)} genes)',
+        #     out_path=experiment_path /  f'{condition_name}_no_cutoff.png')
+
+        for cutoff in [0.25, 0.5, 0.75]:
+            temp_expr_mat = deepcopy(expr_mat_time)
+            # std_series = temp_expr_mat.plot_per_gene_std()
+            temp_expr_mat.keep_genes_above_percentile_score(
+                cutoff,
+                method='cond_rmsd')
+            # temp_expr_mat.scatterplot_of_two_per_gene_stats(
+            #     'mean', 'std',
+            #     plotting_func=sns.jointplot,
+            #     title=f'{condition_name} cutoff={cutoff} perc. ({len(temp_expr_mat.df)} genes)',
+            #     out_path=experiment_path / f'{condition_name}_{cutoff}_cutoff.png'
+            # )
+            # mad_series = expr_mat_time.plot_per_gene_mad()
+            # cv_serie = expr_mat_time._calculate_gene_variation('cv')
+            # cv_list.append(cv_serie)
+            #
+            # expr_mat_time.scatterplot_of_two_per_gene_stats('std', 'qcd')
+            # expr_mat_time.scatterplot_of_two_per_gene_stats('mean', 'qcd')
+            # expr_mat_time.scatterplot_of_two_per_gene_stats('std', 'mad')
+            # expr_mat_time.scatterplot_of_two_per_gene_stats('std', 'cv')
+            # expr_mat_time.scatterplot_of_two_per_gene_stats('std', 'qcd')
+            # Median should roughly be good cutoff?
+            # Or only remove lower 25th percentile?
+            # Look at distribution of MAD
+
+
+    # cv_list[0].name = 'drought'
+    # cv_list[1].name = 'heat'
+    # merged_df = pd.concat(cv_list, axis=1, join='inner')
+    # sns.histplot(merged_df)
+    # print()
+
+
+
+
+
+
 def figure_2_pipeline(experiment_path):
     for folder in experiment_path.iterdir():
         if not folder.name.endswith('_data') or folder.name.startswith('drought'):

@@ -19,7 +19,7 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, \
 from analysis_pipelines import compare_clusterings_for_ode_use
 from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
     exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline, \
-    config_preprocess
+    config_preprocess, prefilter_genes_experiment
 from helpers import plot_y_and_y_hat, get_info_from_gse65046
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
@@ -455,7 +455,7 @@ def camila_red_panda(soft_file_in_path: Path,
 
 def main():
     # ONLY EDIT THESE LINES
-    name = '09_heat_data_end_to_end'
+    name = '10_prefiltering_genes'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -481,6 +481,13 @@ def main():
         case '09_heat_data_end_to_end':
             # Full pipeline for heat should turn up here
             heat_data_e2e_pipeline(experiment_path)
+        case '10_prefiltering_genes':
+            prefilter_genes_experiment(experiment_path)
+        case '12_drought_data_end_to_end':
+            # Full pipeline for drought
+            drought_data_e2e_pipeline(experiment_path)
+
+        case _:
             raise NotImplementedError
 
     _, _, experiment_params = config_preprocess(

@@ -280,10 +280,12 @@ class ExpressionMatrix:
                     if (string_to_select in col or 'cluster_id' in col or 'zero' in col)]
         self.df = self.df[col_mask]
 
-    def plot_per_gene_std(self) -> None:
+    def plot_per_gene_std(self) -> pd.Series:
         """Plot per gene standard deviation across samples"""
-        sns.histplot(self.df.std(axis=1))
+        std_series = self.df.std(axis=1)
+        sns.histplot(std_series)
         plt.show()
+        return std_series
 
     def plot_sample_gene_heatmap(self, standard_scale=0) -> None:
         sns.clustermap(self.df, method='complete', metric='correlation',
@@ -302,79 +304,6 @@ class ExpressionMatrix:
         else:
             plt.savefig(out_path)
         plt.close()
-
-    def _calculate_gene_variation(self, method: Literal['std', 'mad', 'cv', 'qcd']) -> pd.Series:
-        """Calculate for each gene how much it varies over all the samples
-
-        :param method: How to determine variation between samples:
-                        std: standard deviation
-                        mad: mean absolute deviation
-                        qcd: quartile coefficient of dispersion
-        :return: Measure of variation for each gene
-        """
-
-        if method in ['qcd', 'cv']:
-            # Cannot take negative values:
-            # Subtract minimum value to all values, so qcd / cv does not
-            # get negative inputs
-            min_value = self.df.min().min()
-            # all_num_df = self.df.apply(pd.to_numeric)
-            translated_df = self.df - min_value
-
-        # # Random snippet to plot compare measures
-        # self.df['qcd'] = translated_df.apply(calculate_qcd, axis=1)
-        # self.df['cv'] = translated_df.apply(calculate_coefficient_of_variation,
-        #                               axis=1)
-        # fig, axs = plt.subplots(2, 1)
-        # sns.stripplot(data=self.df, x='qcd', ax=axs[0], alpha=.5)
-        # sns.stripplot(data=self.df, x='cv', ax=axs[1], alpha=.5)
-        # plt.tight_layout()
-        # plt.show()
-        # logging.info(self.df[['qcd', 'cv']].corr('spearman'))
-
-        match method:
-            case 'std':
-                return self.df.std(axis=1)
-            case 'mad':
-                return self.df.mad(axis=1)
-            case 'qcd':
-                return translated_df.apply(calculate_qcd, axis=1)
-            case 'cv':
-                return translated_df.apply(calculate_coefficient_of_variation, axis=1)
-            case _:
-                raise NotImplementedError
-
-    def keep_genes_above_deviation_cutoff(
-            self, cutoff: float = None,
-            method: Literal['std', 'mad', 'qcd'] = 'std'
-    ) -> None:
-        """Remove non-differentially expressed (de) genes.
-
-        :param method: How to determine variation between samples:
-                        std: standard deviation
-                        mad: mean absolute deviation
-                        qcd: quantile coefficient of dispersion
-        :param cutoff: Minimum standard deviation between samples
-                           for a gene to be included. Default: 1.0
-        """
-        variation = self._calculate_gene_variation(method)
-        # Only keep genes that are above the cutoff
-        self.df = self.df[variation > cutoff]
-
-    def keep_n_most_deviating_genes(self, n_max: int = None,
-                                    method: Literal['std', 'mad', 'cv', 'qcd'] = 'std') -> None:
-        """Remove non-differentially expressed (de) genes.
-
-        :param method: How to determine variation between samples:
-                        std: standard deviation
-                        mad: mean absolute deviation
-                        cv: coefficient of variation
-        :param n_max: Number of genes to keep. E.g. 1000 will give you the
-            top 1000 genes with highest variation between samples.
-        """
-        variation = self._calculate_gene_variation(method)
-        subset_genes = variation.sort_values(ascending=False).head(n_max)
-        self.df = self.df.loc[subset_genes.index]
 
     def quantile_normalize(self, ref_mappings: ExpressionMatrix | None = None):
         if ref_mappings is None:
@@ -399,6 +328,9 @@ class ExpressionMatrix:
     def to_expressionmatrix_training(self):
         assert type(self) != ExpressionMatrixTraining, 'Is already an ExpressionMatrixTraining object. Conversion is pointless.'
         return ExpressionMatrixTraining(self.df)
+
+    def save_for_limma(self, out_path: Path):
+        self.df.to_csv(out_path)
 
     def save_expression_to_txt(self, file_name: Path, do_standardize=True):
         """Save the expression values to txt.
@@ -670,6 +602,10 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         """
         one_group_df = one_group_df.drop('cluster_id', axis=1)
         expressions = one_group_df.mean()
+        expressions = self._annotate_sample_names_expressions(expressions)
+        return expressions
+
+    def _annotate_sample_names_expressions(self, expressions):
         updated_indices = pd.DataFrame(
             self.column_parser(expressions.index))
         if 'rep_nr' in updated_indices:
@@ -912,13 +848,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         :return: absolute correlation value
         """
         assert self.column_parser is not None, 'Explicitly provide a column_parser first'
-        match self.aggregation_method:
-            case AggregationMethod.EIGENGENE:
-                expressions = self._get_eigengene_over_time(one_group_df)
-            case AggregationMethod.MEAN:
-                expressions = self._get_mean_over_time(one_group_df)
-            case _:
-                raise NotImplementedError
+        expressions = self._aggregate_module_expressions_one_group(
+            one_group_df)
         expressions = expressions.reset_index()
         logging.warning("Can only correlate to one phenotype at the moment")
         for phenotype, metabolite_values in self.phenotype_dict.items():
@@ -929,6 +860,153 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             # TODO handle multiple phenotypes
             return abs(corr)
 
+    def plot_per_gene_mad(self) -> pd.Series:
+        """Plot per gene mean absolute deviation across samples"""
+        mad_series = self._calculate_per_gene_statistic('mad')
+        sns.histplot(mad_series)
+        plt.show()
+        return mad_series
+
+    def scatterplot_of_two_per_gene_stats(
+            self,
+            stat1: Literal['std', 'mean', 'mad', 'cv', 'qcd', 'cond_rmse'],
+            stat2: Literal['std', 'mean', 'mad', 'cv', 'qcd', 'cond_rmse'],
+            title: str = None,
+            out_path: str = None,
+            plotting_func = sns.scatterplot
+    ) -> pd.DataFrame:
+        """Show a scatterplot between summary statistics of each gene.
+        E.g. between mean expression and its standard deviation
+
+        :param stat1: Statistic shown on x-axis
+        :param stat2: Statistic shown on y-axis
+        """
+        stat_name_list = [stat1, stat2]
+        out_list = []
+        for stat_name in stat_name_list:
+            stat_list = self._calculate_per_gene_statistic(stat_name)
+            stat_list.name = stat_name
+            out_list.append(stat_list)
+
+        merged_df = pd.concat(out_list, axis=1, join='inner')
+        plotting_func(data=merged_df, x=stat1, y=stat2)
+        if title:
+            plt.suptitle(title)
+        if out_path:
+            plt.savefig(out_path)
+            plt.close()
+        else:
+            plt.show()
+        return merged_df
+
+    def keep_genes_above_deviation_cutoff(
+            self, cutoff: float = None,
+            method: Literal['std', 'mad', 'qcd'] = 'std'
+    ) -> None:
+        """Remove non-differentially expressed (de) genes.
+
+        :param method: How to determine variation between samples:
+                        std: standard deviation
+                        mad: mean absolute deviation
+                        qcd: quantile coefficient of dispersion
+        :param cutoff: Minimum standard deviation between samples
+                           for a gene to be included. Default: 1.0
+        """
+        variation = self._calculate_per_gene_statistic(method)
+        # Only keep genes that are above the cutoff
+        self.df = self.df[variation > cutoff]
+
+    def keep_genes_above_percentile_score(
+            self, quantile: float = None,
+            method = 'std'
+    ) -> None:
+        """Remove non-differentially expressed (de) genes.
+
+        :param method: How to determine variation between samples:
+                        std: standard deviation
+                        mad: mean absolute deviation
+                        qcd: quantile coefficient of dispersion
+        :param quantile: Quantile cutoff to select (e.g. to remove lowest 25%
+                         use .25)
+        """
+        variation = self._calculate_per_gene_statistic(method)
+        # Only keep genes that are above the cutoff
+        cutoff = variation.quantile(quantile)
+        self.df = self.df[variation > cutoff]
+
+    def keep_n_most_deviating_genes(self, n_max: int = None,
+                                    method: Literal['std', 'mad', 'cv', 'qcd'] = 'std') -> None:
+        """Remove non-differentially expressed (de) genes.
+
+        :param method: How to determine variation between samples:
+                        std: standard deviation
+                        mad: mean absolute deviation
+                        cv: coefficient of variation
+        :param n_max: Number of genes to keep. E.g. 1000 will give you the
+            top 1000 genes with highest variation between samples.
+        """
+        variation = self._calculate_per_gene_statistic(method)
+        subset_genes = variation.sort_values(ascending=False).head(n_max)
+        self.df = self.df.loc[subset_genes.index]
+
+    def _calculate_per_gene_statistic(
+            self,
+            method: Literal['std', 'mad', 'cv', 'qcd', 'cond_rmsd',
+            'norm_cond_rmsd', 'mean']
+    ) -> pd.Series:
+        """Calculate for each gene a statistic over all samples
+
+        :param method: Method to calculate over samples:
+                        std: standard deviation
+                        mad: mean absolute deviation
+                        cv: coefficient of variation
+                        qcd: quartile coefficient of dispersion
+                        cond_rmse: root mean square error of expression
+                        norm_cond_rmse: root mean square error of expression
+                            divided by standard deviation over all samples
+                        between treatment and control
+                        mean: mean expression over all samples
+        :return: Series containing output result for each gene
+        """
+
+        if method in ['qcd', 'cv']:
+            # Cannot take negative values:
+            # Subtract minimum value to all values, so qcd / cv does not
+            # get negative inputs
+            min_value = self.df.min().min()
+            if min_value < 0:
+                # all_num_df = self.df.apply(pd.to_numeric)
+                translated_df = self.df - min_value
+            else:
+                translated_df = self.df
+
+        # # Random snippet to plot compare measures
+        # self.df['qcd'] = translated_df.apply(calculate_qcd, axis=1)
+        # self.df['cv'] = translated_df.apply(calculate_coefficient_of_variation,
+        #                               axis=1)
+        # fig, axs = plt.subplots(2, 1)
+        # sns.stripplot(data=self.df, x='qcd', ax=axs[0], alpha=.5)
+        # sns.stripplot(data=self.df, x='cv', ax=axs[1], alpha=.5)
+        # plt.tight_layout()
+        # plt.show()
+        # logging.info(self.df[['qcd', 'cv']].corr('spearman'))
+
+        match method:
+            case 'mean':
+                return self.df.mean(axis=1)
+            case 'cond_rmsd':
+                return self.get_gene_rmse_difference_between_conditions()
+            case 'std':
+                return self.df.std(axis=1)
+            case 'mad':
+                return self.df.mad(axis=1)
+            case 'qcd':
+                return translated_df.apply(calculate_qcd, axis=1)
+            case 'cv':
+                return translated_df.apply(calculate_coefficient_of_variation,
+                                           axis=1)
+            case _:
+                raise NotImplementedError(f'{method} not available')
     def _get_cluster_expression_long_form(self, n_clusters: int):
         """Get dataframe which shows expression of clusters over time
         in long-form dataframe
@@ -1123,15 +1201,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             logging.warning(f'TF ({tf_name}) not present in dataframe')
             return np.nan
         module_expressions = self.df[self.df['cluster_id'] == module_index]
-        match self.aggregation_method:
-            case AggregationMethod.EIGENGENE:
-                module_expressions = self._get_eigengene_over_time(
-                    module_expressions)
-            case AggregationMethod.MEAN:
-                module_expressions = self._get_mean_over_time(
-                    module_expressions)
-            case _:
-                raise NotImplementedError
+        module_expressions = self._aggregate_module_expressions_one_group(
+            module_expressions)
         tf_expressions = self.df.loc[tf_name]
         tf_expressions = tf_expressions.drop('cluster_id')
         # Ensure that indices match between eigengene and transciption factor
@@ -1200,7 +1271,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             #'corr_to_phenotype': self._corr_to_phenotypes,
             'mean_pairwise_abs_cor': self._mean_pairwise_abs_cor,
             'var_through_time': self._get_eigengene_variation_over_time,
-            'difference_between_conditions': self._get_difference_between_conditions,
+            'difference_between_conditions': self._get_module_difference_between_conditions,
         }
         all_dfs = []
         for col_name, function_name in characteristics_dict.items():
@@ -1230,28 +1301,60 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         summary_df = summary_df.assign(tfbs_present=tfbs_score)
         return summary_df
 
-    def _get_difference_between_conditions(self, one_group_df: pd.DataFrame):
+    def _get_module_difference_between_conditions(self, one_group_df: pd.DataFrame):
         """Measure difference in expression of the module between two conditions
 
         :param one_group_df: Dataframe that contains expressions of genes in
                              one column. (Typically from .grouppby() method)
         :return: mean squared error
         """
-        match self.aggregation_method:
-            case AggregationMethod.EIGENGENE:
-                expressions = self._get_eigengene_over_time(one_group_df)
-            case AggregationMethod.MEAN:
-                expressions = self._get_mean_over_time(one_group_df)
-            case _:
-                raise NotImplementedError
+        expressions = self._aggregate_module_expressions_one_group(
+            one_group_df)
         expressions.name = 'expressions'
+        mse = self._calculate_mse_two_expression_series(expressions)
+        return mse
+
+    def get_gene_rmse_difference_between_conditions(self) -> pd.Series:
+        """For each gene calculate the MSE of its expression in
+        control vs treatment
+        """
+        annotated_df = self._annotate_sample_names_expressions(self.df.T)
+
+        control_series = annotated_df[annotated_df.index.get_level_values(
+            'condition').isin(['zero', self.condition_names[0]])]
+        treatment_series = annotated_df[annotated_df.index.get_level_values(
+            'condition').isin(['zero', self.condition_names[1]])]
+
+        control_series.index = control_series.index.droplevel('condition')
+        treatment_series.index = treatment_series.index.droplevel('condition')
+
+        rmse = mean_squared_error(control_series, treatment_series,
+                                  multioutput='raw_values',
+                                    squared=False)
+        rmse = pd.Series(rmse, index=annotated_df.columns)
+        rmse.name = 'mean_square_error'
+        return rmse
+
+        # def small_changing_function(x):
+        #     x.name = 'expressions'
+        #     return self._calculate_mse_two_expression_series(x)
+        # mse =  annotated_df.apply(small_changing_function)
+        # # TO speed up first split the df into two, then do substraction and squaring simultaneously
+        # logging.info('Calculating difference between gene expression in '
+        #              'samples, this is implemented quite poorly '
+        #              'so will probably take a while 🙃')
+        #
+        # return mse
+
+    def _calculate_mse_two_expression_series(self, expressions):
         # Split into drought and control time series
-        assert len(self.condition_names) == 2, (f'Can only calculate difference '
-                                                f'between two conditions.'
-                                                f' Now provides with'
-                                                f' {len(self.condition_names)}'
-                                                f'conditions: {self.condition_names}.'
-                                                f'Specify self.condition_names to get this workin properly.')
+        assert len(self.condition_names) == 2, (
+            f'Can only calculate difference '
+            f'between two conditions.'
+            f' Now provides with'
+            f' {len(self.condition_names)}'
+            f'conditions: {self.condition_names}.'
+            f'Specify self.condition_names to get this workin properly.')
         control_series = expressions[expressions.index.get_level_values(
             'condition').isin(['zero', self.condition_names[0]])].reset_index()
         drought_series = expressions[expressions.index.get_level_values(
@@ -1259,9 +1362,19 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         # Ensure that in similar order and everything matches
         merged = control_series.merge(drought_series, on='time',
                                       suffixes=['_control', '_condition'])
+        mse = mean_squared_error(merged['expressions_control'],
+                                 merged['expressions_condition'])
+        return mse
 
-        return mean_squared_error(merged['expressions_control'],
-                                  merged['expressions_condition'])
+    def _aggregate_module_expressions_one_group(self, one_group_df):
+        match self.aggregation_method:
+            case AggregationMethod.EIGENGENE:
+                expressions = self._get_eigengene_over_time(one_group_df)
+            case AggregationMethod.MEAN:
+                expressions = self._get_mean_over_time(one_group_df)
+            case _:
+                raise NotImplementedError
+        return expressions
 
     @staticmethod
     def _mean_pairwise_abs_cor(one_group_df: pd.Dataframe) -> float | np.floating:
