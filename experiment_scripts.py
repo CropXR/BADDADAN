@@ -1,3 +1,4 @@
+from copy import deepcopy
 from pathlib import Path
 from typing import Dict
 
@@ -26,17 +27,17 @@ from helpers import get_info_from_emtab375
 def prefilter_genes_experiment(experiment_path):
 
     data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
+
     expr_mat_time_drought = expr_mat_from_drought(
-        data_params['drought_path'],
+        data_params['limma_drought_out_path'],
         hyper_params['agg_method'],
-        hyper_params['do_log2_drought'],
-        out_path = data_params['limma_drought_out_path'])
+        hyper_params['do_log2_drought'])
+
     expr_mat_time_heat = expr_mat_from_emexp(
-        data_params['heat_path'],
+        data_params['limma_heat_out_path'],
         hyper_params['agg_method'],
         hyper_params['do_log2_heat'],
-        data_params['heat_gpl_path'],
-        out_path = data_params['limma_heat_out_path']
+        data_params['heat_gpl_path']
     )
 
     cv_list = []
@@ -112,7 +113,7 @@ def figure_2_pipeline(experiment_path):
 
         if folder.name.startswith('drought'):
             expr_mat_time = expr_mat_from_drought(
-                soft_file_path=data_params['soft_path'],
+                in_file_path=data_params['soft_path'],
                 agg_method=hyper_params['agg_method'],
                 do_log2=hyper_params['do_log2']
             )

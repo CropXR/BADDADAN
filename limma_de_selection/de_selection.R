@@ -91,6 +91,10 @@ do_drought <- function(){
   
   out_df <- df[rownames(out_table),]
   
+  original_headers <- colnames(read.csv(drought_path, check.names=FALSE))
+  
+  colnames(out_df) <- original_headers[-1]
+  
   write.csv(out_df, drought_out_path)
   # Cols are samples, rows are genes, values are expression values in csv
 }
@@ -125,10 +129,15 @@ do_heat <- function(){
   
   out_table = topTable(fit, coef=8:12, number=nrow(df), p.value=.05)
   
-  out_df <- df[rownames(out_table),]
+  # Remove first column again
+  out_df <- df[rownames(out_table),-1]
   
+  
+  original_headers <- colnames(read.csv(heat_path, check.names=FALSE))
+  
+  colnames(out_df) <- original_headers[-1]
+  # Reuse old column names
   write.csv(out_df, heat_out_path)
-  
   
   # AT5G52640 hsp90
   "AT5G52640" %in% rownames(out_table)
