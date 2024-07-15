@@ -15,7 +15,7 @@ data:
 hyperparams:
   nr_clusters: 500
   agg_method: 'mean'
-  do_log2_drought: True
+  do_log2_drought: False
   do_log2_heat: False
   edge_corr_threshold: .3
   top_nr_clusters: 5

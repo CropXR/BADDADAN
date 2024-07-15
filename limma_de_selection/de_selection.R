@@ -12,6 +12,10 @@ library(limma)
 library(splines)
 library(ggplot2)
 
+# Load required library
+# install.packages("VennDiagram")
+library(VennDiagram)
+
 # DROUGHT FIRST AND SCREW THE FUNCTIONS I'LL JUST COPY PASTE THE CODE :O
 do_drought <- function(){
   drought_path = 'drought_expr_matrix.csv'
@@ -99,6 +103,62 @@ do_drought <- function(){
   # Cols are samples, rows are genes, values are expression values in csv
 }
 
+do_drought_spline <- function(){
+  drought_path = 'drought_expr_matrix.csv'
+  drought_out_path = 'drought_expr_matrix_limma_spline_filtered.csv'
+  
+  
+  df = read.csv(drought_path, header=TRUE, row.names=1)
+  
+  # Do some limma checks to see if samples are alright
+  plotMA(df)
+  plotMDS(df)
+  
+  # Identify the column(s) with condition 'zero'
+  zero_cols <- grep("zero", colnames(df), value = TRUE)
+  
+  # Duplicate the identified column(s) and rename them
+  for (col in zero_cols) {
+    new_control_col <- sub("zero", "control", col)
+    new_drought_col <- sub("zero", "drought", col)
+    
+    # Add the new columns to the dataframe
+    df[[new_control_col]] <- df[[col]]
+    df[[new_drought_col]] <- df[[col]]
+  }
+  
+  # Remove the columns with 'zero' in their names
+  df <- df[, !colnames(df) %in% zero_cols]
+  
+  cols = colnames(df)
+  split_data <- strsplit(cols, "\\.")
+  targets <- do.call(rbind, split_data)
+  targets <- as.data.frame(targets, stringsAsFactors = FALSE)
+  colnames(targets) <- c("Time", "Condition", "Replicate")
+  targets$Time <- as.numeric(gsub("X", "", targets$Time))
+  
+  nat_spline <- ns(targets$Time, df=5)
+  
+  group <- factor(targets$Condition)
+  design <- model.matrix(~group*nat_spline)
+  
+  fit <- lmFit(df, design)
+  fit <- eBayes(fit)
+  
+  out_table = topTable(fit, coef=8:12, number=nrow(df), p.value=.05)
+  
+  
+  # Save data for using in python again
+  out_df <- read.csv(drought_path, header=TRUE, row.names=1, check.names = FALSE)
+  out_df <- out_df[rownames(out_table),]
+  
+  write.csv(out_df, drought_out_path)
+  # Do some limma checks to see if samples are alright
+  plotMA(out_df)
+  plotMDS(out_df)
+}
+
+
 
 do_heat <- function(){
   heat_path = 'heat_expr_matrix.csv'
@@ -106,6 +166,9 @@ do_heat <- function(){
   heat_target_path = 'heat_sample_metadata.csv'
   df = read.csv(heat_path, header=TRUE, row.names=1)
   df = log2(df)
+  
+  plotMDS(df, cex=.5)
+  
   
   # Read sample annotations
   heat_targets_df <- read.csv(heat_target_path)
@@ -219,7 +282,49 @@ do_heat <- function(){
   
 }
 
+compare_spline_vs_normal_de_drought <- function(){
+  drought_out_path = 'drought_expr_matrix_limma_filtered.csv'
+  drought_out_spline_path = 'drought_expr_matrix_limma_spline_filtered.csv'
+  
+
+  
+  # Read the two CSV files
+  df1 <- read.csv(drought_out_path, row.names = 1)
+  df2 <- read.csv(drought_out_spline_path, row.names = 1)
+  
+  # Get the row names of both dataframes
+  rows_df1 <- rownames(df1)
+  rows_df2 <- rownames(df2)
+  
+  # Find overlapping and unique row names
+  overlap <- intersect(rows_df1, rows_df2)
+  unique_df1 <- setdiff(rows_df1, rows_df2)
+  unique_df2 <- setdiff(rows_df2, rows_df1)
+  
+  # Print the results
+  cat("Number of overlapping row names: ", length(overlap), "\n")
+  cat("Number of unique row names in pairwise DE: ", length(unique_df1), "\n")
+  cat("Number of unique row names in spline DE: ", length(unique_df2), "\n")
+  
+  # Optional: Create a Venn Diagram
+  venn.plot <- venn.diagram(
+    x = list(file1 = rows_df1, file2 = rows_df2),
+    category.names = c("pairwise DE", "spline DE"),
+    filename = NULL
+  )
+  
+  # Display the Venn Diagram
+  grid.newpage()
+  grid.draw(venn.plot)
+  
+  
+}
+
 
 do_drought()
 
 do_heat()
+
+do_drought_spline()
+
+compare_spline_vs_normal_de_drought()

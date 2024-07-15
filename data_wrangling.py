@@ -118,7 +118,7 @@ def calculate_linkage_matrix_from_atted_ii(in_path: Path, out_dir: Path):
         out_path = out_dir / f'{in_path.stem}_{method}_linkage.npy'
         np.save(out_path, linkage_matrix)
 
-def expr_mat_from_emexp(in_path, agg_method, do_log2, gpl_path, out_path):
+def expr_mat_from_emexp(in_path, agg_method, do_log2, gpl_path=None, out_path=None):
     if in_path.endswith('csv'):
         expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
             in_path,

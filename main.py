@@ -19,7 +19,8 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, \
 from analysis_pipelines import compare_clusterings_for_ode_use
 from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
     exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline, \
-    config_preprocess, prefilter_genes_experiment
+    config_preprocess, prefilter_genes_experiment, drought_from_wgcna, \
+    wgcna_with_similarity_scores
 from helpers import plot_y_and_y_hat, get_info_from_gse65046
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
@@ -455,7 +456,7 @@ def camila_red_panda(soft_file_in_path: Path,
 
 def main():
     # ONLY EDIT THESE LINES
-    name = '10_prefiltering_genes'
+    name = '15_wgcna_with_similarity_scores'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -483,12 +484,20 @@ def main():
             heat_data_e2e_pipeline(experiment_path)
         case '10_prefiltering_genes':
             prefilter_genes_experiment(experiment_path)
-        case '12_drought_data_end_to_end':
+        case '11_heat_data_with_gene_prefilter_and_zscore_proper':
+            heat_data_e2e_pipeline(experiment_path)
+        case '12_drought_data_with_gene_prefilter_and_zscore_proper':
             # Full pipeline for drought
             drought_data_e2e_pipeline(experiment_path)
-
+        case '13_drought_data_with_spline_gene_prefilter_and_zscore_proper':
+            # Full pipeline for drought
+            drought_data_e2e_pipeline(experiment_path)
+        case "14_drought_from_wgcna":
+            drought_from_wgcna(experiment_path)
+        case "15_wgcna_with_similarity_scores":
+            wgcna_with_similarity_scores(experiment_path)
         case _:
-            raise NotImplementedError
+                raise NotImplementedError(f'{name} not found')
 
     _, _, experiment_params = config_preprocess(
         experiment_path)

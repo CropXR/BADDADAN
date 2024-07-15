@@ -54,18 +54,72 @@ def save_local_distance_matrix(soft_file_path: Path, do_log_2: bool,
     dist_local = expr_mat_time.get_distance_matrix()
     print()
 
-def sum_local_distance_and_atted(local_dist_path: Path, atted_path: Path,
+def similarity_matrices_local_and_atted(expr_mat: ExpressionMatrixTimeSeries,
+                                        atted_path: Path,
+                                        out_path: Path):
+    local_corr = expr_mat.get_similarity_matrix()
+    # local_corr.to_csv(out_path / 'local_similarity.csv')
+    atted_corr = pd.read_parquet(atted_path)
+    atted_corr = atted_corr.set_index(atted_corr.columns[0])
+    # atted_corr.to_csv(out_path / 'atted_all_genes_unnormalised.csv')
+
+
+    # get intersection
+    selected_genes = atted_corr.index.intersection(local_corr.index)
+    local_corr = local_corr.loc[selected_genes, selected_genes]
+    atted_corr = atted_corr.loc[selected_genes, selected_genes]
+
+    expr_mat.df = expr_mat.df.loc[expr_mat.df.index.isin(selected_genes), :]
+    expr_mat.df.to_csv(out_path / 'expression_de_atted_overlap_genes.csv')
+
+    atted_score_flat = squareform(atted_corr, checks=False)
+    sns.histplot(atted_score_flat)
+    plt.show()
+
+    atted_score_flat_norm = atted_score_flat - min(atted_score_flat)
+    atted_score_flat_norm = atted_score_flat_norm / max(atted_score_flat_norm)
+
+    sns.histplot(atted_score_flat_norm)
+    plt.show()
+
+    atted_score_norm = squareform(atted_score_flat_norm)
+    atted_score_norm = pd.DataFrame(atted_score_norm, index=atted_corr.index, columns=atted_corr.columns)
+
+    atted_score_norm.to_csv(out_path / 'atted_selected_genes_similarity.csv')
+    # Plot both distributions
+    local_dist_flat = squareform(local_dist)
+
+
+    sns.histplot(local_dist_flat, binwidth=.2, element='step', fill=False, common_norm=False)
+    sns.histplot(atted_dist_flat, binwidth=.2, element='step', fill=False, common_norm=False)
+    plt.legend(['Local Distances', 'Atted Distances'])
+
+    plt.savefig(out_path / 'raw_input_distances.png')
+    plt.close()
+
+    # Convert into z-scores
+    local_dist_flat_norm = (local_dist_flat - np.mean(
+        local_dist_flat)) / np.std(local_dist_flat)
+
+    sns.histplot(local_dist_flat_norm, binwidth=.2, element='step', fill=False, common_norm=False)
+    sns.histplot(atted_dist_flat_norm, binwidth=.2, element='step', fill=False, common_norm=False)
+    plt.legend(['Local Distances', 'Atted Distances'])
+    plt.savefig(out_path / 'normalised_distances.png')
+    plt.close()
+
+
+
+def sum_local_distance_and_atted(local_dist: pd.DataFrame, atted_path: Path,
                                  out_path: Path):
     """Get sum of local distances and atted_distances to
     do distances simulatenously
 
-    :param local_dist_path: Path to local distances
+    :param local_dist: Dataframe of local distances
     :param atted_path: Path to raw Atted scores
     :param out_path: directories in which output files should be stored
     """
     atted_score = pd.read_parquet(atted_path)
     atted_score = atted_score.set_index(atted_score.columns[0])
-    local_dist = pd.read_pickle(local_dist_path)
     # toy_size = 5000
     # atted_score = atted_score.iloc[:toy_size, :toy_size]
     # local_dist = local_dist.iloc[:toy_size, :toy_size]
@@ -103,9 +157,9 @@ def sum_local_distance_and_atted(local_dist_path: Path, atted_path: Path,
 
     summed_distances = local_dist_flat_norm + atted_dist_flat_norm
 
-    sns.histplot(summed_distances, binwidth=.2, element='step', fill=False)
-    plt.savefig(out_path / 'summed_distances.png')
-    plt.close()
+    # sns.histplot(summed_distances, binwidth=.2, element='step', fill=False)
+    # plt.savefig(out_path / 'summed_distances.png')
+    # plt.close()
 
     no_negative = summed_distances - np.min(summed_distances)
     square_no_negative = squareform(no_negative)
@@ -119,7 +173,7 @@ def sum_local_distance_and_atted(local_dist_path: Path, atted_path: Path,
                                   columns=local_dist.index)
 
     summed_dist_df.to_parquet(
-        out_path / 'atted_local_dist_emtab375_summed_no_negative.parquet.gzip',
+        out_path / 'atted_local_dist_summed_no_negative.parquet.gzip',
                               compression='gzip')
 
     dist_dict = {'atted': atted_dist_flat_norm,
@@ -135,6 +189,15 @@ def sum_local_distance_and_atted(local_dist_path: Path, atted_path: Path,
             linkage_matrix = linkage(input_dists, method=method)
             np_path = out_path / f'{input_dist_name}_distances_{method}_linkage.npy'
             np.save(np_path, linkage_matrix)
+
+    sns.clustermap(squareform(atted_dist_flat_norm),
+                   row_linkage=np.load(out_path / f'atted_distances_complete_linkage.npy'),
+                   col_linkage=np.load(out_path / f'atted_distances_complete_linkage.npy'),
+                   )
+    plt.show()
+
+
+    return dist_dict
 
 
 def rand_index_both_clusterings(tf2_input_1, tf2_input_2):

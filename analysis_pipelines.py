@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Callable, Dict
 
 import dill as pickle
+import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
@@ -184,11 +185,28 @@ def assign_clusters_and_infer_intermodular_network(
         tf2_in_name: str,
         tf2_out_name: str):
     """Cluster expression matrix, and infer intermodular network"""
+
     expr_mat_time.assign_clusters_from_linkage_matrix(
         summed_linkage_matrix,
         nr_clusters,
         distance_matrix_path=summed_dist_matrix_path)
+    # TODO actually put some plotting stuff things in here for visual inspection
+    sns.clustermap(expr_mat_time.df.iloc[:, :-1],
+                  row_linkage=np.load(summed_linkage_matrix),
+                  z_score=0)
+    plt.show()
 
+    sns.clustermap(
+        expr_mat_time.get_distance_matrix(),
+        row_linkage=np.load('data/experiments/12_drought_data_with_gene_prefilter_and_zscore_proper/local_distances_complete_linkage.npy'),
+        col_linkage=np.load('data/experiments/12_drought_data_with_gene_prefilter_and_zscore_proper/local_distances_complete_linkage.npy'),)
+    plt.show()
+
+
+    sns.clustermap(pd.read_parquet(summed_dist_matrix_path))
+    plt.show()
+
+    expr_mat_time.plot_sample_gene_heatmap()
     # explained_vars = expr_mat_time.get_all_explained_vars()
 
     expr_mat_time.plot_cluster_sizes(experiment_path / 'cluster_sizes.png')
@@ -383,3 +401,4 @@ def module_network_from_tf2_output(expr_mat_time,
     module_module.plot_network(with_labels=True, out_path=module_plot_path)
     logging.info(list(module_module.graph.edges(data=True)))
     return module_module
+

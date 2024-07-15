@@ -31,7 +31,7 @@ import qnorm
 from scipy.integrate._ivp.ivp import OdeResult
 from scipy.spatial.distance import pdist, squareform
 from sklearn.decomposition import PCA
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, silhouette_score
 
 from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628, standardize, \
@@ -438,6 +438,29 @@ class ExpressionMatrix:
                            to link the linkage matrix back to the gene names
         """
         linkage_matrix = np.load(linkage_matrix_path)
+        # assert len(linkage_matrix) == len(self.df-1), f"""
+        #     Size of linkage matrix ({len(linkage_matrix) = }), is not equal to
+        #     size of expression matrix - 1 ({len(self.df) - 1 = })
+        # """
+        do_optimise = False
+        cluster_nrs = [i for i in range(2,10)] + [i for i in range(10, len(self.df), 10)]
+
+        if do_optimise:
+
+            out_list = []
+            dist_matrix = pd.read_parquet(distance_matrix_path)
+            for n_cluster in cluster_nrs:
+                logging.info(f'{n_cluster} clusters being evalueated')
+                clustering = fcluster(linkage_matrix,
+                                      n_cluster,
+                             'maxclust')
+                score = silhouette_score(dist_matrix, clustering, metric='precomputed')
+                out_list.append((n_cluster, score))
+            df = pd.DataFrame.from_records(out_list,
+                                           columns=['n_cluster', 'score'])
+            sns.lineplot(data=df, x='n_cluster', y='score')
+            plt.show()
+            nr_clusters = df.loc[df['score'].idxmax()]['n_cluster']
         self._cluster_from_linkage_matrix(linkage_matrix, nr_clusters, distance_matrix_path)
 
     def _cluster_from_linkage_matrix(self, linkage_matrix: np.ndarray,
@@ -681,10 +704,15 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         dist = self.get_distance_matrix()
         dist.to_pickle(out_path)
 
-    def get_distance_matrix(self) -> pd.DataFrame:
+    def get_distance_matrix(self, absolute_dist=False) -> pd.DataFrame:
         """Get correlation-based pairwise distance"""
-        dist = pdist(self.df, metric='correlation')
-        square_dist = squareform(dist)
+        if not absolute_dist:
+            dist = pdist(self.df, metric='correlation')
+            square_dist = squareform(dist)
+        else:
+            square_dist = self.df.T.corr()
+            square_dist = 1 - abs(square_dist)
+
         dist_df = pd.DataFrame(square_dist, index=self.df.index, columns=self.df.index)
         return dist_df
 
@@ -1684,3 +1712,38 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
         (tf2_out_path.parent / 'tf2network_output.tsv').rename(tf2_out_path.with_name(tf2_out_path.name))
         print()
+
+    def assign_clusters_from_wgcna(self, wgcna_module_assignment):
+        assignment_df = pd.read_csv(wgcna_module_assignment, index_col='gene_id', usecols=['gene_id','colors'])
+        # Map colours to index
+        mapping_dict = {colour: i for (i, colour) in enumerate(assignment_df['colors'].unique())}
+        logging.info(mapping_dict)
+        assignment_df['cluster_id'] = assignment_df['colors'].map(mapping_dict)
+        assignment_df = assignment_df.drop('colors', axis=1)
+        self._apply_cluster_mapping_from_df(assignment_df)
+
+    def do_genewise_normalisation(self):
+
+        # Correct axis
+        if self.has_been_clustered:
+            clusters = self.df['cluster_id']
+            self.df = self.df.drop('cluster_id', axis=1)
+
+        self.df = self.df.apply(lambda x: (x - x.mean()) / x.std(), axis=1)
+        assert np.all(self.df.mean(axis=1) < 0.01)
+
+        if self.has_been_clustered:
+            self.df['cluster_id'] = clusters
+
+    def get_correlation_matrix(self) -> pd.DataFrame:
+        assert not self.has_been_clustered
+        return self.df.T.corr()
+
+    def get_similarity_matrix(self)-> pd.DataFrame:
+        """Get signed similarity matrix that can be used to cluster in WGCNA
+        """
+        cor_matrix = self.get_correlation_matrix()
+        similarity_matrix = (1 + cor_matrix) / 2
+        return similarity_matrix
+
+

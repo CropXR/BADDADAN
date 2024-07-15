@@ -6,8 +6,7 @@ experiment_data:
 data:
   in_path: 'limma_de_selection/drought_expr_matrix_limma_filtered.csv'
   atted_path: "data/raw_data/atted_ii/all_cor_one_matrix_renamed.parquet.gzip"
-  linkage_path: 'data/experiments/12_drought_data_with_gene_prefilter_and_zscore_proper/summed_distances_complete_linkage.npy'
-  dist_matrix_path: 'data/experiments/12_drought_data_with_gene_prefilter_and_zscore_proper/atted_local_dist_summed_no_negative.parquet.gzip'
+  dist_matrix_path: ''
   tf2_in_name: '01_tf2_input.txt'
   tf2_out_name: '02_summed_dists_tf2network_output.tsv'
 hyperparams:
