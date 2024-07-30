@@ -76,6 +76,12 @@ class ExpressionMatrix:
                 f' and columns {self.df.columns.to_list()}')
 
     @classmethod
+    def from_xlsx(cls, file_path, gpl_path: str = None,
+                  log2_transform: bool = False):
+        df = pd.read_excel(file_path, index_col=0)
+        return cls._from_df_to_object(df, gpl_path, log2_transform)
+
+    @classmethod
     def from_csv(cls, file_path: Path, log2_transform: bool = False,
                  sep: str = ',', gpl_path: str = None):
         """Create ExpressionMatrix from csv with genes in row and expression per sample in col
@@ -88,6 +94,11 @@ class ExpressionMatrix:
         Download from e.g. https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL198
         """
         df = pd.read_csv(file_path, sep=sep, index_col=0)
+        return cls._from_df_to_object(df, gpl_path, log2_transform)
+
+    @classmethod
+    def _from_df_to_object(cls, df, gpl_path, log2_transform):
+        """From a dataframe, construct ExpressionMatrix object"""
         if log2_transform:
             df = np.log2(df)
         if gpl_path:
@@ -288,8 +299,11 @@ class ExpressionMatrix:
         return std_series
 
     def plot_sample_gene_heatmap(self, standard_scale=0) -> None:
-        sns.clustermap(self.df, method='complete', metric='correlation',
-                       yticklabels=False, xticklabels=False, standard_scale=standard_scale)
+        if self.has_been_clustered:
+            df = self.df.drop('cluster_id', axis=1)
+        sns.clustermap(df, method='complete', metric='correlation',
+                       yticklabels=False, xticklabels=True,
+                       standard_scale=standard_scale)
         plt.show()
 
     def get_module_sizes(self):
@@ -963,7 +977,8 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         self.df = self.df[variation > cutoff]
 
     def keep_n_most_deviating_genes(self, n_max: int = None,
-                                    method: Literal['std', 'mad', 'cv', 'qcd'] = 'std') -> None:
+                                    method: Literal['std', 'mad', 'cv', 'qcd'] = 'std',
+                                    plot=False) -> None:
         """Remove non-differentially expressed (de) genes.
 
         :param method: How to determine variation between samples:
@@ -974,7 +989,11 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             top 1000 genes with highest variation between samples.
         """
         variation = self._calculate_per_gene_statistic(method)
-        subset_genes = variation.sort_values(ascending=False).head(n_max)
+        sorted_genes = variation.sort_values(ascending=False)
+        if plot:
+            sns.lineplot(sorted_genes.head(10000).to_list())
+            plt.show()
+        subset_genes = sorted_genes.head(n_max)
         self.df = self.df.loc[subset_genes.index]
 
     def _calculate_per_gene_statistic(
@@ -1745,5 +1764,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         cor_matrix = self.get_correlation_matrix()
         similarity_matrix = (1 + cor_matrix) / 2
         return similarity_matrix
+
+
 
 

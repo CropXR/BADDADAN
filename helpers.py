@@ -9,7 +9,7 @@ import numpy as np
 import requests
 import seaborn as sns
 import pandas as pd
-from scipy.spatial.distance import euclidean
+from scipy.spatial.distance import euclidean, squareform
 from scipy.stats import bootstrap
 from lmfit import Parameters
 from matplotlib import pyplot as plt
@@ -235,6 +235,62 @@ def calculate_parameter_distance(guessed_params: Parameters,
     param_array2 = [v.value for v in true_params.values()]
     return euclidean(param_array1, param_array2)
 
+def parse_string_input_data(filter_by_de=False):
+    aliases_path = "data/raw_data/string_db/3702.protein.aliases.v12.0.txt"
+    links_path = "data/raw_data/string_db/3702.protein.links.v12.0.txt"
+
+    # Convert to square matrix of scores
+
+
+    aliases_df = pd.read_csv(aliases_path, sep='\t')
+    aliases_df = aliases_df[aliases_df['source'] == "KEGG_KEGGID_SHORT"]
+    aliases_df = aliases_df.drop('source', axis=1)
+    aliases_df = aliases_df.set_index('#string_protein_id')
+    alias_dict = aliases_df.to_dict()
+    links_df = pd.read_csv(links_path, sep=' ')
+    links_df.head()
+    # logging.info(
+    #     sum(links_df['protein2'].isin(aliases_df['#string_protein_id'])) / len(
+    #         links_df))
+
+    df_pivot = links_df.pivot(index='protein1', columns='protein2',
+                        values='combined_score', )
+
+
+
+    df_pivot.index = df_pivot.index.map(
+        lambda x: alias_dict['alias'].get(x, x)
+    )
+    df_pivot.columns = df_pivot.columns.map(
+        lambda x: alias_dict['alias'].get(x, x)
+    )
+
+
+
+    if filter_by_de:
+        de_df = pd.read_csv('limma_de_selection/drought_expr_matrix_limma_filtered.csv', index_col=0)
+
+        empty_df = pd.DataFrame(index=de_df.index, columns=de_df.index)
+        selected_genes_df, de_df, common_genes = keep_common_genes_in_dfs(
+            df_pivot, empty_df
+        )
+        selected_genes_df = selected_genes_df.fillna(0)
+        return selected_genes_df
+    else:
+        return df_pivot
+    # Some additional analysis
+    flat_string = squareform(selected_genes_df)
+    flat_string = flat_string / max(flat_string)
+    flat_string_dist = 1 - flat_string
+    sns.histplot(flat_string)
+    plt.yscale('log')
+    plt.show()
+
+    return flat_string_dist
+
+
+
+
 
 def do_pca(df: pd.DataFrame) -> np.ndarray:
     """Represent a module as the value of its first principal component.
@@ -397,3 +453,11 @@ def call_string_db(list_of_genes: list, species:int, method="ppi_enrichment",) -
         # order by pvalue
         results = results.sort_values(by="fdr", ascending=True)
         return results
+
+
+def keep_common_genes_in_dfs(df1, df2):
+    # get intersection
+    selected_genes = df1.index.intersection(df2.index)
+    df1 = df1.loc[selected_genes, selected_genes]
+    df2 = df2.loc[selected_genes, selected_genes]
+    return df1, df2, selected_genes

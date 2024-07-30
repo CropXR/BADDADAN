@@ -20,8 +20,10 @@ from analysis_pipelines import compare_clusterings_for_ode_use
 from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
     exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline, \
     config_preprocess, prefilter_genes_experiment, drought_from_wgcna, \
-    wgcna_with_similarity_scores
-from helpers import plot_y_and_y_hat, get_info_from_gse65046
+    wgcna_with_similarity_scores, drought_with_string_db, \
+    integrate_multiple_datasets, generate_dists_for_wgcna_cutting
+from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
+    parse_string_input_data
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
 # pd.options.display.width = 0
@@ -61,7 +63,7 @@ def annotate_microarray_expression(
             logging.info('Detected .csv file')
             expression_matrix = ExpressionMatrix.from_csv(expression_path,
                                                           log2_transform,
-                                                          csv_separator)
+                                                          sep=csv_separator)
         case _:
             raise NotImplementedError(
                 'Cannot parse file format that is currently provided')
@@ -456,11 +458,13 @@ def camila_red_panda(soft_file_in_path: Path,
 
 def main():
     # ONLY EDIT THESE LINES
-    name = '15_wgcna_with_similarity_scores'
+    name = '18_robustness_with_wgcna_cutting'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
     ##  This all shouldn't have to be changed ##
+
+    experiment_path.mkdir(exist_ok=True)
     logging.basicConfig(level=logging.INFO,
                         handlers=[logging.FileHandler(experiment_path / "log.log"),
                                   logging.StreamHandler()])
@@ -496,8 +500,17 @@ def main():
             drought_from_wgcna(experiment_path)
         case "15_wgcna_with_similarity_scores":
             wgcna_with_similarity_scores(experiment_path)
+        case "16_incorporating_string":
+            drought_with_string_db(experiment_path)
+        case "17_from_multiple_experiments":
+            integrate_multiple_datasets(experiment_path)
+        case "18_robustness_with_wgcna_cutting":
+            generate_dists_for_wgcna_cutting(experiment_path)
+            # RUN R CODE
+            # compare_
+
         case _:
-                raise NotImplementedError(f'{name} not found')
+            raise NotImplementedError(f'{name} not found')
 
     _, _, experiment_params = config_preprocess(
         experiment_path)

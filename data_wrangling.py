@@ -121,15 +121,10 @@ def calculate_linkage_matrix_from_atted_ii(in_path: Path, out_dir: Path):
 def expr_mat_from_emexp(in_path, agg_method, do_log2, gpl_path=None, out_path=None):
     if in_path.endswith('csv'):
         expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
-            in_path,
-            log2_transform=do_log2,
-        )
+            in_path, log2_transform=do_log2)
     else:
         expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
-            in_path,
-            log2_transform=do_log2,
-            gpl_path=gpl_path
-        )
+            in_path, log2_transform=do_log2, gpl_path=gpl_path)
     expr_mat_time.keep_only_samples_with_string('normal light')
     expr_mat_time.summary_method = agg_method
     expr_mat_time.condition_names = ['21', '32']
@@ -142,9 +137,7 @@ def expr_mat_from_emexp(in_path, agg_method, do_log2, gpl_path=None, out_path=No
 def expr_mat_from_drought(in_file_path: str, agg_method, do_log2, out_path = None):
     if in_file_path.endswith('csv'):
         expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
-            in_file_path,
-            log2_transform=do_log2,
-        )
+            in_file_path, log2_transform=do_log2)
     else:
         expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
             in_file_path,

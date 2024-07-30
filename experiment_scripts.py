@@ -1,5 +1,7 @@
+import logging
 from copy import deepcopy
 from pathlib import Path
+from random import sample
 from typing import Dict
 
 import dill as pickle
@@ -8,6 +10,7 @@ import pandas as pd
 import yaml
 import seaborn as sns
 import matplotlib.pyplot as plt
+from scipy.spatial.distance import squareform
 
 from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
 from DynamicModels.OdeLocalParameters import OdeLocalParameters
@@ -18,12 +21,12 @@ from Expressions.ExpressionMatrix import AggregationMethod, \
     ExpressionMatrixTimeSeries
 from analysis_pipelines import assign_clusters_and_infer_intermodular_network, \
     explore_emtab_375, compare_clusterings_for_ode_use, \
-    module_network_from_tf2_output
+    module_network_from_tf2_output, infer_intermodular_network
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 
 from exploring_questions import plot_module_size_distributions, \
-    sum_local_distance_and_atted, similarity_matrices_local_and_atted
-from helpers import get_info_from_emtab375
+    combine_local_distance_and_prior, similarity_matrices_local_and_atted
+from helpers import get_info_from_emtab375, parse_string_input_data
 
 
 def prefilter_genes_experiment(experiment_path):
@@ -198,6 +201,96 @@ def drought_from_wgcna(experiment_path,
 
     return expr_mat_time, module_module
 
+def integrate_multiple_datasets(experiment_path):
+    # Download some GEO here
+    expr_mat_time_supp = ExpressionMatrixTimeSeries.from_xlsx(
+        'data/raw_data/expression_datasets/GSE134945/GSE134945_readcount.xlsx')
+    expr_mat_time_supp.keep_n_most_deviating_genes(2000, plot=True)
+    # TODO THINK ABOUT TPKM NORMALISE OR SMTH?
+    # sns.clustermap(expr_mat_time_supp.get_correlation_matrix())
+    # plt.show()
+
+    # data_params, hyper_params, experiment_params = config_preprocess(
+    #     experiment_path)
+    expr_mat_time_og = expr_mat_from_drought(
+        'limma_de_selection/drought_expr_matrix_limma_filtered.csv',
+                      'mean',
+                      False)
+
+    linkage_matrices = combine_local_distance_and_prior(
+        expr_mat_time_og.get_distance_matrix(absolute_dist=False),
+        expr_mat_time_supp.get_distance_matrix(absolute_dist=False),
+        out_path=experiment_path,
+        combo='sum')
+
+
+
+def generate_dists_for_wgcna_cutting(experiment_path):
+    data_params, hyper_params, experiment_params = config_preprocess(
+        experiment_path)
+    expr_mat_time = expr_mat_from_drought(data_params['in_path'],
+                                          hyper_params['agg_method'],
+                                          hyper_params['do_log2'])
+
+    atted_score = pd.read_parquet(data_params['atted_path'])
+    atted_score = atted_score.set_index(atted_score.columns[0])
+
+    # Make atted symmetric
+    a = squareform(atted_score, checks=False)
+    a = squareform(a)
+    atted_score = pd.DataFrame(a,
+                               index=atted_score.index,
+                               columns=atted_score.columns)
+
+    local_dist = expr_mat_time.get_distance_matrix(absolute_dist=False)
+
+    # Merge them to be the same set
+    selected_genes = atted_score.index.intersection(local_dist.index)
+    local_dist = local_dist.loc[selected_genes, selected_genes]
+    atted_score = atted_score.loc[selected_genes, selected_genes]
+
+    # Save full dists
+    local_dist.to_parquet(experiment_path
+                               / 'drought' / 'full_datasets' / 'local_dists.parquet.gzip',
+                                   compression='gzip')
+
+
+    for i in range(hyper_params['nr_jackknifes']):
+        logging.info(f'Iteration {i+1}')
+        rand_index = sample(
+            local_dist.index.tolist(),
+            round(hyper_params['subset_size'] * len(local_dist.index.tolist()))
+        )
+        # From subset get local and global dists
+        subset_local_df = local_dist.loc[rand_index, rand_index]
+        subset_atted_df = atted_score.loc[rand_index, rand_index]
+
+        subset_atted_dist_df = subset_atted_df.max().max() - subset_atted_df
+
+        subset_local_df.to_parquet(experiment_path
+                               / 'drought' / 'jackknifes' / 'local'
+                               / f'jackknife_{i}.parquet.gzip',
+                                   compression='gzip')
+
+        subset_atted_dist_df.to_parquet(experiment_path
+                               / 'drought' / 'jackknifes' / 'atted'
+                               / f'jackknife_{i}.parquet.gzip',
+                               compression='gzip')
+
+        # And combined dists
+        combine_local_distance_and_prior(
+            subset_local_df,
+            subset_atted_df,
+            dists_out_path=(experiment_path
+                            / 'drought' / 'jackknifes' / 'combined_min'
+                            / f'jackknife_{i}.parquet.gzip'),
+            combo='min',
+            calculate_linkages=False,
+            plot_out_path=None,
+        )
+
+
+
 def wgcna_with_similarity_scores(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
@@ -214,23 +307,29 @@ def drought_data_e2e_pipeline(experiment_path):
                                           hyper_params['agg_method'],
                                           hyper_params['do_log2'])
     abs_dists = False
-    skip_stuff = False
+    skip_stuff = True
     if not skip_stuff:
-        linkage_matrices = sum_local_distance_and_atted(
+        atted_score = pd.read_parquet(data_params['atted_path'])
+        atted_score = atted_score.set_index(atted_score.columns[0])
+        linkage_matrices = combine_local_distance_and_prior(
             expr_mat_time.get_distance_matrix(absolute_dist=abs_dists),
-            data_params['atted_path'],
-            out_path=experiment_path)
+            atted_score,
+            combo='min',
+            out_path=experiment_path
+            )
 
-    expr_mat_time, module_module = assign_clusters_and_infer_intermodular_network(
-        experiment_path=experiment_path,
+    expr_mat_time.assign_clusters_from_wgcna(data_params['wgcna_cluster_path'])
+
+    expr_mat_time, module_module = infer_intermodular_network(
         expr_mat_time=expr_mat_time,
-        summed_linkage_matrix=data_params['linkage_path'],
-        summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
-        nr_clusters=hyper_params['nr_clusters'],
-        edge_cor_threshold=hyper_params['edge_corr_threshold'],
-        top_nr_clusters=hyper_params['top_nr_clusters'],
+        experiment_path=experiment_path,
         tf2_in_name=data_params['tf2_in_name'],
-        tf2_out_name=data_params['tf2_out_name'])
+        tf2_out_name=data_params['tf2_out_name'],
+        top_nr_clusters=hyper_params['top_nr_clusters'],
+        edge_cor_threshold=hyper_params['edge_corr_threshold']
+    )
+
+
     with (experiment_path / 'module_network.pkl').open('wb') as f:
         pickle.dump(module_module, f)
     # Assure that data has already been clustered
@@ -278,6 +377,25 @@ def config_preprocess(experiment_path):
     hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
     return data_params, hyper_params, experiment_params
 
+def drought_with_string_db(experiment_path):
+    # Load the config file
+    data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
+    expr_mat_time = expr_mat_from_drought(data_params['in_path'],
+                                          hyper_params['agg_method'],
+                                          hyper_params['do_log2'])
+    abs_dists = False
+    skip_stuff = False
+    # expr_mat_time.do_genewise_normalisation()
+    expr_mat_time.keep_n_most_deviating_genes(2000)
+    if not skip_stuff:
+        prior_score = parse_string_input_data()
+        linkage_matrices = combine_local_distance_and_prior(
+            expr_mat_time.get_distance_matrix(absolute_dist=abs_dists),
+            prior_score,
+            out_path=experiment_path,
+            combo='sum')
+    print()
+
 
 def exploratory_heat_data_scripts(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
@@ -302,9 +420,11 @@ def heat_data_e2e_pipeline(experiment_path):
 
     skip_stuff = True
     if not skip_stuff:
-        linkage_matrices = sum_local_distance_and_atted(
+        atted_score = pd.read_parquet(data_params['atted_path'])
+        atted_score = atted_score.set_index(atted_score.columns[0])
+        linkage_matrices = combine_local_distance_and_prior(
             expr_mat_time.get_distance_matrix(),
-            data_params['atted_path'],
+            atted_score,
             out_path=experiment_path)
 
 

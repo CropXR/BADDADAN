@@ -190,30 +190,35 @@ def assign_clusters_and_infer_intermodular_network(
         summed_linkage_matrix,
         nr_clusters,
         distance_matrix_path=summed_dist_matrix_path)
-    # TODO actually put some plotting stuff things in here for visual inspection
-    sns.clustermap(expr_mat_time.df.iloc[:, :-1],
-                  row_linkage=np.load(summed_linkage_matrix),
-                  z_score=0)
-    plt.show()
 
-    sns.clustermap(
-        expr_mat_time.get_distance_matrix(),
-        row_linkage=np.load('data/experiments/12_drought_data_with_gene_prefilter_and_zscore_proper/local_distances_complete_linkage.npy'),
-        col_linkage=np.load('data/experiments/12_drought_data_with_gene_prefilter_and_zscore_proper/local_distances_complete_linkage.npy'),)
-    plt.show()
+    # sns.clustermap(expr_mat_time.df.iloc[:, :-1],
+    #               row_linkage=np.load(summed_linkage_matrix),
+    #               z_score=0)
+    # plt.show()
+    #
+    # sns.clustermap(
+    #     expr_mat_time.get_distance_matrix(),
+    #     row_linkage=np.load('data/experiments/12_drought_data_with_gene_prefilter_and_zscore_proper/local_distances_complete_linkage.npy'),
+    #     col_linkage=np.load('data/experiments/12_drought_data_with_gene_prefilter_and_zscore_proper/local_distances_complete_linkage.npy'),)
+    # plt.show()
+    #
+    #
+    # sns.clustermap(pd.read_parquet(summed_dist_matrix_path))
+    # plt.show()
+
+    return infer_intermodular_network(expr_mat_time, experiment_path,
+                                      tf2_in_name, tf2_out_name,
+                                      top_nr_clusters, edge_cor_threshold)
 
 
-    sns.clustermap(pd.read_parquet(summed_dist_matrix_path))
-    plt.show()
-
+def infer_intermodular_network(expr_mat_time, experiment_path, tf2_in_name,
+                               tf2_out_name, top_nr_clusters,
+                               edge_cor_threshold):
     expr_mat_time.plot_sample_gene_heatmap()
     # explained_vars = expr_mat_time.get_all_explained_vars()
-
     expr_mat_time.plot_cluster_sizes(experiment_path / 'cluster_sizes.png')
-
     tf2_in_path = experiment_path / tf2_in_name
     tf2_out_path = experiment_path / tf2_out_name
-
     if not tf2_out_path.exists():
         expr_mat_time.write_tf2_input_file(tf2_in_path)
         expr_mat_time.post_to_tf2network(tf2_in_path, tf2_out_path)
@@ -227,13 +232,10 @@ def assign_clusters_and_infer_intermodular_network(
         tf2_out_path,
         threshold=edge_cor_threshold,
         module_plot_path=experiment_path / 'global_cluster_module_network.svg')
-
     expr_mat_time.keep_only_modules_in_network(module_module)
-
     expr_mat_time.plot_clusters_over_time(
         out_path=experiment_path / 'global_cluster_expressions.svg',
         timescale='hours')
-
     return expr_mat_time, module_module
 
 
@@ -277,9 +279,7 @@ def pipeline_from_atted_clustering(experiment_path: Path, soft_file_path: Path,
                                    agg_method: AggregationMethod) \
         -> (ExpressionMatrixTimeSeries, ModuleRegulatoryNetwork):
     expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
-        soft_file_path,
-        log2_transform=do_log2
-    )
+        soft_file_path, log2_transform=do_log2)
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.summary_method = agg_method
 

@@ -1,0 +1,12 @@
+experiment_data:
+  name: 'Generate inputs to be used for WGCNA tree cutting to check robustness/coherence again'
+  description: ""
+  summary_of_result: ""
+data:
+  in_path: 'limma_de_selection/drought_expr_matrix_limma_filtered.csv'
+  atted_path: "data/raw_data/atted_ii/all_cor_one_matrix_renamed.parquet.gzip"
+hyperparams:
+  agg_method: 'mean'
+  do_log2: False
+  nr_jackknifes: 5
+  subset_size: .75
