@@ -520,9 +520,10 @@ def main():
         # mlflow.log_params(data_params)
         # mlflow.log_params(hyper_params)
         mlflow.set_tags(experiment_params)
-        for file in experiment_path.iterdir():
+        for file in experiment_path.rglob('*.png'):
             mlflow.log_artifact(str(file))
-            # if not file.suffix in ['.npy', '.pkl', '.gzip']:
+            #
+            # if not file.suffix in ['.npy', '.csv', '.pkl', '.gzip']:
             #     mlflow.log_artifact(str(file))
 
         # mlflow.log_artifacts(str(experiment_path))

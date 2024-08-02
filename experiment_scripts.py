@@ -230,10 +230,19 @@ def integrate_multiple_datasets(experiment_path):
 def generate_dists_for_wgcna_cutting(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
-    expr_mat_time = expr_mat_from_drought(data_params['in_path'],
+    # condition = 'drought'
+    # expr_mat_time = expr_mat_from_drought(data_params['in_path'],
+    #                                       hyper_params['agg_method'],
+    #                                       hyper_params['do_log2'])
+    condition = 'heat'
+    condition_base_path = experiment_path / condition
+
+    for folder_name in ['figs', 'full_datasets', 'jackknifes']:
+        new_folder = condition_base_path / folder_name
+        new_folder.mkdir(parents=True, exist_ok=True)
+    expr_mat_time = expr_mat_from_emexp(data_params['in_path'],
                                           hyper_params['agg_method'],
                                           hyper_params['do_log2'])
-
     atted_score = pd.read_parquet(data_params['atted_path'])
     atted_score = atted_score.set_index(atted_score.columns[0])
 
@@ -252,16 +261,16 @@ def generate_dists_for_wgcna_cutting(experiment_path):
     atted_score = atted_score.loc[selected_genes, selected_genes]
 
     # Save full dists
-    local_dist.to_parquet(experiment_path
-                           / 'drought' / 'full_datasets' / 'local_dists.parquet.gzip',
+    local_dist.to_parquet(condition_base_path
+                          / 'full_datasets' / 'local_dists.parquet.gzip',
                                compression='gzip')
 
     # And combined dists
     min_dist_df = combine_local_distance_and_prior(
         local_dist,
         atted_score,
-        dists_out_path=(experiment_path
-                        / 'drought' / 'full_datasets' / 'combined_min_dists.parquet.gzip'),
+        dists_out_path=(condition_base_path
+                        / 'full_datasets' / 'combined_min_dists.parquet.gzip'),
         combo='min',
         calculate_linkages=False,
         plot_out_path=None,
@@ -271,16 +280,16 @@ def generate_dists_for_wgcna_cutting(experiment_path):
     sum_dist_df = combine_local_distance_and_prior(
         local_dist,
         atted_score,
-        dists_out_path=(experiment_path
-                        / 'drought' / 'full_datasets' / 'combined_sum_dists.parquet.gzip'),
+        dists_out_path=(condition_base_path
+                        / 'full_datasets' / 'combined_sum_dists.parquet.gzip'),
         combo='sum',
         calculate_linkages=False,
         plot_out_path=None,
     )
 
     atted_dist_df = atted_score.max().max() - atted_score
-    atted_dist_df.to_parquet(experiment_path
-                               / 'drought' / 'full_datasets' / 'atted_dists.parquet.gzip',
+    atted_dist_df.to_parquet(condition_base_path
+                             / 'full_datasets' / 'atted_dists.parquet.gzip',
                                    compression='gzip')
 
     out_records = []
@@ -296,23 +305,26 @@ def generate_dists_for_wgcna_cutting(experiment_path):
         subset_local_df = local_dist.loc[rand_index, rand_index]
         subset_atted_df = atted_score.loc[rand_index, rand_index]
 
-        subset_local_df.to_parquet(experiment_path
-                               / 'drought' / 'jackknifes' / 'local'
+        local_jackknife_dir = condition_base_path / 'jackknifes' / 'local'
+        local_jackknife_dir.mkdir(exist_ok=True)
+        subset_local_df.to_parquet(local_jackknife_dir
                                / f'jackknife_{i}.parquet.gzip',
                                    compression='gzip')
 
+        atted_jackknife_dir = condition_base_path / 'jackknifes' / 'atted'
+        atted_jackknife_dir.mkdir(exist_ok=True)
         subset_atted_dist_df = subset_atted_df.max().max() - subset_atted_df
-        subset_atted_dist_df.to_parquet(experiment_path
-                               / 'drought' / 'jackknifes' / 'atted'
+        subset_atted_dist_df.to_parquet(atted_jackknife_dir
                                / f'jackknife_{i}.parquet.gzip',
                                compression='gzip')
 
+        min_jackknife_dir = condition_base_path / 'jackknifes' / 'combined_min'
+        min_jackknife_dir.mkdir(exist_ok=True)
         # And min dists
         subset_min_dist_df = combine_local_distance_and_prior(
             subset_local_df,
             subset_atted_df,
-            dists_out_path=(experiment_path
-                            / 'drought' / 'jackknifes' / 'combined_min'
+            dists_out_path=(min_jackknife_dir
                             / f'jackknife_{i}.parquet.gzip'),
             combo='min',
             calculate_linkages=False,
@@ -320,12 +332,12 @@ def generate_dists_for_wgcna_cutting(experiment_path):
         )
 
         # And sum dists
+        sum_jackknife_dir = condition_base_path / 'jackknifes' / 'combined_sum'
+        sum_jackknife_dir.mkdir(exist_ok=True)
         subset_sum_dist_df = combine_local_distance_and_prior(
             subset_local_df,
             subset_atted_df,
-            dists_out_path=(experiment_path
-                            / 'drought' / 'jackknifes' / 'combined_sum'
-                            / f'jackknife_{i}.parquet.gzip'),
+            dists_out_path=(sum_jackknife_dir / f'jackknife_{i}.parquet.gzip'),
             combo='sum',
             calculate_linkages=False,
             plot_out_path=None,
@@ -638,5 +650,5 @@ def ground_truth_vs_jackknife(experiment_path):
 
     df = pd.DataFrame.from_records(out_lists, columns=['method', 'ari'])
     sns.boxplot(data=df, y='ari', x='method')
-    plt.show()
+    plt.savefig(experiment_path / 'heat' /  'figs' / 'robustness_modules.png')
 

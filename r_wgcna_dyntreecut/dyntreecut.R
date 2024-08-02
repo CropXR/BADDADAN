@@ -21,7 +21,7 @@ dynamictree_on_combined_dists <- function(in_path, out_dir) {
   
   # Module identification using dynamic tree cut:
   dynamicMods = cutreeDynamic(dendro = gene_tree, distM = coexp_mat,
-                              deepSplit = 2, pamRespectsDendro = TRUE,
+                              deepSplit = 1, pamRespectsDendro = TRUE,
                               minClusterSize = minModuleSize);
   
   dynamicColors = labels2colors(dynamicMods)
@@ -47,7 +47,6 @@ dynamictree_on_combined_dists <- function(in_path, out_dir) {
   write.csv(module_df, out_path)
 }
 
-
 main <- function(in_dir, out_dir){
   files <- list.files(path = in_dir, 
                       pattern = "*.parquet.gzip",
@@ -58,12 +57,29 @@ main <- function(in_dir, out_dir){
          SIMPLIFY = FALSE)
 }
 
-for (word in c('atted', 'local', 'combined_min', 'combined_sum')){
-  in_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/drought/jackknifes", word)
-  out_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/drought/r_output", word)
-  message(paste('Processing', word))
-  main(in_dir, out_dir)
+do_drought <- function(){
+  for (word in c('atted', 'local', 'combined_min', 'combined_sum')){
+    in_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/drought/jackknifes", word)
+    out_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/drought/r_output", word)
+    message(paste('Processing', word))
+    main(in_dir, out_dir)
+  }
+  
+  main("../data/experiments/18_robustness_with_wgcna_cutting/drought/full_datasets",
+       "../data/experiments/18_robustness_with_wgcna_cutting/drought/r_output/full_datasets")
 }
 
-main("../data/experiments/18_robustness_with_wgcna_cutting/drought/full_datasets",
-     "../data/experiments/18_robustness_with_wgcna_cutting/drought/r_output/full_datasets")
+do_heat <- function(){
+  for (word in c('atted', 'local', 'combined_min', 'combined_sum')){
+    in_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/heat/jackknifes", word)
+    out_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/heat/r_output", word)
+    message(paste('Processing', word))
+    main(in_dir, out_dir)
+  }
+  
+  main("../data/experiments/18_robustness_with_wgcna_cutting/heat/full_datasets",
+       "../data/experiments/18_robustness_with_wgcna_cutting/heat/r_output/full_datasets")
+}
+
+do_heat()
+
