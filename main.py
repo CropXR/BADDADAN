@@ -21,7 +21,8 @@ from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, 
     exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline, \
     config_preprocess, prefilter_genes_experiment, drought_from_wgcna, \
     wgcna_with_similarity_scores, drought_with_string_db, \
-    integrate_multiple_datasets, generate_dists_for_wgcna_cutting
+    integrate_multiple_datasets, generate_dists_for_wgcna_cutting, \
+    ground_truth_vs_jackknife
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
     parse_string_input_data
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
@@ -505,10 +506,11 @@ def main():
         case "17_from_multiple_experiments":
             integrate_multiple_datasets(experiment_path)
         case "18_robustness_with_wgcna_cutting":
-            generate_dists_for_wgcna_cutting(experiment_path)
+            skip = True
+            if not skip:
+                generate_dists_for_wgcna_cutting(experiment_path)
             # RUN R CODE
-            # compare_
-
+            ground_truth_vs_jackknife(experiment_path)
         case _:
             raise NotImplementedError(f'{name} not found')
 

@@ -11,6 +11,8 @@ import yaml
 import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.spatial.distance import squareform
+from sklearn.metrics import adjusted_rand_score
+from scipy.cluster.hierarchy import linkage, fcluster
 
 from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
 from DynamicModels.OdeLocalParameters import OdeLocalParameters
@@ -251,10 +253,39 @@ def generate_dists_for_wgcna_cutting(experiment_path):
 
     # Save full dists
     local_dist.to_parquet(experiment_path
-                               / 'drought' / 'full_datasets' / 'local_dists.parquet.gzip',
+                           / 'drought' / 'full_datasets' / 'local_dists.parquet.gzip',
+                               compression='gzip')
+
+    # And combined dists
+    min_dist_df = combine_local_distance_and_prior(
+        local_dist,
+        atted_score,
+        dists_out_path=(experiment_path
+                        / 'drought' / 'full_datasets' / 'combined_min_dists.parquet.gzip'),
+        combo='min',
+        calculate_linkages=False,
+        plot_out_path=None,
+    )
+
+    # And combined dists
+    sum_dist_df = combine_local_distance_and_prior(
+        local_dist,
+        atted_score,
+        dists_out_path=(experiment_path
+                        / 'drought' / 'full_datasets' / 'combined_sum_dists.parquet.gzip'),
+        combo='sum',
+        calculate_linkages=False,
+        plot_out_path=None,
+    )
+
+    atted_dist_df = atted_score.max().max() - atted_score
+    atted_dist_df.to_parquet(experiment_path
+                               / 'drought' / 'full_datasets' / 'atted_dists.parquet.gzip',
                                    compression='gzip')
 
-
+    out_records = []
+    do_debug_thing = False
+    # Save jackknifed distance matrices
     for i in range(hyper_params['nr_jackknifes']):
         logging.info(f'Iteration {i+1}')
         rand_index = sample(
@@ -265,20 +296,19 @@ def generate_dists_for_wgcna_cutting(experiment_path):
         subset_local_df = local_dist.loc[rand_index, rand_index]
         subset_atted_df = atted_score.loc[rand_index, rand_index]
 
-        subset_atted_dist_df = subset_atted_df.max().max() - subset_atted_df
-
         subset_local_df.to_parquet(experiment_path
                                / 'drought' / 'jackknifes' / 'local'
                                / f'jackknife_{i}.parquet.gzip',
                                    compression='gzip')
 
+        subset_atted_dist_df = subset_atted_df.max().max() - subset_atted_df
         subset_atted_dist_df.to_parquet(experiment_path
                                / 'drought' / 'jackknifes' / 'atted'
                                / f'jackknife_{i}.parquet.gzip',
                                compression='gzip')
 
-        # And combined dists
-        combine_local_distance_and_prior(
+        # And min dists
+        subset_min_dist_df = combine_local_distance_and_prior(
             subset_local_df,
             subset_atted_df,
             dists_out_path=(experiment_path
@@ -289,6 +319,62 @@ def generate_dists_for_wgcna_cutting(experiment_path):
             plot_out_path=None,
         )
 
+        # And sum dists
+        subset_sum_dist_df = combine_local_distance_and_prior(
+            subset_local_df,
+            subset_atted_df,
+            dists_out_path=(experiment_path
+                            / 'drought' / 'jackknifes' / 'combined_sum'
+                            / f'jackknife_{i}.parquet.gzip'),
+            combo='sum',
+            calculate_linkages=False,
+            plot_out_path=None,
+        )
+
+        if do_debug_thing:
+            # Just for one jackknife atm
+            def debug_func(dist1, dist2, nclust=50):
+                a = cluster_from_dists(dist1, nclust)
+                b = cluster_from_dists(dist2, nclust)
+
+                merged_df = a.join(b, how='inner',
+                                   lsuffix='_subset',
+                                   rsuffix='_og')
+
+                return adjusted_rand_score(merged_df['colors_subset'],
+                                           merged_df['colors_og'])
+
+            def cluster_from_dists(dist, nclust=50):
+                clustering = fcluster(
+                    linkage(squareform(dist, checks=False), method='average'),
+                    nclust, 'maxclust')
+                return pd.DataFrame(clustering, index=dist.index,
+                                    columns=['colors'])
+
+
+            for nclust in range(1,500, 50):
+                out_records.append(
+                    ('local', debug_func(
+                        subset_local_df, local_dist, nclust=nclust),
+                     nclust))
+                out_records.append(
+                    ('min_dist', debug_func(
+                        min_dist_df, subset_min_dist_df, nclust=nclust),
+                     nclust))
+                out_records.append(
+                    ('sum_dist', debug_func(
+                        sum_dist_df, subset_sum_dist_df, nclust=nclust),
+                     nclust))
+                out_records.append(
+                    ('atted', debug_func(
+                        subset_atted_dist_df, atted_dist_df, nclust=nclust),
+                     nclust))
+
+    if do_debug_thing:
+        plot_df = pd.DataFrame.from_records(out_records,
+                                            columns=['dist', 'ari', 'nclust'])
+        sns.lineplot(data=plot_df, x='nclust', y='ari', hue='dist')
+        plt.show()
 
 
 def wgcna_with_similarity_scores(experiment_path):
@@ -519,3 +605,38 @@ def fit_ode_to_two_datasets(
     return best_fit
     # multiple_fitter.fit(100)
     # best_fits = multiple_fitter.calculate_current_best_fits()
+
+
+def ground_truth_vs_jackknife(experiment_path):
+    data_params, hyper_params, experiment_params = config_preprocess(
+        experiment_path)
+    in_path = Path(data_params['r_out_path'])
+    out_lists = []
+    # FOr keyword, find jackknifes:
+    for keyword in ['atted', 'combined_min', 'combined_sum', 'local']:
+    # for keyword in ['atted', 'combined_min', 'local']:
+        jackknife_paths = list(in_path.glob(f'{keyword}/*.csv'))
+        logging.info(f'Doing {keyword}')
+        # Full dataset
+        full_dataset_path_list = list(in_path.glob(f'full_datasets/{keyword}*.csv'))
+        assert len(jackknife_paths) == hyper_params['nr_jackknifes']
+        assert  len(full_dataset_path_list) == 1
+        full_dataset_path = full_dataset_path_list[0]
+        full_dataset = pd.read_csv(full_dataset_path, usecols=[1,2])
+        full_dataset = full_dataset.set_index('gene_id')
+        for jackknife_path in jackknife_paths:
+                subset = pd.read_csv(jackknife_path, usecols=[1,2])
+                subset = subset.set_index('gene_id')
+                # Merge genes
+                merged_df = subset.join(full_dataset,
+                                        how='inner',
+                                                   lsuffix='_subset',
+                                                   rsuffix='_og')
+                ari = adjusted_rand_score(merged_df['colors_subset'],
+                                          merged_df['colors_og'])
+                out_lists.append((keyword, ari))
+
+    df = pd.DataFrame.from_records(out_lists, columns=['method', 'ari'])
+    sns.boxplot(data=df, y='ari', x='method')
+    plt.show()
+

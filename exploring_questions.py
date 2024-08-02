@@ -217,7 +217,7 @@ def combine_local_distance_and_prior(local_dist: pd.DataFrame,
                 linkage_matrix = linkage(input_dists, method=method)
                 np_path = out_path / f'{input_dist_name}_distances_{method}_linkage.npy'
                 np.save(np_path, linkage_matrix)
-
+    return combined_dist_df
     # sns.clustermap(squareform(atted_dist_flat_norm),
     #                row_linkage=np.load(out_path / f'atted_distances_complete_linkage.npy'),
     #                col_linkage=np.load(out_path / f'atted_distances_complete_linkage.npy'),
