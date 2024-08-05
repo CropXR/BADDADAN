@@ -17,6 +17,7 @@ from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
 from analysis_pipelines import compare_clusterings_for_ode_use
+from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
     exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline, \
     config_preprocess, prefilter_genes_experiment, drought_from_wgcna, \
@@ -506,22 +507,47 @@ def main():
         case "17_from_multiple_experiments":
             integrate_multiple_datasets(experiment_path)
         case "18_robustness_with_wgcna_cutting":
+            data_params, hyper_params, experiment_params = config_preprocess(
+                experiment_path)
+            if 'heat' in data_params['in_path']:
+                # Get heat expr_mat
+                condition_name = 'heat'
+                expr_mat_time = expr_mat_from_emexp(data_params['in_path'],
+                                                    hyper_params['agg_method'],
+                                                    hyper_params['do_log2'])
+            elif 'drought' in data_params['in_path']:
+                # Get drought expr_mat
+                condition_name = 'drought'
+                expr_mat_time = expr_mat_from_drought(data_params['in_path'],
+                                                      hyper_params['agg_method'],
+                                                      hyper_params['do_log2'])
+            else:
+                raise NotImplementedError(
+                    "Couldn't find what condition (drought or heat) was used"
+                )
             skip = True
             if not skip:
-                generate_dists_for_wgcna_cutting(experiment_path)
-            # RUN R CODE
-            ground_truth_vs_jackknife(experiment_path)
+                generate_dists_for_wgcna_cutting(
+                    experiment_path, expr_mat_time, condition_name)
+
+            #####################
+            ## RUN R CODE HERE ##
+            #####################
+
+            ground_truth_vs_jackknife(experiment_path, expr_mat_time)
         case _:
             raise NotImplementedError(f'{name} not found')
 
-    _, _, experiment_params = config_preprocess(
+    data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
     with mlflow.start_run(description=experiment_params['description']):
-        # mlflow.log_params(data_params)
-        # mlflow.log_params(hyper_params)
+        mlflow.log_params(data_params)
+        mlflow.log_params(hyper_params)
         mlflow.set_tags(experiment_params)
-        for file in experiment_path.rglob('*.png'):
-            mlflow.log_artifact(str(file))
+        extensions = ['png', 'yaml', 'log', 'csv']
+        for extension in extensions:
+            for file in Path(data_params['r_out_path']).parent.rglob(f'*.{extension}'):
+                mlflow.log_artifact(str(file))
             #
             # if not file.suffix in ['.npy', '.csv', '.pkl', '.gzip']:
             #     mlflow.log_artifact(str(file))

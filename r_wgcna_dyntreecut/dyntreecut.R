@@ -1,9 +1,14 @@
 library(WGCNA)
 library(arrow)
+library(yaml)
 
-dynamictree_on_combined_dists <- function(in_path, out_dir) {
+dynamictree_on_combined_dists <- function(in_path, out_dir, yaml_path) {
   coexp_mat <- read_parquet(in_path)
   coexp_mat <- as.data.frame(coexp_mat)
+  
+  yaml <- yaml.load_file(yaml_path)
+  minModuleSize <- yaml$hyperparams$r_min_module_size
+  deepSplit <-   yaml$hyperparams$r_deep_split
   
   # Set the row names 
   rownames(coexp_mat) <- coexp_mat$`__index_level_0__`
@@ -13,18 +18,15 @@ dynamictree_on_combined_dists <- function(in_path, out_dir) {
   
   gene_tree <- hclust(as.dist(coexp_mat), method='average')
 
-  # We like large modules, so we set the minimum module size relatively high:
-  minModuleSize = 20;
-  
-  # Regular tree cut
+  # Regular tree cut was used for debugging
   # dynamicMods <- cutree(gene_tree, 400)
   
   # Module identification using dynamic tree cut:
   dynamicMods = cutreeDynamic(dendro = gene_tree, distM = coexp_mat,
-                              deepSplit = 1, pamRespectsDendro = TRUE,
+                              deepSplit = deepSplit, pamRespectsDendro = TRUE,
                               minClusterSize = minModuleSize);
   
-  dynamicColors = labels2colors(dynamicMods)
+  # dynamicColors = labels2colors(dynamicMods)
 
   file_name <- basename(in_path)
 
@@ -38,7 +40,7 @@ dynamictree_on_combined_dists <- function(in_path, out_dir) {
   
   module_df <- data.frame(
     gene_id = rownames(coexp_mat),
-    colors = dynamicColors
+    colors = dynamicMods
   )
   
   file_name <- sub("\\.parquet\\.gzip$", "_wgcna_clustered.csv", file_name)  
@@ -51,13 +53,20 @@ main <- function(in_dir, out_dir){
   files <- list.files(path = in_dir, 
                       pattern = "*.parquet.gzip",
                       full.names = TRUE)
+  yaml_config <- file.path(dirname(dirname(dirname(in_dir))), 'config.yaml')
+  
+  if (!file.exists(yaml_config)) {
+    yaml_config <- file.path(dirname(dirname(in_dir)), 'config.yaml')
+  }
+  
   mapply(dynamictree_on_combined_dists, 
          files,
-         MoreArgs = list(out_dir),
+         MoreArgs = list(out_dir, yaml_config),
          SIMPLIFY = FALSE)
 }
 
 do_drought <- function(){
+  message('Processing drought')
   for (word in c('atted', 'local', 'combined_min', 'combined_sum')){
     in_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/drought/jackknifes", word)
     out_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/drought/r_output", word)
@@ -70,6 +79,7 @@ do_drought <- function(){
 }
 
 do_heat <- function(){
+  message('Processing heat')
   for (word in c('atted', 'local', 'combined_min', 'combined_sum')){
     in_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/heat/jackknifes", word)
     out_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/heat/r_output", word)
@@ -82,4 +92,5 @@ do_heat <- function(){
 }
 
 do_heat()
+do_drought()
 

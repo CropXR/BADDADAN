@@ -227,22 +227,18 @@ def integrate_multiple_datasets(experiment_path):
 
 
 
-def generate_dists_for_wgcna_cutting(experiment_path):
+def generate_dists_for_wgcna_cutting(experiment_path, expr_mat_time, condition_name):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
-    # condition = 'drought'
-    # expr_mat_time = expr_mat_from_drought(data_params['in_path'],
-    #                                       hyper_params['agg_method'],
-    #                                       hyper_params['do_log2'])
-    condition = 'heat'
-    condition_base_path = experiment_path / condition
+
+    condition_base_path = experiment_path / condition_name
 
     for folder_name in ['figs', 'full_datasets', 'jackknifes']:
         new_folder = condition_base_path / folder_name
         new_folder.mkdir(parents=True, exist_ok=True)
-    expr_mat_time = expr_mat_from_emexp(data_params['in_path'],
-                                          hyper_params['agg_method'],
-                                          hyper_params['do_log2'])
+    # expr_mat_time = expr_mat_from_emexp(data_params['in_path'],
+    #                                       hyper_params['agg_method'],
+    #                                       hyper_params['do_log2'])
     atted_score = pd.read_parquet(data_params['atted_path'])
     atted_score = atted_score.set_index(atted_score.columns[0])
 
@@ -619,14 +615,17 @@ def fit_ode_to_two_datasets(
     # best_fits = multiple_fitter.calculate_current_best_fits()
 
 
-def ground_truth_vs_jackknife(experiment_path):
+def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
+
     in_path = Path(data_params['r_out_path'])
-    out_lists = []
+    robustness_out_list = []
+    coherence_out_list = []
     # FOr keyword, find jackknifes:
     for keyword in ['atted', 'combined_min', 'combined_sum', 'local']:
     # for keyword in ['atted', 'combined_min', 'local']:
+        expr_mat_time_copy = deepcopy(expr_mat_time)
         jackknife_paths = list(in_path.glob(f'{keyword}/*.csv'))
         logging.info(f'Doing {keyword}')
         # Full dataset
@@ -636,6 +635,12 @@ def ground_truth_vs_jackknife(experiment_path):
         full_dataset_path = full_dataset_path_list[0]
         full_dataset = pd.read_csv(full_dataset_path, usecols=[1,2])
         full_dataset = full_dataset.set_index('gene_id')
+
+        # Do coherence per module
+        expr_mat_time_copy.assign_clusters_from_wgcna(full_dataset_path)
+        coherence_entry = expr_mat_time_copy.get_all_explained_vars()
+        coherence_out_list.extend([(keyword, i) for i in coherence_entry])
+
         for jackknife_path in jackknife_paths:
                 subset = pd.read_csv(jackknife_path, usecols=[1,2])
                 subset = subset.set_index('gene_id')
@@ -646,9 +651,24 @@ def ground_truth_vs_jackknife(experiment_path):
                                                    rsuffix='_og')
                 ari = adjusted_rand_score(merged_df['colors_subset'],
                                           merged_df['colors_og'])
-                out_lists.append((keyword, ari))
+                robustness_out_list.append((keyword, ari))
 
-    df = pd.DataFrame.from_records(out_lists, columns=['method', 'ari'])
-    sns.boxplot(data=df, y='ari', x='method')
-    plt.savefig(experiment_path / 'heat' /  'figs' / 'robustness_modules.png')
+    robustness_df = pd.DataFrame.from_records(robustness_out_list, columns=['method', 'ari'])
+    sns.violinplot(data=robustness_df, y='ari', x='method')
+    plt.savefig(in_path.parent /  'figs' / 'robustness_modules.png')
+    plt.close()
+
+    coherence_df = pd.DataFrame.from_records(coherence_out_list, columns=['method', 'coherence'])
+    sns.violinplot(data=coherence_df, y='coherence', x='method')
+    plt.savefig(in_path.parent / 'figs' / 'coherence_modules.png')
+    plt.close()
+
+    sns.histplot(full_dataset.value_counts().to_list())
+    plt.xlabel('Module size')
+    plt.savefig(in_path.parent / 'figs' / 'size_modules.png')
+    plt.close()
+
+
+
+
 
