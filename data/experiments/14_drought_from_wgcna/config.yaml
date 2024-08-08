@@ -5,15 +5,13 @@ experiment_data:
   summary_of_result: ""
 data:
   in_path: 'limma_de_selection/drought_expr_matrix_limma_filtered.csv'
-  wgcna_eigengenes: 'limma_de_selection/drought_wgcna_eigengenes.csv'
-  wgcna_module_assignment_path: 'limma_de_selection/drought_wgcna_clusters.csv'
+  wgcna_module_assignment_path: 'data/experiments/18_robustness_with_wgcna_cutting/drought/r_output/full_datasets/combined_sum_dists_wgcna_clustered.csv'
   tf2_in_name: '01_tf2_input.txt'
   tf2_out_name: '02_tf2network_output.tsv'
 hyperparams:
-  nr_clusters: 500
   agg_method: 'mean'
   do_log2: False
   edge_corr_threshold: .3
-  top_nr_clusters: 5
+  top_nr_clusters: 3
   nr_ode_iters: 300
   param_limit: .1

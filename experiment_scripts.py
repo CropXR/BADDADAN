@@ -164,15 +164,10 @@ def module_size_pipeline(experiment_path):
             # if not file.suffix in ['.npy', '.pkl', '.gzip']:
             #     mlflow.log_artifact(str(file))
 
-def drought_from_wgcna(experiment_path,
-                       ):
+def drought_from_wgcna(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
     wgcna_module_assignment = data_params['wgcna_module_assignment_path']
-    wgcna_eigengenes = data_params['wgcna_eigengenes']
-    df_eigengenes = pd.read_csv(wgcna_eigengenes)
-    # sns.lineplot(df_eigengenes)
-    # plt.show()
     expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_drought(data_params['in_path'],
                                           hyper_params['agg_method'],
                                           hyper_params['do_log2'])
@@ -185,13 +180,15 @@ def drought_from_wgcna(experiment_path,
     expr_mat_time.write_tf2_input_file(
         out_path=tf2_in_path)
 
-    expr_mat_time.do_genewise_normalisation()
+    # expr_mat_time.do_genewise_normalisation()
     expr_mat_time.keep_highest_z_clusters(
-        5,
+        hyper_params['top_nr_clusters'],
         tf2_output_path=tf2_out_path,
     plotting_path=experiment_path)
 
     expr_mat_time.plot_clusters_over_time()
+    # # TO get gene list
+    # [print(i) for i in expr_mat_time.get_genes_per_cluster()[32]]
 
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
@@ -429,9 +426,14 @@ def drought_data_e2e_pipeline(experiment_path):
     # Assure that data has already been clustered
     assert expr_mat_time.has_been_clustered
     # expr_mat_time.get_genes_per_cluster()[328]
+    fit_ode_drought_data(experiment_path, expr_mat_time, hyper_params,
+                         module_module)
+
+
+def fit_ode_drought_data(experiment_path, expr_mat_time, hyper_params,
+                         module_module):
     my_ode = OdeModel.construct_from_regulatory_network(module_module,
                                                         nonlinear=True)
-
     # These are parameters that are different between the two datasets
     # They are the initial values, and the drought treatment (i.e. u_t function)
     custom_params = dict()
@@ -443,21 +445,21 @@ def drought_data_e2e_pipeline(experiment_path):
     #
     # custom_params[control_name] = OdeLocalParameters(
     #      u_t=(lambda t: small_constant*(90 - t * 0)))
-
     custom_params[control_name] = OdeLocalParameters(
         u_t=(lambda t: 0))
     custom_params[drought_name] = OdeLocalParameters(
         u_t=(lambda t: small_constant * t / (13 * 24)))
-
     best_ode_fit = fit_ode_to_two_datasets(
         my_ode,
         expr_mat_time,
         custom_params=custom_params,
         nr_ode_iters=hyper_params['nr_ode_iters'],
-        experiment_path=experiment_path
+        experiment_path=experiment_path,
+        param_limit=hyper_params.get('param_limit')
     )
     with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
         pickle.dump(best_ode_fit, f)
+
 
 def config_preprocess(experiment_path):
     config_path = experiment_path / 'config.yaml'

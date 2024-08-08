@@ -23,7 +23,7 @@ from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, 
     config_preprocess, prefilter_genes_experiment, drought_from_wgcna, \
     wgcna_with_similarity_scores, drought_with_string_db, \
     integrate_multiple_datasets, generate_dists_for_wgcna_cutting, \
-    ground_truth_vs_jackknife
+    ground_truth_vs_jackknife, fit_ode_drought_data
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
     parse_string_input_data
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
@@ -460,7 +460,7 @@ def camila_red_panda(soft_file_in_path: Path,
 
 def main():
     # ONLY EDIT THESE LINES
-    name = '18_robustness_with_wgcna_cutting'
+    name = '14_drought_from_wgcna'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -499,7 +499,11 @@ def main():
             # Full pipeline for drought
             drought_data_e2e_pipeline(experiment_path)
         case "14_drought_from_wgcna":
-            drought_from_wgcna(experiment_path)
+            _, hyper_params, _ = config_preprocess(
+                experiment_path)
+            expr_mat_time, module_module = drought_from_wgcna(experiment_path)
+            fit_ode_drought_data(experiment_path, expr_mat_time, hyper_params,
+                                 module_module)
         case "15_wgcna_with_similarity_scores":
             wgcna_with_similarity_scores(experiment_path)
         case "16_incorporating_string":
@@ -544,13 +548,19 @@ def main():
         mlflow.log_params(data_params)
         mlflow.log_params(hyper_params)
         mlflow.set_tags(experiment_params)
-        extensions = ['png', 'yaml', 'log', 'csv']
-        for extension in extensions:
-            for file in Path(data_params['r_out_path']).parent.rglob(f'*.{extension}'):
+        if name == '18_robustness_with_wgcna_cutting':
+            extensions = ['png', 'yaml', 'log', 'csv']
+            for extension in extensions:
+                for file in Path(data_params['r_out_path']).parent.rglob(f'*.{extension}'):
+                    mlflow.log_artifact(str(file))
+        else:
+            for file in experiment_path.iterdir():
                 mlflow.log_artifact(str(file))
-            #
-            # if not file.suffix in ['.npy', '.csv', '.pkl', '.gzip']:
-            #     mlflow.log_artifact(str(file))
+
+
+        #
+        # if not file.suffix in ['.npy', '.csv', '.pkl', '.gzip']:
+        #     mlflow.log_artifact(str(file))
 
         # mlflow.log_artifacts(str(experiment_path))
         # mlflow.log_metrics({'bic': best_ode_fit.sol.bic,
