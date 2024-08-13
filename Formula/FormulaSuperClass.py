@@ -1,3 +1,10 @@
+import logging
+import re
+from typing import Callable
+
+import numpy as np
+
+
 class FormulaSuperClass:
     """Class can only be inherited, not used by itself"""
 
@@ -7,7 +14,8 @@ class FormulaSuperClass:
         :param regulator_names: List of all modules that regulate this module
         """
         self.module_name = module_name
-        self.module_index = int(module_name[-1])
+        self.module_index = self.module_name_to_index(module_name)
+        self.module_y_name = f'y_{self.module_index}'
         self.params = []
         self.regulator_names = []
         # Capture each term of the formula
@@ -18,11 +26,13 @@ class FormulaSuperClass:
         self.params.append(d_param_name)
         self.formula_parts.append(f' - {d_param_name} * y[{self.module_index}]')
 
-        # Add factor which expresses the change in expression based on temperature
+        # Add factor which expresses the change in expression based on u_t
         gamma_param_name = f'gamma_{self.module_index}'
         self.params.append(gamma_param_name)
-        self.formula_parts.append(f' + {gamma_param_name} * temp * y[{self.module_index}]')
-        # self.formula_string += f' + {gamma_param_name} * temp'
+
+        # TODO make this nonlinear?
+        self.formula_parts.append(f' + {gamma_param_name} * u_t * y[{self.module_index}] ')
+        # self.formula_parts.append(f' + {gamma_param_name} * u_t ')
 
         # Register if the module has been compiled (which speeds up its evaluation)
         self.formula_is_compiled = False
@@ -32,11 +42,28 @@ class FormulaSuperClass:
         """Get string of full formula"""
         return ''.join(self.formula_parts)
 
+    @property
+    def sbml_string(self):
+        out_string  = self.formula_string.replace('**', '^')
+        out_string = out_string.replace('[', '_')
+        out_string = out_string.replace(']', '')
+        out_string = out_string.replace('u_t', 'u(t)')
+        return out_string
+
+    def specify_u_t(self, u_t: Callable):
+        """Give the U_t function, which implements external stresses"""
+        # TODO perhaps move to __init__ later
+        self.u_t = u_t
+
     def compile_formula(self):
         # Compile string to speed up evaluation
         self.compiled_formula_string = compile(self.formula_string.lstrip(),
                                                "<string>", "eval")
         self.formula_is_compiled = True
+
+    @staticmethod
+    def module_name_to_index(module_name):
+        return int(re.search(r'\d+$', module_name).group())
 
     @staticmethod
     def generate_linear_term(param_name: str, var_name: str,
@@ -68,7 +95,7 @@ class FormulaSuperClass:
                 f'/ ({k_param_name}**{n} + {var_name}**{n})')
 
     def __repr__(self):
-        return f'Formula of {self.module_name}={self.formula_string} ' \
+        return f'dy_{self.module_index}/dt = {self.formula_string} ' \
                f'\n nr_params = {self.nr_params}'
 
     def __call__(self, t: float, y: list[float],
@@ -87,12 +114,13 @@ class FormulaSuperClass:
         local_dict = init_val | params
         if not self.formula_is_compiled:
             self.compile_formula()
+        local_dict['u_t'] = self.u_t(t)
+        logging.debug(f"u(t) at {t} = {local_dict['u_t']}")
         result = eval(self.compiled_formula_string, {}, local_dict)
+        assert not np.isnan(result) and not np.isinf(result)
         return result
 
     @property
     def nr_params(self):
         """Get the number of parameters"""
         return len(self.params)
-
-
