@@ -3,11 +3,13 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Literal
 
+import numpy as np
 import pandas as pd
 from lmfit import Parameters, minimize, fit_report
 from lmfit.minimizer import MinimizerResult
 from matplotlib import pyplot as plt
 import seaborn as sns
+from scipy.interpolate import UnivariateSpline
 
 from DynamicModels.OdeFitter import OdeFitter
 from DynamicModels.OdeLocalParameters import OdeLocalParameters
@@ -26,7 +28,9 @@ class OdeFitterMultipleDatasets:
                  param_limit: float = 800.,
                  method: Literal['lbfgs', 'bfgs',
                                  'differential_evolution',
-                                 'basinhopping', 'shgo'] = 'lbfgs'
+                                 'basinhopping', 'shgo'] = 'lbfgs',
+                 do_spline_smooth = False,
+                 nr_time_points_interpolation: None | int = None
                  ):
         """
         :param ode_model: The ODE model used for fitting.
@@ -36,14 +40,17 @@ class OdeFitterMultipleDatasets:
          to its custom parameters as OdeLocalParameters object.
         :param param_limit: The parameter limit. Default is 800.
         :param method: The optimization method to be used. Default is 'lbfgs'.
+        :param do_spline_smooth: If true, smooth expressions of all
+                    modules using a spline.
         To overcome this, add a constant value to all expressions.
         """
-
+        self.do_spline_smooth = do_spline_smooth
         self.method = method
         self.has_been_fitted = False
         self.dataset = dataset
         self.sol : MinimizerResult|None = None
         self.words_to_split_dataset = dataset.condition_names
+        self.nr_time_points_interpolation = nr_time_points_interpolation
         # Combine all OdeFitter objects
         self.all_fitters = []
         assert dataset.has_been_clustered
@@ -55,6 +62,7 @@ class OdeFitterMultipleDatasets:
         elif dataset.aggregation_method == AggregationMethod.MEAN:
             expressions: pd.DataFrame = dataset.df.groupby('cluster_id').apply(
                 dataset._get_mean_over_time)
+            # dataset.plot_clusters_over_time()
         else:
             raise NotImplementedError
 
@@ -69,14 +77,14 @@ class OdeFitterMultipleDatasets:
             # Convert time into hours
             time = data.columns.get_level_values('time') / pd.to_timedelta(1, unit='h')
             assert len(data.columns) == len(time)
-
             data = data.to_numpy()
             time = time.to_numpy()
             u_t_for_dataset = custom_params_per_dataset[word].u_t
             fitter = OdeFitter(copy.deepcopy(ode_model), data, time,
                                param_limit=param_limit,
                                u_t_function=u_t_for_dataset,
-                               method=method)
+                               method=method,
+                               do_gradient_matching=do_spline_smooth)
             self.all_fitters.append(fitter)
         logging.info(f'Created {len(self.all_fitters)} fitters '
                      f'to be fitted simultaneously.')
@@ -120,11 +128,27 @@ class OdeFitterMultipleDatasets:
         :return: Total loss as a float.
         """
         all_loss = []
+
         for fitter in self.all_fitters:
-            loss = fitter.loss_function(
-                params, fitter.time_points,
-                fitter.measured_data, custom_param_names, return_scalar=True)
-            norm_loss = loss / len(fitter.time_points)
+            if self.nr_time_points_interpolation:
+                evaluation_time_points = np.linspace(
+                    min(fitter.time_points),
+                    max(fitter.time_points),
+                    self.nr_time_points_interpolation
+                )
+            else:
+                evaluation_time_points = fitter.time_points
+
+            if self.do_spline_smooth:
+                # Make t larger than original t
+                loss = fitter.gradient_matching_loss_function(
+                    params, evaluation_time_points, custom_param_names, return_scalar=True
+                )
+            else:
+                loss = fitter.loss_function(
+                    params, evaluation_time_points,
+                    fitter.measured_data, custom_param_names, return_scalar=True)
+            norm_loss = loss / len(evaluation_time_points)
             all_loss.append(norm_loss)
         total_loss = sum(all_loss)
         logging.debug(f'{total_loss=}')
@@ -144,14 +168,14 @@ class OdeFitterMultipleDatasets:
 
         match self.method:
             case 'lbfgs' | 'bfgs':
-                result = minimize(self.loss_on_multiple_datasets,
-                                  self._master_params,
-                                  method=self.method,
-                                  kws=dict(custom_param_names=self.local_param_names),
-                                  options=dict(disp=1, maxiter=max_iter,
-                                               maxfun=1e99,
-                                               )
-                                  )
+                    result = minimize(self.loss_on_multiple_datasets,
+                                      self._master_params,
+                                      method=self.method,
+                                      kws=dict(custom_param_names=self.local_param_names),
+                                      options=dict(disp=1, maxiter=max_iter,
+                                                   maxfun=1e99,
+                                                   )
+                                      )
             case _:
                 raise NotImplementedError(f'Optimisation method: {self.method} '
                                           f'is currently not supported')

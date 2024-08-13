@@ -9,6 +9,7 @@ import networkx as nx
 import numpy as np
 from lmfit import Parameters
 from scipy.integrate._ivp.ivp import OdeResult, solve_ivp
+import libsbml
 
 from DynamicModels.ModuleRegulatoryNetwork import (ModuleRegulatoryNetwork,
                                                    EdgeRelation)
@@ -213,3 +214,91 @@ class OdeModel:
             f"Integration failed: {y_pred.message}"
             f"\nParams: {params}")
         return y_pred
+
+    def derivatives_at_time_points(self, time_points, spline_per_rows, params
+                                   ) -> np.array:
+        """Get derivatives of function at all time points,
+        used for gradient matching
+        """
+        out = []
+        for t in time_points:
+            y = [spline(t) for spline in spline_per_rows]
+            out.append(self.compute_one_step(time_points, y, params))
+        out = np.array(out)
+        return out
+
+    def save_to_sbml(self, out_path, custom_params):
+
+        def check(value, message):
+            """If 'value' is None, prints an error message constructed using
+            'message' and then exits with status code 1.  If 'value' is an integer,
+            it assumes it is a libSBML return status code.  If the code value is
+            LIBSBML_OPERATION_SUCCESS, returns without further action; if it is not,
+            prints an error message constructed using 'message' along with text from
+            libSBML explaining the meaning of the code, and exits with status code 1.
+            """
+            if value == None:
+                raise SystemExit(
+                    'LibSBML returned a null value trying to ' + message + '.')
+            elif type(value) is int:
+                if value == libsbml.LIBSBML_OPERATION_SUCCESS:
+                    return
+                else:
+                    err_msg = 'Error encountered trying to ' + message + '.' \
+                              + 'LibSBML returned error code ' + str(
+                        value) + ': "' \
+                              + libsbml.OperationReturnValue_toString(
+                        value).strip() + '"'
+                    raise SystemExit(err_msg)
+            else:
+                return
+
+        document = libsbml.SBMLDocument(3, 1)
+        model = document.createModel()
+        model.setId('baddadan_model')
+
+
+
+        for module_formula in self.formula_per_module:
+            # Add modules as entities
+            module = model.createSpecies()
+            module.setId(module_formula.module_y_name)
+            # module.setCompartment('compartment')
+            # And how about this :O? Retrieve from custom_params?
+            # module.setInitialAmount(1.0)  # Set appropriate initial condition
+            module.setBoundaryCondition(False)
+            module.setHasOnlySubstanceUnits(False)
+            module.setConstant(False)
+
+            # Add parameters
+            for parameter_name in module_formula.params:
+                # Create parameters (delta, gamma, beta, k values)
+                new_param = model.createParameter()
+                new_param.setId(parameter_name)
+                # new_param.setValue(0.1)
+                new_param.setConstant(False)
+            # Add reactions
+
+            module_rate = model.createRateRule()
+            module_rate.setVariable(module_formula.module_y_name)
+            check(libsbml.parseL3Formula(
+                module_formula.sbml_string
+            ), 'parse formula')
+
+            rate_equation = libsbml.parseL3Formula(
+                module_formula.sbml_string
+            )
+            libsbml.formulaToString(rate_equation)
+
+            module_rate.setMath(rate_equation)
+
+
+            # TODO Add environment-dependant variable things
+
+        # Save to out path
+        if document.checkConsistency() == 0:
+            print('The SBML document is valid.')
+
+        libsbml.writeSBMLToFile(document, str(out_path))
+
+        pass

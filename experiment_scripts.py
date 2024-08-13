@@ -513,7 +513,8 @@ def heat_data_e2e_pipeline(experiment_path):
                                         hyper_params['agg_method'],
                                         hyper_params['do_log2'],
                                         )
-
+    wgcna_module_assignment = data_params['wgcna_module_assignment_path']
+    expr_mat_time.assign_clusters_from_wgcna(wgcna_module_assignment)
     skip_stuff = True
     if not skip_stuff:
         atted_score = pd.read_parquet(data_params['atted_path'])
@@ -523,17 +524,40 @@ def heat_data_e2e_pipeline(experiment_path):
             atted_score,
             out_path=experiment_path)
 
+    tf2_in_path = experiment_path / data_params['tf2_in_name']
+    tf2_out_path = experiment_path / data_params['tf2_out_name']
+    # Post to tf2network
+    expr_mat_time.write_tf2_input_file(
+        out_path=tf2_in_path)
 
-    expr_mat_time, module_module =  assign_clusters_and_infer_intermodular_network(
-        experiment_path=experiment_path,
-        expr_mat_time=expr_mat_time,
-        summed_linkage_matrix=data_params['linkage_path'],
-        summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
-        nr_clusters=hyper_params['nr_clusters'],
-        edge_cor_threshold=hyper_params['edge_corr_threshold'],
-        top_nr_clusters=hyper_params['top_nr_clusters'],
-        tf2_in_name=data_params['tf2_in_name'],
-        tf2_out_name=data_params['tf2_out_name'])
+    # expr_mat_time.do_genewise_normalisation()
+    expr_mat_time.keep_highest_z_clusters(
+        hyper_params['top_nr_clusters'],
+        tf2_output_path=tf2_out_path,
+        plotting_path=experiment_path)
+
+    expr_mat_time.plot_clusters_over_time()
+    # # TO get gene list
+    # [print(i) for i in expr_mat_time.get_genes_per_cluster()[75]]
+
+    module_module = module_network_from_tf2_output(
+        expr_mat_time, tf2_in_path,
+        tf2_out_path,
+        threshold=hyper_params['edge_corr_threshold'],
+        module_plot_path=experiment_path / 'global_cluster_module_network.svg')
+
+    expr_mat_time.keep_only_modules_in_network(module_module)
+
+    # expr_mat_time, module_module =  assign_clusters_and_infer_intermodular_network(
+    #     experiment_path=experiment_path,
+    #     expr_mat_time=expr_mat_time,
+    #     summed_linkage_matrix=data_params['linkage_path'],
+    #     summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
+    #     nr_clusters=hyper_params['nr_clusters'],
+    #     edge_cor_threshold=hyper_params['edge_corr_threshold'],
+    #     top_nr_clusters=hyper_params['top_nr_clusters'],
+    #     tf2_in_name=data_params['tf2_in_name'],
+    #     tf2_out_name=data_params['tf2_out_name'])
 
     with (experiment_path / 'module_network.pkl').open('wb') as f:
         pickle.dump(module_module, f)
@@ -553,25 +577,33 @@ def heat_data_e2e_pipeline(experiment_path):
     custom_params[treatment_name] = OdeLocalParameters(
         u_t=(lambda t: 1))
 
+    my_ode.save_to_sbml(experiment_path / 'module_network.xml', custom_params)
+
     best_ode_fit = fit_ode_to_two_datasets(
         my_ode,
         expr_mat_time,
         custom_params=custom_params,
         nr_ode_iters=hyper_params['nr_ode_iters'],
         experiment_path=experiment_path,
-        param_limit=hyper_params.get('param_limit')
+        param_limit=hyper_params.get('param_limit'),
+        gradient_matching=hyper_params['do_gradient_matching'],
+        nr_fitters=hyper_params['nr_fitters'],
+        nr_time_points_interpolation=hyper_params['nr_time_points_interpolation']
     )
     with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
         pickle.dump(best_ode_fit, f)
-
+    return expr_mat_time, module_module
 
 def fit_ode_to_two_datasets(
         my_ode: OdeModel,
         my_time_series_expressions: ExpressionMatrixTimeSeries,
         nr_ode_iters: int,
         custom_params: Dict,
+        nr_fitters: int = 5,
         experiment_path: Path|None = None,
-        param_limit: float = .1
+        param_limit: float = .1,
+        gradient_matching: bool = False,
+        nr_time_points_interpolation = None
         ):
 
     # condition_names = list(custom_params.keys())
@@ -606,7 +638,9 @@ def fit_ode_to_two_datasets(
             my_ode, my_time_series_expressions,
             custom_params,
             param_limit=param_limit,
-        ) for _ in range(5)]
+            do_spline_smooth=gradient_matching,
+            nr_time_points_interpolation=nr_time_points_interpolation
+        ) for _ in range(nr_fitters)]
 
     best_fit = fit_multiple_fitters(multiple_fitters, nr_ode_iters)
     best_fit.calculate_current_best_fits(data_point_overlay=True,

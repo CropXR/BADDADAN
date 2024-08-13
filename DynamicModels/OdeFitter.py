@@ -10,6 +10,7 @@ from lmfit.minimizer import MinimizerResult
 from matplotlib import pyplot as plt
 from scipy.integrate._ivp.ivp import OdeResult
 import seaborn as sns
+from scipy.interpolate import UnivariateSpline
 
 from DynamicModels.OdeModel import OdeModel
 
@@ -19,13 +20,28 @@ class OdeFitter:
     def __init__(self, ode_model: OdeModel, measured_data: np.ndarray,
                  time_points: np.ndarray, param_limit: float = 800.,
                  u_t_function: Callable = None,
-                 method: Literal['lbfgs', 'bfgs', 'differential_evolution', 'basinhopping', 'shgo'] = 'lbfgs'):
+                 method: Literal['lbfgs', 'bfgs', 'differential_evolution',
+                 'basinhopping', 'shgo'] = 'lbfgs',
+                 do_gradient_matching: bool = False):
         self.odes = ode_model
+        self.do_gradient_matching = do_gradient_matching
         self.measured_data = measured_data
         self.has_been_fitted = False
         self.method = method
         self.time_points = time_points
         self.param_limit = param_limit
+
+        if self.do_gradient_matching:
+            self.spline_per_rows = []
+            for row in self.measured_data:
+                spline = UnivariateSpline(self.time_points, row)
+                self.spline_per_rows.append(spline)
+
+                # plt.plot(time_points, spline(time_points))
+                # plt.plot(time_points, row, 'o')
+                # plt.show()
+                # self.measured_data = spline
+                # derivative = spline.derivative()
 
         # Set parameters
         self.params = Parameters()
@@ -64,6 +80,26 @@ class OdeFitter:
             self.init_condition_names.append(init_y_name)
         self.odes.set_u_t(u_t_function)
 
+    def gradient_matching_loss_function(self, params: Parameters,
+                                        t: np.ndarray,
+                                        custom_param_names: set[str] = None, return_scalar=False
+                                        ):
+        if custom_param_names:
+            # Parameters that should not be taken from 'params' but should use
+            # the value that is in the local 'self.params'.
+            for custom_param in custom_param_names:
+                params.add(self.params[custom_param])
+
+        y_prime_pred = self.odes.derivatives_at_time_points(
+            t, self.spline_per_rows, params)
+        y_prime_real = np.array(
+            [[spline.derivative()(one_t)
+                for spline in self.spline_per_rows]
+                for one_t in t])
+        if return_scalar:
+            return float(np.mean(np.square(y_prime_pred - y_prime_real)))
+        else:
+            raise NotImplementedError
 
     def loss_function(self, params: Parameters, t: np.ndarray,
                       y_real: np.ndarray,
@@ -115,6 +151,16 @@ class OdeFitter:
         else:
             assert self.method in ['lbfgs', 'bfgs'], \
                 'Can only enter maxiter for BFGS/LBFGS methods currently.'
+        if self.do_gradient_matching:
+            result = minimize(self.gradient_matching_loss_function,
+                              self.params,
+                              method=self.method,
+                              kws={'t': self.time_points,
+                                       'y_real': self.measured_data,
+                                       'return_scalar': True},
+                              options=dict(disp=1, maxiter=max_iter,
+                                               maxfun=1e99),
+                              )
 
         match self.method:
             case 'lbfgs' | 'bfgs':
