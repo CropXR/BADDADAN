@@ -30,7 +30,6 @@ class FormulaSuperClass:
         gamma_param_name = f'gamma_{self.module_index}'
         self.params.append(gamma_param_name)
 
-        # TODO make this nonlinear?
         self.formula_parts.append(f' + {gamma_param_name} * u_t * y[{self.module_index}] ')
         # self.formula_parts.append(f' + {gamma_param_name} * u_t ')
 
