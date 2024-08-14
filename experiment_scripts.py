@@ -712,9 +712,31 @@ def heat_pypesto(experiment_path):
         experiment_path
     )
 
-    sbml_importer = amici.SbmlImporter("model_steadystate_scaled.xml",
+    sbml_importer = amici.SbmlImporter(data_params['in_path'],
                                        show_sbml_warnings=True)
 
     model_name = "model_steadystate"
-    model_dir = "model_dir"
-    sbml_importer.sbml2amici(model_name, model_dir)
+    model_dir = experiment_path / "model_dir"
+    constant_parameters = ['u_t']
+
+    observables = amici.assignmentRules2observables(
+        sbml_importer.sbml,  # the libsbml model object
+        filter_function=lambda variable: variable.getId().startswith(
+            "observable_")
+    )
+    print(observables)
+
+    sbml_importer.sbml2amici(model_name, str(model_dir),
+                             constant_parameters=constant_parameters,
+                             observables=observables,
+                             compute_conservation_laws=False)
+
+    # load the generated module
+    model_module = amici.import_model_module(model_name, model_dir)
+    # Create Model instance
+    model = model_module.getModel()
+
+    print("Model parameters:", list(model.getParameterIds()))
+    print("Model outputs:   ", list(model.getObservableIds()))
+    print("Model states:    ", list(model.getStateIds()))
+

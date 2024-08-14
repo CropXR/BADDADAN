@@ -46,7 +46,7 @@ class FormulaSuperClass:
         out_string  = self.formula_string.replace('**', '^')
         out_string = out_string.replace('[', '_')
         out_string = out_string.replace(']', '')
-        out_string = out_string.replace('u_t', 'u(t)')
+        # out_string = out_string.replace('u_t', 'u')
         return out_string
 
     def specify_u_t(self, u_t: Callable):

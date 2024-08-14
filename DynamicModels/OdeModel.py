@@ -256,29 +256,67 @@ class OdeModel:
         document = libsbml.SBMLDocument(3, 1)
         model = document.createModel()
         model.setId('baddadan_model')
+        # model.setSubstanceUnits('mole')
+        model.setTimeUnits("second")
 
 
+        compartment = model.createCompartment()
+        compartment.setId('whole_plant')
+        compartment.setConstant(True)
+        compartment.setUnits('litre')
+
+        per_second = model.createUnitDefinition()
+        per_second.setId('per_second')
+        unit = per_second.createUnit()
+        unit.setKind(libsbml.UNIT_KIND_SECOND)
+        unit.setExponent(-1)
+        unit.setScale(0)
+        unit.setMultiplier(1)
+
+        u_param = model.createParameter()
+        u_param.setId('u_t')
+        u_param.setConstant(False)
+        u_param.setUnits('dimensionless')
+
+
+        # compartment.setConstant(True)
+        # compartment.setSize(1)
+        # compartment.setSpatialDimensions(3)
+        # compartment.setUnits('au')
 
         for module_formula in self.formula_per_module:
             # Add modules as entities
             module = model.createSpecies()
             module.setId(module_formula.module_y_name)
-            # module.setCompartment('compartment')
+            module.setCompartment('whole_plant')
             # And how about this :O? Retrieve from custom_params?
-            # module.setInitialAmount(1.0)  # Set appropriate initial condition
+            module.setInitialAmount(1.0)  # Set appropriate initial condition?
             module.setBoundaryCondition(False)
             module.setHasOnlySubstanceUnits(False)
             module.setConstant(False)
+
 
             # Add parameters
             for parameter_name in module_formula.params:
                 # Create parameters (delta, gamma, beta, k values)
                 new_param = model.createParameter()
                 new_param.setId(parameter_name)
-                # new_param.setValue(0.1)
+                new_param.setValue(0.1)
                 new_param.setConstant(False)
-            # Add reactions
+                new_param.setUnits('dimensionless')
 
+            # For AMICI each observable species needs to be specified:
+            obs_name = f'observable_{module_formula.module_y_name}'
+            obs_param = model.createParameter()
+            obs_param.setConstant(False)
+            obs_param.setId(obs_name)
+            rule = model.createAssignmentRule()
+            rule.setVariable(obs_name)
+            equation = libsbml.parseL3Formula(module_formula.module_y_name)
+            rule.setMath(equation)
+            libsbml.formulaToString(equation)
+
+            # Add reactions
             module_rate = model.createRateRule()
             module_rate.setVariable(module_formula.module_y_name)
             check(libsbml.parseL3Formula(
@@ -288,17 +326,21 @@ class OdeModel:
             rate_equation = libsbml.parseL3Formula(
                 module_formula.sbml_string
             )
-            libsbml.formulaToString(rate_equation)
+
 
             module_rate.setMath(rate_equation)
 
-
             # TODO Add environment-dependant variable things
 
-        # Save to out path
-        assert document.checkConsistency() == 0, \
-            (f'SBML document not valid. '
-             f'{[document.getError(i) for i in range(document.checkConsistency())]}')
 
+
+        # Check consistency
+        consistency_check = document.checkConsistency()
+        error_list = [f'{document.getError(i).getSeverityAsString()}: {document.getError(i).getMessage()}' for i in range(consistency_check)]
+        error_string = '\n '.join(error_list)
+        if consistency_check > 0:
+            logging.warning(f"SBML document not valid: {error_string}")
+
+        # Save to out path
         libsbml.writeSBMLToFile(document, str(out_path))
 
