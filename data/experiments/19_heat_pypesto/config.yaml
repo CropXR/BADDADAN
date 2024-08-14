@@ -1,0 +1,10 @@
+experiment_data:
+  name: 'Heat model fit ODE with PyPesto'
+  description: ""
+  summary_of_result: ""
+data:
+  in_path: 'data/experiments/09_heat_data_end_to_end/module_network.xml'
+hyperparams:
+  nr_fitters: 1
+  nr_ode_iters: 5
+  param_limit: 5

@@ -23,7 +23,7 @@ from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, 
     config_preprocess, prefilter_genes_experiment, drought_from_wgcna, \
     wgcna_with_similarity_scores, drought_with_string_db, \
     integrate_multiple_datasets, generate_dists_for_wgcna_cutting, \
-    ground_truth_vs_jackknife, fit_ode_drought_data
+    ground_truth_vs_jackknife, fit_ode_drought_data, heat_pypesto
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
     parse_string_input_data
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
@@ -460,7 +460,7 @@ def camila_red_panda(soft_file_in_path: Path,
 
 def main():
     # ONLY EDIT THESE LINES
-    name = '09_heat_data_end_to_end'
+    name = '19_heat_pypesto'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -539,6 +539,8 @@ def main():
             #####################
 
             ground_truth_vs_jackknife(experiment_path, expr_mat_time)
+        case "19_heat_pypesto":
+            heat_pypesto(experiment_path)
         case _:
             raise NotImplementedError(f'{name} not found')
 
@@ -558,7 +560,6 @@ def main():
                 mlflow.log_artifact(str(file))
 
 
-        #
         # if not file.suffix in ['.npy', '.csv', '.pkl', '.gzip']:
         #     mlflow.log_artifact(str(file))
 

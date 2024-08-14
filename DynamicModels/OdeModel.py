@@ -296,9 +296,9 @@ class OdeModel:
             # TODO Add environment-dependant variable things
 
         # Save to out path
-        if document.checkConsistency() == 0:
-            print('The SBML document is valid.')
+        assert document.checkConsistency() == 0, \
+            (f'SBML document not valid. '
+             f'{[document.getError(i) for i in range(document.checkConsistency())]}')
 
         libsbml.writeSBMLToFile(document, str(out_path))
 
-        pass

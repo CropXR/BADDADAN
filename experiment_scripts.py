@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial.distance import squareform
 from sklearn.metrics import adjusted_rand_score
 from scipy.cluster.hierarchy import linkage, fcluster
+import amici
 
 from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
 from DynamicModels.OdeLocalParameters import OdeLocalParameters
@@ -470,7 +471,9 @@ def config_preprocess(experiment_path):
     experiment_params = config['experiment_data']
     agg_method_dict = {'mean': AggregationMethod.MEAN,
                        'eigengene': AggregationMethod.EIGENGENE}
-    hyper_params['agg_method'] = agg_method_dict[hyper_params['agg_method']]
+    hyper_params['agg_method'] = agg_method_dict.get(
+        hyper_params.get('agg_method')
+    )
     return data_params, hyper_params, experiment_params
 
 def drought_with_string_db(experiment_path):
@@ -704,7 +707,14 @@ def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
     plt.savefig(in_path.parent / 'figs' / 'size_modules.png')
     plt.close()
 
+def heat_pypesto(experiment_path):
+    data_params, hyper_params, experiment_params = config_preprocess(
+        experiment_path
+    )
 
+    sbml_importer = amici.SbmlImporter("model_steadystate_scaled.xml",
+                                       show_sbml_warnings=True)
 
-
-
+    model_name = "model_steadystate"
+    model_dir = "model_dir"
+    sbml_importer.sbml2amici(model_name, model_dir)
