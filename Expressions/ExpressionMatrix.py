@@ -1064,7 +1064,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         if 'time' not in out_df.columns:
             new_cols = self.column_parser(out_df['sample'].to_list())
             out_df = pd.concat([out_df, pd.DataFrame.from_dict(new_cols)], axis=1)
-        out_df['elapsed_mins'] = out_df['time'].astype('timedelta64[m]')
+        out_df['elapsed_mins'] = out_df['time'].dt.seconds / 60
         return out_df
 
     def _get_gene_expression_long_form(self):
