@@ -6,10 +6,15 @@ from typing import Dict
 
 import dill as pickle
 import mlflow
+import numpy as np
 import pandas as pd
+import pypesto
+import pypesto.optimize as optimize
 import yaml
 import seaborn as sns
 import matplotlib.pyplot as plt
+from amici.plotting import plot_observable_trajectories, \
+    plot_state_trajectories
 from scipy.spatial.distance import squareform
 from sklearn.metrics import adjusted_rand_score
 from scipy.cluster.hierarchy import linkage, fcluster
@@ -543,6 +548,9 @@ def heat_data_e2e_pipeline(experiment_path):
     # # TO get gene list
     # [print(i) for i in expr_mat_time.get_genes_per_cluster()[75]]
 
+    with (experiment_path / 'expr_mat_time.pkl').open('wb') as f:
+        pickle.dump(expr_mat_time, f)
+
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
         tf2_out_path,
@@ -712,24 +720,30 @@ def heat_pypesto(experiment_path):
         experiment_path
     )
 
-    sbml_importer = amici.SbmlImporter(data_params['in_path'],
-                                       show_sbml_warnings=True)
-
+    with open(data_params['expr_mat_time_path'], 'rb') as f:
+        expr_mat_time = pickle.load(f)
     model_name = "model_steadystate"
-    model_dir = experiment_path / "model_dir"
+    model_dir = str(experiment_path / "model_dir")
     constant_parameters = ['u_t']
 
-    observables = amici.assignmentRules2observables(
-        sbml_importer.sbml,  # the libsbml model object
-        filter_function=lambda variable: variable.getId().startswith(
-            "observable_")
-    )
-    print(observables)
+    omit_sbml_converstion = True
+    if not omit_sbml_converstion:
+        sbml_importer = amici.SbmlImporter(data_params['sbml_path'],
+                                           show_sbml_warnings=True)
 
-    sbml_importer.sbml2amici(model_name, str(model_dir),
-                             constant_parameters=constant_parameters,
-                             observables=observables,
-                             compute_conservation_laws=False)
+
+
+        observables = amici.assignmentRules2observables(
+            sbml_importer.sbml,  # the libsbml model object
+            filter_function=lambda variable: variable.getId().startswith(
+                "observable_")
+        )
+        print(observables)
+        # Sometimes get AttributeError: 'PosixPath' object has no attribute 'startswith'?
+        sbml_importer.sbml2amici(model_name, model_dir,
+                                 constant_parameters=constant_parameters,
+                                 observables=observables,
+                                 compute_conservation_laws=False)
 
     # load the generated module
     model_module = amici.import_model_module(model_name, model_dir)
@@ -740,3 +754,108 @@ def heat_pypesto(experiment_path):
     print("Model outputs:   ", list(model.getObservableIds()))
     print("Model states:    ", list(model.getStateIds()))
 
+    # Now get data to do the fit
+    print()
+    # Get expr mat time
+    # TODO later on put this all in a class again
+    if expr_mat_time.aggregation_method == AggregationMethod.EIGENGENE:
+        expressions: pd.DataFrame = expr_mat_time.df.groupby('cluster_id').apply(
+            expr_mat_time._get_eigengene_over_time)
+        # Add constant value to eigengenes
+        expressions = abs(expressions.min().min()) + expressions
+    elif expr_mat_time.aggregation_method == AggregationMethod.MEAN:
+        expressions: pd.DataFrame = expr_mat_time.df.groupby('cluster_id').apply(
+            expr_mat_time._get_mean_over_time)
+        # dataset.plot_clusters_over_time()
+    else:
+        raise NotImplementedError
+
+    for word in expr_mat_time.condition_names:
+        # Deepcopy first?
+        # dataset.keep_only_samples_with_string(word)
+        valid_index = expressions.columns.get_level_values(
+            'condition').isin(['zero', word])
+        data = expressions.loc[:, valid_index]
+        # Ensure that time is increasing
+        data = data.sort_index(axis=1, level='time')
+        # Convert time into hours
+        time = data.columns.get_level_values('time') / pd.to_timedelta(1,
+                                                                       unit='h')
+        assert len(data.columns) == len(time)
+        data = data.to_numpy()
+        time = time.to_numpy()
+        # u_t_for_dataset = custom_params_per_dataset[word].u_t
+        u_t_for_dataset = 1
+
+        # set timepoints for which we want to simulate the model
+        model.setTimepoints(time)
+
+        # # Here: set u_t to correct value
+        # model.setFixedParameters(np.array([u_t_for_dataset]))
+        model.setFixedParametersByIdRegex('u_t', u_t_for_dataset)
+
+        # set parameters to optimal values found in the benchmark collection
+        # model.setParameterScale(amici.ParameterScaling.log10)
+        nr_params = len(model.getParameterIds())
+        # IF all zero, does not throw error
+        # model.setParameters(np.zeros(nr_params))
+
+        # model.setParameters(np.random.standard_normal(nr_params)/10)
+        some_params = np.random.rand(nr_params)/10
+        model.setParameters(some_params)
+
+        # Create solver instance
+        solver = model.getSolver()
+
+        # Run simulation using model parameters from the benchmark collection and default solver options
+        rdata = amici.runAmiciSimulation(model, solver)
+
+        # plot_observable_trajectories(rdata)
+        # plt.show()
+        # plot_state_trajectories(rdata)
+        # plt.show()
+        # Create edata instance with dimensions and timepoints
+
+        edata = amici.ExpData(
+            data.shape[0],  # number of observables
+            0,  # number of event outputs
+            0,  # maximum number of events
+            time,  # timepoints
+        )
+        # set observed data
+        for i in range(data.shape[0]):
+            edata.setObservedData(data[i,:], i)
+
+        rdata = amici.runAmiciSimulation(model, solver, edata)
+
+        print(f"chi2 value using AMICI: {rdata['chi2']}")
+
+        # we make some more adjustments to our model and the solver
+        model.requireSensitivitiesForAllParameters()
+
+        solver.setSensitivityMethod(amici.SensitivityMethod.forward)
+        solver.setSensitivityOrder(amici.SensitivityOrder.first)
+
+        objective = pypesto.AmiciObjective(
+            amici_model=model, amici_solver=solver, edatas=[edata],
+            max_sensi_order=1
+        )
+
+        # the generic objective call
+        print(f"Objective value: {objective(some_params)}")
+        # a call returning the AMICI data as well
+        obj_call_with_dict = objective(some_params, return_dict=True)
+        print(
+            f'Chi^2 value of the same parameters: {obj_call_with_dict["rdatas"][0]["chi2"]}'
+        )
+
+        n_starts = 20  # usually a value >= 100 should be used
+        engine = pypesto.engine.MultiProcessEngine()
+        result = optimize.minimize(
+            problem=problem,
+            optimizer=optimizer,
+            n_starts=n_starts,
+            startpoint_method=startpoint_method,
+            engine=engine,
+            options=opt_options,
+        )

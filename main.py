@@ -541,6 +541,8 @@ def main():
 
             ground_truth_vs_jackknife(experiment_path, expr_mat_time)
         case "19_heat_pypesto":
+            # Run heat data e2e first for this to run
+            # heat_data_e2e_pipeline(experiment_path)
             heat_pypesto(experiment_path)
         case _:
             raise NotImplementedError(f'{name} not found')

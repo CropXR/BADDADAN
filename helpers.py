@@ -3,16 +3,23 @@ import logging
 import re
 import string
 from pathlib import Path
-from typing import List
+from typing import List, Iterable
 
 import numpy as np
 import requests
 import seaborn as sns
 import pandas as pd
+
+
+
+import amici
+from amici import ReturnDataView, Model
 from scipy.spatial.distance import euclidean, squareform
 from scipy.stats import bootstrap
 from lmfit import Parameters
 from matplotlib import pyplot as plt
+from matplotlib.axes import Axes
+
 from scipy.integrate._ivp.ivp import OdeResult
 from sklearn.decomposition import PCA
 from sklearn.model_selection import RepeatedStratifiedKFold
@@ -461,3 +468,144 @@ def keep_common_genes_in_dfs(df1, df2):
     df1 = df1.loc[selected_genes, selected_genes]
     df2 = df2.loc[selected_genes, selected_genes]
     return df1, df2, selected_genes
+
+#
+# def plot_state_trajectories(
+#     rdata: ReturnDataView,
+#     state_indices: Sequence[int] | None = None,
+#     ax: Axes | None = None,
+#     model: Model = None,
+#     prefer_names: bool = True,
+#     marker=None,
+# ) -> None:
+#     """
+#     Plot state trajectories.
+#
+#     :param rdata:
+#         AMICI simulation results as returned by
+#         :func:`amici.amici.runAmiciSimulation`.
+#     :param state_indices:
+#         Indices of state variables for which trajectories are to be plotted.
+#     :param ax:
+#         :class:`matplotlib.pyplot.Axes` instance to plot into.
+#     :param model:
+#         The model *rdata* was generated from.
+#     :param prefer_names:
+#         Whether state names should be preferred over IDs, if available.
+#     :param marker:
+#         Point marker for plotting (see
+#         `matplotlib documentation <https://matplotlib.org/stable/api/markers_api.html>`_).
+#     """
+#     if not ax:
+#         fig, ax = plt.subplots()
+#     if not state_indices:
+#         state_indices = range(rdata["x"].shape[1])
+#
+#     if marker is None:
+#         # Show marker if only one time point is available,
+#         #  otherwise nothing will be shown
+#         marker = "o" if len(rdata.t) == 1 else None
+#
+#     if model is None and rdata.ptr.state_ids is None:
+#         labels = [f"$x_{{{ix}}}$" for ix in state_indices]
+#     elif model is not None and prefer_names:
+#         labels = np.asarray(model.getStateNames())[list(state_indices)]
+#         labels = [
+#             l if l else model.getStateIds()[ix] for ix, l in enumerate(labels)
+#         ]
+#     elif model is not None:
+#         labels = np.asarray(model.getStateIds())[list(state_indices)]
+#     else:
+#         labels = np.asarray(rdata.ptr.state_ids)[list(state_indices)]
+#
+#     for ix, label in zip(state_indices, labels, strict=True):
+#         ax.plot(rdata["t"], rdata["x"][:, ix], marker=marker, label=label)
+#
+#     ax.set_xlabel("$t$")
+#     ax.set_ylabel("$x(t)$")
+#     ax.legend()
+#     ax.set_title("State trajectories")
+#
+#
+# def plot_observable_trajectories(
+#     rdata: ReturnDataView,
+#     observable_indices: Iterable[int] | None = None,
+#     ax: Axes | None = None,
+#     model: Model = None,
+#     prefer_names: bool = True,
+#     marker=None,
+#     edata: amici.ExpData | amici.ExpDataView = None,
+# ) -> None:
+#     """
+#     Plot observable trajectories.
+#
+#     :param rdata:
+#         AMICI simulation results as returned by
+#         :func:`amici.amici.runAmiciSimulation`.
+#     :param observable_indices:
+#         Indices of observables for which trajectories are to be plotted.
+#     :param ax:
+#         :class:`matplotlib.pyplot.Axes` instance to plot into.
+#     :param model:
+#         The model *rdata* was generated from.
+#     :param prefer_names:
+#         Whether observable names should be preferred over IDs, if available.
+#     :param marker:
+#         Point marker for plotting (see
+#         `matplotlib documentation <https://matplotlib.org/stable/api/markers_api.html>`_).
+#     :param edata:
+#         Experimental data to be plotted (no event observables yet).
+#     """
+#     if isinstance(edata, amici.amici.ExpData):
+#         edata = amici.ExpDataView(edata)
+#
+#     if not ax:
+#         fig, ax = plt.subplots()
+#     if not observable_indices:
+#         observable_indices = range(rdata.ny)
+#
+#     if marker is None:
+#         # Show marker if only one time point is available,
+#         #  otherwise nothing will be shown
+#         marker = "o" if len(rdata.t) == 1 else None
+#
+#     if model is None and rdata.ptr.observable_ids is None:
+#         labels = [f"$y_{{{iy}}}$" for iy in observable_indices]
+#     elif model is not None and prefer_names:
+#         labels = np.asarray(model.getObservableNames())[
+#             list(observable_indices)
+#         ]
+#         labels = [
+#             l if l else model.getObservableIds()[ix]
+#             for ix, l in enumerate(labels)
+#         ]
+#     elif model is not None:
+#         labels = np.asarray(model.getObservableIds())[list(observable_indices)]
+#     else:
+#         labels = np.asarray(rdata.ptr.observable_ids)[list(observable_indices)]
+#
+#     for iy, label in zip(observable_indices, labels, strict=True):
+#         (l,) = ax.plot(
+#             rdata["t"], rdata["y"][:, iy], marker=marker, label=label
+#         )
+#
+#         if edata is not None:
+#             ax.plot(
+#                 edata.ts,
+#                 edata.observedData[:, iy],
+#                 "x",
+#                 label=f"exp. {label}",
+#                 color=l.get_color(),
+#             )
+#             ax.errorbar(
+#                 edata.ts,
+#                 edata.observedData[:, iy],
+#                 yerr=rdata.sigmay[:, iy],
+#                 fmt="none",
+#                 color=l.get_color(),
+#             )
+#
+#     ax.set_xlabel("$t$")
+#     ax.set_ylabel("$y(t)$")
+#     ax.set_title("Observable trajectories")
+#     ax.legend()

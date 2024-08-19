@@ -3,8 +3,17 @@ experiment_data:
   description: ""
   summary_of_result: ""
 data:
-  in_path: 'data/experiments/09_heat_data_end_to_end/module_network.xml'
+  in_path: 'limma_de_selection/heat_expr_matrix_limma_filtered.csv'
+  wgcna_module_assignment_path: 'data/experiments/18_robustness_with_wgcna_cutting/heat/r_output/full_datasets/combined_sum_dists_wgcna_clustered.csv'
+  tf2_in_name: '01_tf2_input.txt'
+  tf2_out_name: '02_tf2network_output.tsv'
+  expr_mat_time_path: 'data/experiments/19_heat_pypesto/expr_mat_time.pkl'
+  sbml_path: 'data/experiments/19_heat_pypesto/module_network.xml'
 hyperparams:
+  agg_method: 'mean'
+  do_log2: False
+  edge_corr_threshold: .1
+  top_nr_clusters: 3
   nr_fitters: 1
   nr_ode_iters: 5
   param_limit: 5
