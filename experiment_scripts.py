@@ -810,8 +810,8 @@ def heat_pypesto(experiment_path):
         # Run simulation using model parameters from the benchmark collection and default solver options
         rdata = amici.runAmiciSimulation(model, solver)
 
-        # plot_observable_trajectories(rdata)
-        # plt.show()
+        plot_observable_trajectories(rdata)
+        plt.show()
         # plot_state_trajectories(rdata)
         # plt.show()
         # Create edata instance with dimensions and timepoints

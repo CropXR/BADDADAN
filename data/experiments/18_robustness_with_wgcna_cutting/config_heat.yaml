@@ -12,4 +12,4 @@ hyperparams:
   nr_jackknifes: 30
   subset_size: .75
   r_min_module_size: 20
-  r_deep_split: 3
+  r_deep_split: [0, 1, 2, 3, 4]
