@@ -25,7 +25,7 @@ from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, 
     integrate_multiple_datasets, generate_dists_for_wgcna_cutting, \
     ground_truth_vs_jackknife, fit_ode_drought_data, heat_pypesto
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
-    parse_string_input_data
+    parse_string_input_data, one_gene_list_file_per_cluster
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
 # pd.options.display.width = 0
@@ -461,7 +461,7 @@ def camila_red_panda(soft_file_in_path: Path,
 def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
-    name = '19_heat_pypesto'
+    name = '20_go_terms_deepsplit_values'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -471,6 +471,7 @@ def main():
     logging.basicConfig(level=logging.INFO,
                         handlers=[logging.FileHandler(experiment_path / "log.log"),
                                   logging.StreamHandler()])
+
     match name:
         case '04_comparing_clusterings':
             # Full compare clustering
@@ -541,12 +542,27 @@ def main():
 
             ground_truth_vs_jackknife(experiment_path, expr_mat_time)
         case "19_heat_pypesto":
+
             # Run heat data e2e first for this to run
             # heat_data_e2e_pipeline(experiment_path)
             heat_pypesto(experiment_path)
+
+        case "20_go_terms_deepsplit_values":
+            for treatment_name in ['drought', 'heat']:
+                data_params, hyper_params, experiment_params = config_preprocess(
+                    experiment_path / treatment_name)
+                one_gene_list_file_per_cluster(
+                    in_dir=Path(data_params['in_path']),
+                    out_dir=Path(data_params['out_path']),
+                )
+                ### RUN SNAKEMAKE ###
+                # JUST PASTE COMMAND HERE BECAUSE ITS EASIEST
+
+
+                analyse_go_enrichments_find_enrichment(
+                    experiment_path / treatment_name / 'go_outputs')
         case _:
             raise NotImplementedError(f'{name} not found')
-
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
     with mlflow.start_run(description=experiment_params['description']):

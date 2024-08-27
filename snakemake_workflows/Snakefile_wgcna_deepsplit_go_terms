@@ -1,0 +1,29 @@
+"""
+Execute from within the experiment 20 'drought' or 'heat' directory
+
+E.g. this command:
+snakemake -s ../../../../snakemake_workflows/Snakefile_wgcna_deepsplit_go_terms -r -c5 -k
+
+"""
+
+
+IDS, = glob_wildcards("split_by_module/{id}.csv")
+
+
+rule target:
+    input:
+        expand("go_outputs/{id}.tsv", id=IDS)
+
+rule go_annotate:
+    input:
+        "split_by_module/{id}.csv",
+        "../../../resources/go_annotations/ATH_GO_GOSLIM_genes_only.txt",
+        "../../../resources/go_annotations/ATH_GO_GOSLIM_one_gene_per_line.txt",
+    params:
+        obo="../../../resources/go_annotations/go-basic.obo"
+    output:
+        "go_outputs/{id}.tsv"
+    log:
+        "go_outputs/{id}.log"
+    shell:
+        "find_enrichment.py {input} --pval=0.05 --method=fdr_bh --pval_field=fdr_bh --obo {params.obo} --ns=BP --outfile {output} > {log}"

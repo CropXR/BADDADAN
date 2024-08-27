@@ -667,53 +667,110 @@ def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
         experiment_path)
 
     in_path = Path(data_params['r_out_path'])
-    robustness_out_list = []
-    coherence_out_list = []
+    out_list = []
+    module_size_list = []
     # FOr keyword, find jackknifes:
-    for keyword in ['atted', 'combined_min', 'combined_sum', 'local']:
-    # for keyword in ['atted', 'combined_min', 'local']:
-        expr_mat_time_copy = deepcopy(expr_mat_time)
-        jackknife_paths = list(in_path.glob(f'{keyword}/*.csv'))
-        logging.info(f'Doing {keyword}')
-        # Full dataset
-        full_dataset_path_list = list(in_path.glob(f'full_datasets/{keyword}*.csv'))
-        assert len(jackknife_paths) == hyper_params['nr_jackknifes']
-        assert  len(full_dataset_path_list) == 1
-        full_dataset_path = full_dataset_path_list[0]
-        full_dataset = pd.read_csv(full_dataset_path, usecols=[1,2])
-        full_dataset = full_dataset.set_index('gene_id')
+    for method in ['atted', 'combined_min', 'combined_sum', 'local']:
+        for deepsplit_value in hyper_params['r_deep_split']:
+            expr_mat_time_copy = deepcopy(expr_mat_time)
+            jackknife_paths = list(
+                in_path.glob(f'{method}/*ds{deepsplit_value}.csv')
+            )
+            logging.info(f'Doing {method} with {deepsplit_value=}')
+            # Full dataset
+            full_dataset_path_list = list(
+                in_path.glob(f'full_datasets/{method}*ds{deepsplit_value}.csv')
+            )
+            assert len(jackknife_paths) == hyper_params['nr_jackknifes']
+            assert  len(full_dataset_path_list) == 1
+            full_dataset_path = full_dataset_path_list[0]
+            full_dataset = pd.read_csv(full_dataset_path, usecols=[1,2])
+            full_dataset = full_dataset.set_index('gene_id')
 
-        # Do coherence per module
-        expr_mat_time_copy.assign_clusters_from_wgcna(full_dataset_path)
-        coherence_entry = expr_mat_time_copy.get_all_explained_vars()
-        coherence_out_list.extend([(keyword, i) for i in coherence_entry])
+            # Module sizes (in full dataset)
+            module_size_list.extend(
+                [(method, deepsplit_value, size)
+                for size in full_dataset.value_counts().to_list()]
+            )
+            sns.histplot(full_dataset.value_counts().to_list())
+            plt.xlabel('Module size')
+            plt.savefig(in_path.parent / 'figs'
+                        / f'{method}_size_modules_ds{deepsplit_value}.png')
+            plt.close()
 
-        for jackknife_path in jackknife_paths:
-                subset = pd.read_csv(jackknife_path, usecols=[1,2])
-                subset = subset.set_index('gene_id')
-                # Merge genes
-                merged_df = subset.join(full_dataset,
-                                        how='inner',
-                                                   lsuffix='_subset',
-                                                   rsuffix='_og')
-                ari = adjusted_rand_score(merged_df['colors_subset'],
-                                          merged_df['colors_og'])
-                robustness_out_list.append((keyword, ari))
+            # Do coherence per module
+            expr_mat_time_copy.assign_clusters_from_wgcna(full_dataset_path)
+            coherence_entry = expr_mat_time_copy.get_all_explained_vars()
+            out_list.extend([(method, deepsplit_value, 'coherence', i) for i in coherence_entry])
 
-    robustness_df = pd.DataFrame.from_records(robustness_out_list, columns=['method', 'ari'])
-    sns.violinplot(data=robustness_df, y='ari', x='method')
-    plt.savefig(in_path.parent /  'figs' / 'robustness_modules.png')
+            # Robustness
+            for jackknife_path in jackknife_paths:
+                    subset = pd.read_csv(jackknife_path, usecols=[1,2])
+                    subset = subset.set_index('gene_id')
+                    # Merge genes
+                    merged_df = subset.join(full_dataset,
+                                            how='inner',
+                                                       lsuffix='_subset',
+                                                       rsuffix='_og')
+                    ari = adjusted_rand_score(merged_df['colors_subset'],
+                                              merged_df['colors_og'])
+                    out_list.append((method, deepsplit_value, 'robustness', ari))
+
+    metric_df = pd.DataFrame.from_records(out_list, columns=['method', 'deepsplit', 'metric', 'score'])
+    sns.catplot(metric_df, x='deepsplit', y='score', hue='metric',
+                col='method', kind='box')
+    plt.savefig(in_path.parent /  'figs' / 'coherence_robustness_modules.png')
     plt.close()
 
-    coherence_df = pd.DataFrame.from_records(coherence_out_list, columns=['method', 'coherence'])
-    sns.violinplot(data=coherence_df, y='coherence', x='method')
-    plt.savefig(in_path.parent / 'figs' / 'coherence_modules.png')
+    module_size_df = pd.DataFrame.from_records(module_size_list, columns=['method', 'deepsplit', 'size'] )
+    sns.catplot(data=module_size_df, y='size', x='deepsplit', col='method',
+                col_wrap=2, kind='strip')
+    plt.savefig(in_path.parent /  'figs' / 'module_size_stripplot.png')
     plt.close()
 
-    sns.histplot(full_dataset.value_counts().to_list())
-    plt.xlabel('Module size')
-    plt.savefig(in_path.parent / 'figs' / 'size_modules.png')
+    sns.catplot(data=module_size_df, y='size', x='deepsplit', col='method',
+                col_wrap=2, kind='box')
+    plt.savefig(in_path.parent /  'figs' / 'module_size_boxplot.png')
     plt.close()
+
+    sns.catplot(data=module_size_df, x='deepsplit', col='method',
+                col_wrap=2, kind='count')
+    plt.savefig(in_path.parent / 'figs' / 'module_counts.png')
+    plt.close()
+
+    # sns.violinplot(data=robustness_df, y='ari', x='method')
+    # plt.savefig(in_path.parent /  'figs' / 'robustness_modules.png')
+    # plt.close()
+    #
+    # sns.violinplot(data=coherence_df, y='coherence', x='method')
+    # plt.savefig(in_path.parent / 'figs' / 'coherence_modules.png')
+    # plt.close()
+
+
+
+def write_petab_files_heat(expr_mat_time: ExpressionMatrixTimeSeries, sbml_path: Path | str, out_path: Path):
+    # Create conditions.tsv
+    col_names = ['conditionId', 'conditionName', 'u_t']
+    cond_entries = [
+        ['control', 'no heat applied', 0],
+        ['heat',    'heat applied',    1]
+    ]
+    out_path.mkdir(exist_ok=True)
+    cond_df = pd.DataFrame(data=cond_entries,
+                           columns=col_names)
+    cond_df.to_csv(out_path / 'conditions.tsv', sep='\t', index=False)
+
+    # observables.tsv
+    for module in expr_mat_time.get_genes_per_cluster().keys():
+        ...
+
+    sbml_importer = amici.SbmlImporter(sbml_path,
+                                       show_sbml_warnings=True)
+    # measurements.tsv=True)
+
+    # parameters.tsv
+    # create yaml file
+    # do evaluation of YAML file using the PETAB library
 
 def heat_pypesto(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(
@@ -725,6 +782,10 @@ def heat_pypesto(experiment_path):
     model_name = "model_steadystate"
     model_dir = str(experiment_path / "model_dir")
     constant_parameters = ['u_t']
+
+    # write_petab_files_heat(expr_mat_time, data_params['sbml_path'], experiment_path / 'petab_files')
+
+
 
     omit_sbml_converstion = True
     if not omit_sbml_converstion:

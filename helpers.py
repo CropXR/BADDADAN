@@ -461,6 +461,13 @@ def call_string_db(list_of_genes: list, species:int, method="ppi_enrichment",) -
         results = results.sort_values(by="fdr", ascending=True)
         return results
 
+def one_gene_list_file_per_cluster(in_dir: Path, out_dir: Path):
+    for file in in_dir.iterdir():
+        logging.info(f'Processing {file.name}')
+        df = pd.read_csv(file, index_col=0)
+        for module_name, group_df in df.groupby('colors'):
+            out_file_name = f'{file.stem}_module_{module_name}.csv'
+            group_df['gene_id'].to_csv(out_dir / out_file_name, index=False, header=False)
 
 def keep_common_genes_in_dfs(df1, df2):
     # get intersection
