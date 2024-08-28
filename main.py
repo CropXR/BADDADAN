@@ -23,7 +23,8 @@ from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, 
     config_preprocess, prefilter_genes_experiment, drought_from_wgcna, \
     wgcna_with_similarity_scores, drought_with_string_db, \
     integrate_multiple_datasets, generate_dists_for_wgcna_cutting, \
-    ground_truth_vs_jackknife, fit_ode_drought_data, heat_pypesto
+    ground_truth_vs_jackknife, fit_ode_drought_data, heat_pypesto, \
+    analyse_go_enrichments_find_enrichment
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
     parse_string_input_data, one_gene_list_file_per_cluster
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
@@ -548,23 +549,31 @@ def main():
             heat_pypesto(experiment_path)
 
         case "20_go_terms_deepsplit_values":
-            for treatment_name in ['drought', 'heat']:
+            # for treatment_name in ['heat']:
+            for treatment_name in ['drought']:
+            # for treatment_name in ['drought', 'heat']:
                 data_params, hyper_params, experiment_params = config_preprocess(
                     experiment_path / treatment_name)
-                one_gene_list_file_per_cluster(
-                    in_dir=Path(data_params['in_path']),
-                    out_dir=Path(data_params['out_path']),
-                )
+                skip= True
+                if not skip:
+                    one_gene_list_file_per_cluster(
+                        in_dir=Path(data_params['in_path']),
+                        out_dir=Path(data_params['out_path']),
+                    )
                 ### RUN SNAKEMAKE ###
-                # JUST PASTE COMMAND HERE BECAUSE ITS EASIEST
-
+                # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
 
                 analyse_go_enrichments_find_enrichment(
-                    experiment_path / treatment_name / 'go_outputs')
+                    experiment_path / treatment_name / 'go_outputs',
+                    experiment_path / treatment_name / 'figures',
+                    )
         case _:
             raise NotImplementedError(f'{name} not found')
-    data_params, hyper_params, experiment_params = config_preprocess(
-        experiment_path)
+    try:
+        (data_params, hyper_params, experiment_params)
+    except NameError:
+        data_params, hyper_params, experiment_params = config_preprocess(
+            experiment_path)
     with mlflow.start_run(description=experiment_params['description']):
         mlflow.log_params(data_params)
         mlflow.log_params(hyper_params)
@@ -574,6 +583,9 @@ def main():
             for extension in extensions:
                 for file in Path(data_params['r_out_path']).parent.rglob(f'*.{extension}'):
                     mlflow.log_artifact(str(file))
+        elif name == '20_go_terms_deepsplit_values':
+            mlflow.log_artifact(str(experiment_path / 'drought' / 'figures'))
+            # mlflow.log_artifact(str(experiment_path / 'heat' / 'figures'))
         else:
             for file in experiment_path.iterdir():
                 mlflow.log_artifact(str(file))

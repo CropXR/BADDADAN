@@ -3,6 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 from random import sample
 from typing import Dict
+import re
 
 import dill as pickle
 import mlflow
@@ -434,6 +435,74 @@ def drought_data_e2e_pipeline(experiment_path):
     # expr_mat_time.get_genes_per_cluster()[328]
     fit_ode_drought_data(experiment_path, expr_mat_time, hyper_params,
                          module_module)
+
+
+def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
+    # For DS and Method
+    out_records = []
+    for file in in_path.glob('*.log'):
+        with file.open('r') as f:
+            text = f.read()
+            module_size = re.search('(?<=Study:) \d+', text).group()
+        module_size = int(module_size)
+
+        method = file.name.split('_wgcna')[0]
+        deepsplit_value = re.search('(?<=ds)\d+', file.name).group()
+        module_nr = re.search('(?<=module_)\d+', file.name).group()
+        go_output_file_name = file.with_suffix('.tsv')
+        if go_output_file_name.exists():
+            one_module_df = pd.read_csv(go_output_file_name, sep='\t')
+            nr_enriched = len(one_module_df)
+        else:
+            nr_enriched= 0
+        out_records.append((method, deepsplit_value, module_nr, nr_enriched, module_size))
+
+    all_result_df = pd.DataFrame.from_records(
+        out_records,
+        columns=['method', 'deepsplit', 'module_id', 'nr_enriched_go_terms', 'module_size'])
+    # print(all_result_df.groupby(['method', 'deepsplit'])['nr_enriched_go_terms'].mean())
+    sns.catplot(data=all_result_df, x='deepsplit', y='nr_enriched_go_terms', col='method', kind='box')
+    plt.savefig(out_path / 'go_terms_per_module_boxplot.png')
+    plt.close()
+
+    sns.boxplot(data=all_result_df, x='module_size', y='method',
+                hue='deepsplit')
+    plt.tight_layout()
+    plt.savefig(out_path / 'module_sizes_deepsplit_hue_is_deepsplit_boxplot.png')
+    plt.show()
+
+    sns.boxplot(data=all_result_df, x='module_size', hue='method',
+                y='deepsplit')
+    plt.tight_layout()
+    plt.savefig(out_path / 'module_sizes_deepsplit_hue_is_method_boxplot.png')
+    plt.show()
+
+    sns.catplot(data=all_result_df, x='deepsplit', y='nr_enriched_go_terms', col='method', kind='strip')
+    plt.savefig(out_path / 'go_terms_per_module_stripplot.png')
+    plt.close()
+
+    mean_module_size = all_result_df.groupby(['method', 'deepsplit'])['module_size'].mean()
+    mean_enriched_go_terms = all_result_df.groupby(['method', 'deepsplit'])['nr_enriched_go_terms'].mean()
+    module_size_and_nr_go_terms_df = pd.concat(
+        [mean_module_size, mean_enriched_go_terms], axis=1).reset_index()
+    module_size_and_nr_go_terms_df = module_size_and_nr_go_terms_df.rename({'module_size': 'mean_module_size'}, axis='columns')
+
+    sns.scatterplot(data=module_size_and_nr_go_terms_df, x='mean_module_size', y='nr_enriched_go_terms',
+                    hue='method', style='deepsplit')
+    plt.ylabel('Mean nr of enriched go terms per module')
+    # Add error bar?
+    plt.savefig(out_path / 'module_size_mean_nr_go_terms_scatterplot.png')
+    plt.show()
+
+    mean_module_size = mean_module_size.reset_index()
+    mean_module_size = mean_module_size.rename({'module_size': 'mean_module_size'}, axis='columns')
+    newer_df = all_result_df.merge(mean_module_size, on=['method', 'deepsplit'])
+    sns.lineplot(data=newer_df, x='mean_module_size', y='nr_enriched_go_terms',
+                 hue='method', style='method', err_style='bars', marker='o')
+    plt.savefig(out_path / 'module_size_mean_nr_go_terms_line_plot.png')
+    # TODO implement error bars
+    # plt.errorbar(...)
+    plt.show()
 
 
 def fit_ode_drought_data(experiment_path, expr_mat_time, hyper_params,
