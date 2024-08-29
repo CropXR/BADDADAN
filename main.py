@@ -462,7 +462,7 @@ def camila_red_panda(soft_file_in_path: Path,
 def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
-    name = '20_go_terms_deepsplit_values'
+    name = '18_robustness_with_wgcna_cutting'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 

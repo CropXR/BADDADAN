@@ -761,11 +761,11 @@ def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
                 [(method, deepsplit_value, size)
                 for size in full_dataset.value_counts().to_list()]
             )
-            sns.histplot(full_dataset.value_counts().to_list())
-            plt.xlabel('Module size')
-            plt.savefig(in_path.parent / 'figs'
-                        / f'{method}_size_modules_ds{deepsplit_value}.png')
-            plt.close()
+            # sns.histplot(full_dataset.value_counts().to_list())
+            # plt.xlabel('Module size')
+            # plt.savefig(in_path.parent / 'figs'
+            #             / f'{method}_size_modules_ds{deepsplit_value}.png')
+            # plt.close()
 
             # Do coherence per module
             expr_mat_time_copy.assign_clusters_from_wgcna(full_dataset_path)
@@ -786,26 +786,44 @@ def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
                     out_list.append((method, deepsplit_value, 'robustness', ari))
 
     metric_df = pd.DataFrame.from_records(out_list, columns=['method', 'deepsplit', 'metric', 'score'])
-    sns.catplot(metric_df, x='deepsplit', y='score', hue='metric',
-                col='method', kind='box')
-    plt.savefig(in_path.parent /  'figs' / 'coherence_robustness_modules.png')
-    plt.close()
 
     module_size_df = pd.DataFrame.from_records(module_size_list, columns=['method', 'deepsplit', 'size'] )
-    sns.catplot(data=module_size_df, y='size', x='deepsplit', col='method',
-                col_wrap=2, kind='strip')
-    plt.savefig(in_path.parent /  'figs' / 'module_size_stripplot.png')
-    plt.close()
+    module_size_df['deepsplit'] = module_size_df['deepsplit'].astype('str')
+    module_size_df['size'] = module_size_df['size'].astype('int')
 
-    sns.catplot(data=module_size_df, y='size', x='deepsplit', col='method',
-                col_wrap=2, kind='box')
-    plt.savefig(in_path.parent /  'figs' / 'module_size_boxplot.png')
-    plt.close()
+    sns.boxplot(data=module_size_df, x='size', y='deepsplit', hue='method')
+    plt.savefig(in_path.parent /  'figs' / 'module_size_hue_is_ds.png')
 
     sns.catplot(data=module_size_df, x='deepsplit', col='method',
                 col_wrap=2, kind='count')
     plt.savefig(in_path.parent / 'figs' / 'module_counts.png')
     plt.close()
+
+    # Select deepsplit value on most comparable module sizes
+    if 'drought' in data_params['in_path']:
+        valid_rows = metric_df[
+            (metric_df['method'] == 'local') & (metric_df['deepsplit'] == 2)
+            | (metric_df['method'].isin(['atted', 'combined_sum'])) & (metric_df['deepsplit'] == 1) ]
+    elif 'heat' in data_params['in_path']:
+        valid_rows = metric_df[
+            (metric_df['deepsplit'] == 1) & (metric_df['method'].isin(['atted', 'combined_sum', 'local']))]
+
+    sns.catplot(valid_rows, x='method', y='score', row='metric',
+                kind='box', hue='method')
+    plt.savefig(
+        in_path.parent / 'figs' / 'coherence_robustness_modules_selected_ds_separate_rows_boxplot.png')
+
+    sns.catplot(valid_rows, x='method', y='score', row='metric',
+                kind='violin', hue='method')
+    plt.savefig(
+        in_path.parent / 'figs' / 'coherence_robustness_modules_selected_ds_separate_rows_violin.png')
+
+    sns.catplot(metric_df, x='deepsplit', y='score', hue='metric',
+                col='method', kind='box')
+    plt.savefig(in_path.parent /  'figs' / 'coherence_robustness_modules.png')
+    plt.close()
+
+
 
     # sns.violinplot(data=robustness_df, y='ari', x='method')
     # plt.savefig(in_path.parent /  'figs' / 'robustness_modules.png')

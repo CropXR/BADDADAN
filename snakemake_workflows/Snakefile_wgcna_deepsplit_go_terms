@@ -12,7 +12,7 @@ IDS, = glob_wildcards("split_by_module/{id}.csv")
 
 rule target:
     input:
-        expand("go_outputs/{id}.tsv", id=IDS)
+        expand("go_outputs/{id}.log", id=IDS)
 
 rule go_annotate:
     input:
