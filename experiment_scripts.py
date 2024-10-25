@@ -20,6 +20,7 @@ from scipy.spatial.distance import squareform
 from sklearn.metrics import adjusted_rand_score
 from scipy.cluster.hierarchy import linkage, fcluster
 import amici
+from tqdm import tqdm
 
 from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
 from DynamicModels.OdeLocalParameters import OdeLocalParameters
@@ -28,6 +29,7 @@ from DynamicModels.OdeModel import OdeModel
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 from Expressions.ExpressionMatrix import AggregationMethod, \
     ExpressionMatrixTimeSeries
+from GoEnrich.GeneModuleGoTerms import GeneModuleGoTerms
 from analysis_pipelines import assign_clusters_and_infer_intermodular_network, \
     explore_emtab_375, compare_clusterings_for_ode_use, \
     module_network_from_tf2_output, infer_intermodular_network
@@ -440,7 +442,7 @@ def drought_data_e2e_pipeline(experiment_path):
 def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     # For DS and Method
     out_records = []
-    for file in in_path.glob('*.log'):
+    for file in tqdm(list(in_path.glob('*.log'))):
         with file.open('r') as f:
             text = f.read()
             module_size = re.search('(?<=Study:) \d+', text).group()
@@ -452,16 +454,41 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
         go_output_file_name = file.with_suffix('.tsv')
         if go_output_file_name.exists():
             one_module_df = pd.read_csv(go_output_file_name, sep='\t')
-            nr_enriched = len(one_module_df)
+            go_terms = GeneModuleGoTerms(one_module_df)
+            semantic_similarity = go_terms.overall_wang_similarity()
+            nr_enriched = go_terms.get_nr_go_terms()
         else:
             nr_enriched= 0
-        out_records.append((method, deepsplit_value, module_nr, nr_enriched, module_size))
+            semantic_similarity = np.nan
+        out_records.append(
+            (method, deepsplit_value, module_nr, nr_enriched,
+             module_size, semantic_similarity)
+        )
 
     all_result_df = pd.DataFrame.from_records(
         out_records,
-        columns=['method', 'deepsplit', 'module_id', 'nr_enriched_go_terms', 'module_size'])
+        columns=['method', 'deepsplit', 'module_id',
+                 'nr_enriched_go_terms', 'module_size', 'semantic_similarity']
+    )
+
+    # sns.scatterplot(data=all_result_df, x='nr_enriched_go_terms',
+    #                 y='semantic_similarity', hue='method')
+    # plt.show()
+
+    sns.scatterplot(data=all_result_df, x='module_size',
+                    y='nr_enriched_go_terms', hue='method', style='deepsplit')
+    plt.savefig(out_path / 'go_terms_module_scatterplot.png')
+    plt.close()
+
+    sns.boxenplot(data=all_result_df, x='deepsplit', y='nr_enriched_go_terms',
+                  hue='method')
+    plt.savefig(out_path / 'go_terms_ds_boxenplot.png')
+    plt.close()
+
+
     # print(all_result_df.groupby(['method', 'deepsplit'])['nr_enriched_go_terms'].mean())
-    sns.catplot(data=all_result_df, x='deepsplit', y='nr_enriched_go_terms', col='method', kind='box')
+    sns.catplot(data=all_result_df, x='deepsplit', y='nr_enriched_go_terms',
+                col='method', kind='box')
     plt.savefig(out_path / 'go_terms_per_module_boxplot.png')
     plt.close()
 
@@ -477,25 +504,80 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     plt.savefig(out_path / 'module_sizes_deepsplit_hue_is_method_boxplot.png')
     plt.show()
 
-    sns.catplot(data=all_result_df, x='deepsplit', y='nr_enriched_go_terms', col='method', kind='strip')
+    sns.catplot(data=all_result_df, x='deepsplit', y='nr_enriched_go_terms',
+                col='method', kind='strip')
     plt.savefig(out_path / 'go_terms_per_module_stripplot.png')
     plt.close()
 
-    mean_module_size = all_result_df.groupby(['method', 'deepsplit'])['module_size'].mean()
-    mean_enriched_go_terms = all_result_df.groupby(['method', 'deepsplit'])['nr_enriched_go_terms'].mean()
+    # Select deepsplit value on most comparable module sizes
+    if 'drought' == in_path.parent.name:
+        valid_rows = all_result_df[
+            (all_result_df['method'] == 'local_dists')
+            & (all_result_df['deepsplit'] == '2')
+            | (all_result_df['method'].isin(
+                ['atted_dists', 'combined_sum_dists']))
+            & (all_result_df['deepsplit'] == '1')
+            ]
+    elif 'heat' == in_path.parent.name:
+        valid_rows = all_result_df[
+            (all_result_df['deepsplit'] == '1')
+            & (all_result_df['method'].isin(
+                ['atted_dists', 'combined_sum_dists', 'local_dists']))
+            ]
+    assert len(valid_rows) > 0
+    sns.boxplot(data=valid_rows, y='nr_enriched_go_terms', x='method',
+                hue='method')
+    plt.tight_layout()
+    plt.savefig(out_path / 'go_terms_per_module_boxplot_selected_ds.png')
+    plt.close()
+
+    # Fraction of modules with > 0 GO term
+    ax = sns.barplot(data=valid_rows, y='nr_enriched_go_terms', x='method',
+                hue='method', estimator=lambda x: (x != 0).sum() / len(x))
+    ax.set_ylabel('Fraction of modules with > 0 enriched GO term')
+    plt.savefig(out_path / 'fraction_at_least_one_go_term_selected_ds.png')
+    plt.close()
+
+    # Of these GO-terms, what is their semantic similarity?
+    sns.scatterplot(data=valid_rows, x='nr_enriched_go_terms',
+                    y='semantic_similarity', hue='method')
+    plt.savefig(out_path / 'scatterplot_enriched_go_terms_semantic_sim_selected_ds.png')
+    plt.close()
+
+    sns.jointplot(data=valid_rows, x='nr_enriched_go_terms',
+                    y='semantic_similarity', hue='method')
+    plt.savefig(out_path / 'jointplot_enriched_go_terms_semantic_sim_selected_ds.png')
+    plt.close()
+
+    sns.barplot(data=valid_rows, y='semantic_similarity', x='method')
+    plt.savefig(out_path / 'semantic_similarity_barplot.png')
+    plt.close()
+
+    sns.boxplot(data=valid_rows, y='semantic_similarity', x='method')
+    plt.savefig(out_path / 'semantic_similarity_boxplot.png')
+    plt.close()
+
+    mean_module_size = all_result_df.groupby(
+        ['method', 'deepsplit'])['module_size'].mean()
+    mean_enriched_go_terms = all_result_df.groupby(
+        ['method', 'deepsplit'])['nr_enriched_go_terms'].mean()
+
     module_size_and_nr_go_terms_df = pd.concat(
         [mean_module_size, mean_enriched_go_terms], axis=1).reset_index()
-    module_size_and_nr_go_terms_df = module_size_and_nr_go_terms_df.rename({'module_size': 'mean_module_size'}, axis='columns')
+    module_size_and_nr_go_terms_df = module_size_and_nr_go_terms_df.rename(
+        {'module_size': 'mean_module_size'}, axis='columns')
 
-    sns.scatterplot(data=module_size_and_nr_go_terms_df, x='mean_module_size', y='nr_enriched_go_terms',
-                    hue='method', style='deepsplit')
+    sns.scatterplot(data=module_size_and_nr_go_terms_df, x='mean_module_size',
+                    y='nr_enriched_go_terms', hue='method', style='deepsplit')
     plt.ylabel('Mean nr of enriched go terms per module')
     # Add error bar?
     plt.savefig(out_path / 'module_size_mean_nr_go_terms_scatterplot.png')
     plt.show()
+    plt.close()
 
     mean_module_size = mean_module_size.reset_index()
-    mean_module_size = mean_module_size.rename({'module_size': 'mean_module_size'}, axis='columns')
+    mean_module_size = mean_module_size.rename(
+        {'module_size': 'mean_module_size'}, axis='columns')
     newer_df = all_result_df.merge(mean_module_size, on=['method', 'deepsplit'])
     sns.lineplot(data=newer_df, x='mean_module_size', y='nr_enriched_go_terms',
                  hue='method', style='method', err_style='bars', marker='o')
@@ -809,7 +891,7 @@ def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
             (metric_df['deepsplit'] == 1) & (metric_df['method'].isin(['atted', 'combined_sum', 'local']))]
 
     sns.catplot(valid_rows, x='method', y='score', row='metric',
-                kind='box', hue='method')
+                kind='box', hue='method', )
     plt.savefig(
         in_path.parent / 'figs' / 'coherence_robustness_modules_selected_ds_separate_rows_boxplot.png')
 

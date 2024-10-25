@@ -462,7 +462,7 @@ def camila_red_panda(soft_file_in_path: Path,
 def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
-    name = '18_robustness_with_wgcna_cutting'
+    name = '20_go_terms_deepsplit_values'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -550,8 +550,8 @@ def main():
 
         case "20_go_terms_deepsplit_values":
             # for treatment_name in ['heat']:
-            for treatment_name in ['drought']:
-            # for treatment_name in ['drought', 'heat']:
+            # for treatment_name in ['drought']:
+            for treatment_name in ['drought', 'heat']:
                 data_params, hyper_params, experiment_params = config_preprocess(
                     experiment_path / treatment_name)
                 skip= True
@@ -567,6 +567,14 @@ def main():
                     experiment_path / treatment_name / 'go_outputs',
                     experiment_path / treatment_name / 'figures',
                     )
+
+                with mlflow.start_run(
+                        description=experiment_params['description']):
+                    mlflow.log_params(data_params)
+                    mlflow.log_params(hyper_params)
+                    mlflow.set_tags(experiment_params)
+                    mlflow.log_artifact(str(experiment_path / treatment_name / 'figures'))
+
         case _:
             raise NotImplementedError(f'{name} not found')
     try:
