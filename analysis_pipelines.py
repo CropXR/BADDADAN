@@ -1,5 +1,6 @@
 import copy
 import logging
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict
@@ -8,12 +9,19 @@ import dill as pickle
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from goatools.anno.idtogos_reader import IdToGosReader
+from goatools.go_enrichment import GOEnrichmentStudy
+from goatools.utils import read_geneset
 from matplotlib import pyplot as plt
+from tqdm import tqdm
+from goatools.obo_parser import GODag
+
 
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries, \
     AggregationMethod
-from data_wrangling import expr_mat_from_drought, expr_mat_from_emexp
+from data_wrangling import expr_mat_from_drought, expr_mat_from_emexp, \
+    merge_ath_annotation_for_goatools
 from helpers import get_info_from_gse65046
 
 @dataclass
@@ -402,3 +410,67 @@ def module_network_from_tf2_output(expr_mat_time,
     logging.info(list(module_module.graph.edges(data=True)))
     return module_module
 
+def do_GO_enrichment_per_cluster(
+        gene_module_in_dir: Path,
+        out_dir: Path,
+        gene_annotation_path: Path = Path(
+            'data/resources/go_annotations/ATH_GO_GOSLIM.txt'),
+        go_dag_file: Path = Path('data/resources/go_annotations/go-basic.obo'),
+        filter_by_code: list[str]=None):
+    """"""
+    godag = GODag(go_dag_file)
+    annotation_df = merge_ath_annotation_for_goatools(gene_annotation_path,
+                                                      evidence_code_filter=filter_by_code)
+    filtered_by_evidence_out_path = Path(
+        'data/resources/go_annotations/ATH_GO_GOSLIM_one_gene_per_line_only_experimental_evidence.txt')
+    annotation_df.to_csv(filtered_by_evidence_out_path, sep='\t', header=False)
+
+    background_genes_by_exp_evidence_out_path = Path(
+        'data/resources/go_annotations/ATH_GO_GOSLIM_genes_only_experimental_evidence.txt')
+    annotation_df.reset_index()['locus name'].to_csv(background_genes_by_exp_evidence_out_path, sep='\t', header=False, index=False)
+
+    background_genes = read_geneset(background_genes_by_exp_evidence_out_path)
+    annoobj = IdToGosReader(filtered_by_evidence_out_path, godag=godag)
+    id2gos = annoobj.get_id2gos()
+
+    for one_gene_module_file in tqdm(list(
+            gene_module_in_dir.glob('atted_dists_wgcna_clustered_ds0_module_1.csv'))):
+    # for one_gene_module_file in tqdm(list(gene_module_in_dir.glob('*.csv'))):
+        module_genes = read_geneset(one_gene_module_file)
+
+        ### DO THE SNAKEMAKE HERE
+
+
+        goeaobj = GOEnrichmentStudy(
+            background_genes,
+            annoobj.get_id2gos(namespace='BP'),
+            godag,
+            methods=['fdr_bh'],
+            log= str(out_dir / one_gene_module_file.with_suffix('.log'))
+        )
+
+        results = goeaobj.run_study_nts(module_genes)
+
+        count = 0
+        for ntd in sorted(results, key=lambda entry: entry.p_fdr_bh):
+            if ntd.p_fdr_bh < 0.05 and ntd.NS == 'BP':
+                print(f'{ntd.goterm.name:<30}\t\t{ntd.p_fdr_bh}'
+                      )
+                count += 1
+        print(count)
+        # print(
+        #     'namespace       term_id  e/p pval_uncorr Benjamimi/Hochberg  study_ratio population_ratio')
+        # print(
+        #     '--------------- -------- --- ----------- ------------------ ----------  ----------- ----------------')
+        # pat = '{NS} {GO} {e}    {PVAL:8.2e}           {BH:8.2e}   {RS:>12} {RP:>12}'
+        # for ntd in sorted(results, key=lambda nt: [nt.p_uncorrected, nt.GO]):
+        #     if ntd.p_fdr_bh < 0.05 and ntd.NS == 'BP':
+        #         print(pat.format(
+        #             NS=ntd.NS,
+        #             GO=ntd.GO,
+        #             e=ntd.enrichment,
+        #             RS='{}/{}'.format(*ntd.ratio_in_study),
+        #             RP='{}/{}'.format(*ntd.ratio_in_pop),
+        #             PVAL=ntd.p_uncorrected,
+        #             BH=ntd.p_fdr_bh)
+        #         )

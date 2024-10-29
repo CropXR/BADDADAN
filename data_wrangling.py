@@ -11,7 +11,9 @@ from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 from helpers import get_info_from_gse65046, get_info_from_emtab375
 
 
-def merge_ath_annotation_for_goatools(in_path: Path, out_path: Path):
+def merge_ath_annotation_for_goatools(in_path: Path,
+                                      evidence_code_filter: bool | list[
+                                          str] = False):
     """Take go annotation from TAIR, and transform it so it can be read by GOATOOLS
     """
     column_names = [
@@ -31,9 +33,15 @@ def merge_ath_annotation_for_goatools(in_path: Path, out_path: Path):
         "Annotator",
         "Date annotated",]
     df = pd.read_csv(in_path, sep='\t', comment='!', names=column_names)
+    if evidence_code_filter:
+        assert len(evidence_code_filter) > 0, \
+            f"No evidence codes provided: {evidence_code_filter=}"
+        df = df[df['Evidence code'].isin(evidence_code_filter)]
+
     df_group = df.groupby('locus name')
     out_df = df_group['GO ID'].apply(lambda x: ';'.join(x))
-    out_df.to_csv(out_path, sep='\t')
+    return out_df
+
 
 
 def parse_go_enrichment_output(in_file: Path, cutoff: float = 0.05) -> pd.DataFrame:

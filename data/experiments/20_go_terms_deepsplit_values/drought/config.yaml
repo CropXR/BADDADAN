@@ -7,4 +7,4 @@ data:
   out_path: 'data/experiments/20_go_terms_deepsplit_values/drought/split_by_module'
 hyperparams:
   r_deep_split: [0, 1, 2, 3, 4]
-  use_all_genes_as_background: True
+  filter_by_go_evidence_codes: ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"]

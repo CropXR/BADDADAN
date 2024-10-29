@@ -4,13 +4,30 @@ from goatools.base import get_godag
 from goatools.semsim.termwise.wang import SsWang
 from itertools import combinations
 
-GODAG = get_godag("data/resources/go_annotations/go-basic.obo", optional_attrs={'relationship'})
-class GeneModuleGoTerms:
+
+
+
+
+class EnrichedGeneModuleGoTerms:
+    GODAG = get_godag("data/resources/go_annotations/go-basic.obo",
+                      optional_attrs={'relationship'})
+    """Class to store the enriched GO terms of a module and calculate
+     their semantic similarity
+    """
     def __init__(self, go_term_df: pd.DataFrame):
+        """
+        :param go_term_df: Dataframe that contains enriched GO terms.
+        Typically output of the find_enrichment.py function of GOA tools.
+        """
         self.go_terms = go_term_df['# GO'].to_list()
         relationships = {'part_of'}
-        self.wang_object = SsWang(self.go_terms, GODAG, relationships)
+        self.wang_object = SsWang(self.go_terms, self.GODAG, relationships)
     def overall_wang_similarity(self):
+        """Calculate the mean pairwise wang similarity between all GO terms.
+
+        Used to assess if they provide a 'coherent' description of
+        the biological function.
+        """
         pairwise_sims = []
         if self.get_nr_go_terms() < 2:
             return np.nan
@@ -22,4 +39,5 @@ class GeneModuleGoTerms:
         return np.mean(pairwise_sims)
 
     def get_nr_go_terms(self):
+        """Get number of enriched GO terms (i.e. length of DF)"""
         return len(self.go_terms)

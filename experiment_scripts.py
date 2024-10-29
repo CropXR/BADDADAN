@@ -29,7 +29,7 @@ from DynamicModels.OdeModel import OdeModel
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 from Expressions.ExpressionMatrix import AggregationMethod, \
     ExpressionMatrixTimeSeries
-from GoEnrich.GeneModuleGoTerms import GeneModuleGoTerms
+from GoEnrich.EnrichedGeneModuleGoTerms import EnrichedGeneModuleGoTerms
 from analysis_pipelines import assign_clusters_and_infer_intermodular_network, \
     explore_emtab_375, compare_clusterings_for_ode_use, \
     module_network_from_tf2_output, infer_intermodular_network
@@ -454,7 +454,7 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
         go_output_file_name = file.with_suffix('.tsv')
         if go_output_file_name.exists():
             one_module_df = pd.read_csv(go_output_file_name, sep='\t')
-            go_terms = GeneModuleGoTerms(one_module_df)
+            go_terms = EnrichedGeneModuleGoTerms(one_module_df)
             semantic_similarity = go_terms.overall_wang_similarity()
             nr_enriched = go_terms.get_nr_go_terms()
         else:

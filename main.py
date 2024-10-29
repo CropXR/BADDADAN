@@ -16,7 +16,8 @@ from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
-from analysis_pipelines import compare_clusterings_for_ode_use
+from analysis_pipelines import compare_clusterings_for_ode_use, \
+    do_GO_enrichment_per_cluster
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
     exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline, \
@@ -560,6 +561,15 @@ def main():
                         in_dir=Path(data_params['in_path']),
                         out_dir=Path(data_params['out_path']),
                     )
+                go_enrich_output_path = experiment_path / treatment_name / 'go_outputs'
+                if hyper_params['filter_by_go_evidence_codes']:
+                    go_enrich_output_path = go_enrich_output_path.with_name(
+                        'go_outputs_exp_evidence_only')
+                do_GO_enrichment_per_cluster(
+                    gene_module_in_dir=Path(data_params['out_path']),
+                    out_dir=go_enrich_output_path,
+                    filter_by_code=hyper_params['filter_by_go_evidence_codes']
+                )
                 ### RUN SNAKEMAKE ###
                 # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
 
