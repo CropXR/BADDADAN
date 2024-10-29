@@ -562,18 +562,36 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     mean_enriched_go_terms = all_result_df.groupby(
         ['method', 'deepsplit'])['nr_enriched_go_terms'].mean()
 
-    module_size_and_nr_go_terms_df = pd.concat(
-        [mean_module_size, mean_enriched_go_terms], axis=1).reset_index()
-    module_size_and_nr_go_terms_df = module_size_and_nr_go_terms_df.rename(
-        {'module_size': 'mean_module_size'}, axis='columns')
+    mean_semantic_similarity = all_result_df.groupby(
+        ['method', 'deepsplit'])['semantic_similarity'].mean()
 
-    sns.scatterplot(data=module_size_and_nr_go_terms_df, x='mean_module_size',
+
+    mean_module_size_and_go_enrichments = pd.concat(
+        [mean_module_size, mean_enriched_go_terms, mean_semantic_similarity], axis=1).reset_index()
+    mean_module_size_and_go_enrichments = mean_module_size_and_go_enrichments.rename(
+        {'module_size': 'mean_module_size',
+            'semantic_similarity': 'mean_semantic_similarity'}, axis='columns')
+
+    sns.scatterplot(data=mean_module_size_and_go_enrichments, x='mean_module_size',
                     y='nr_enriched_go_terms', hue='method', style='deepsplit')
     plt.ylabel('Mean nr of enriched go terms per module')
     # Add error bar?
     plt.savefig(out_path / 'module_size_mean_nr_go_terms_scatterplot.png')
     plt.show()
     plt.close()
+
+    sns.scatterplot(data=mean_module_size_and_go_enrichments, x='mean_module_size',
+                    y='mean_semantic_similarity', hue='method', style='deepsplit')
+    plt.ylabel('Mean semantic similarity within a module')
+    plt.savefig(out_path / 'module_size_mean_semantic_sim_scatterplot.png')
+    # Add error bar?
+    plt.show()
+    plt.close()
+
+    # sns.scatterplot(data=all_result_df, x='module_size',
+    #                 y='semantic_similarity', hue='method', style='deepsplit')
+    # plt.show()
+
 
     mean_module_size = mean_module_size.reset_index()
     mean_module_size = mean_module_size.rename(
@@ -582,9 +600,14 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     sns.lineplot(data=newer_df, x='mean_module_size', y='nr_enriched_go_terms',
                  hue='method', style='method', err_style='bars', marker='o')
     plt.savefig(out_path / 'module_size_mean_nr_go_terms_line_plot.png')
-    # TODO implement error bars
+    # TODO implement error bars on X axis
     # plt.errorbar(...)
     plt.show()
+
+    sns.lineplot(data=newer_df, x='mean_module_size', y='semantic_similarity',
+                 hue='method', style='method', err_style='bars', marker='o')
+    plt.savefig(out_path / 'module_size_mean_semantic_sim_line_plot.png')
+    print()
 
 
 def fit_ode_drought_data(experiment_path, expr_mat_time, hyper_params,

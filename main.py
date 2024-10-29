@@ -17,7 +17,7 @@ from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
 from analysis_pipelines import compare_clusterings_for_ode_use, \
-    do_GO_enrichment_per_cluster
+    prepare_files_for_find_enrichment_py
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
     exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline, \
@@ -550,9 +550,9 @@ def main():
             heat_pypesto(experiment_path)
 
         case "20_go_terms_deepsplit_values":
-            # for treatment_name in ['heat']:
+            for treatment_name in ['heat']:
             # for treatment_name in ['drought']:
-            for treatment_name in ['drought', 'heat']:
+            # for treatment_name in ['drought', 'heat']:
                 data_params, hyper_params, experiment_params = config_preprocess(
                     experiment_path / treatment_name)
                 skip= True
@@ -561,20 +561,23 @@ def main():
                         in_dir=Path(data_params['in_path']),
                         out_dir=Path(data_params['out_path']),
                     )
+
+                skip = True
                 go_enrich_output_path = experiment_path / treatment_name / 'go_outputs'
                 if hyper_params['filter_by_go_evidence_codes']:
                     go_enrich_output_path = go_enrich_output_path.with_name(
                         'go_outputs_exp_evidence_only')
-                do_GO_enrichment_per_cluster(
-                    gene_module_in_dir=Path(data_params['out_path']),
-                    out_dir=go_enrich_output_path,
-                    filter_by_code=hyper_params['filter_by_go_evidence_codes']
-                )
+
+                if not skip:
+                    prepare_files_for_find_enrichment_py(
+                        gene_module_in_dir=Path(data_params['out_path']),
+                        out_dir=go_enrich_output_path,
+                        filter_by_code=hyper_params['filter_by_go_evidence_codes'])
                 ### RUN SNAKEMAKE ###
                 # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
 
                 analyse_go_enrichments_find_enrichment(
-                    experiment_path / treatment_name / 'go_outputs',
+                    go_enrich_output_path,
                     experiment_path / treatment_name / 'figures',
                     )
 
