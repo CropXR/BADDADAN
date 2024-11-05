@@ -410,11 +410,9 @@ def module_network_from_tf2_output(expr_mat_time,
     logging.info(list(module_module.graph.edges(data=True)))
     return module_module
 
-def prepare_files_for_find_enrichment_py(gene_module_in_dir: Path,
-                                         out_dir: Path,
-                                         gene_annotation_path: Path = Path(
-                                             'data/resources/go_annotations/ATH_GO_GOSLIM.txt'),
-                                         filter_by_code: list[str] = None):
+def prepare_files_for_find_enrichment_py(gene_annotation_path: Path = Path(
+    'data/resources/go_annotations/ATH_GO_GOSLIM.txt'),
+        filter_by_code: list[str] = None):
     """"""
     # godag = GODag(go_dag_file)
     annotation_df = merge_ath_annotation_for_goatools(gene_annotation_path,
@@ -432,8 +430,6 @@ def prepare_files_for_find_enrichment_py(gene_module_in_dir: Path,
         index=False
     )
 
-
-    return
     #
     # background_genes = read_geneset(background_genes_by_exp_evidence_out_path)
     # annoobj = IdToGosReader(filtered_by_evidence_out_path, godag=godag)

@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import logging
 import random
+import tempfile
 import time
 from datetime import datetime
 from enum import Enum
@@ -1663,7 +1664,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         return self.df.groupby('cluster_id').apply(mean_bootstrap_error)
 
     def get_all_explained_vars(self):
-        assert self.has_been_clustered == True
+        assert self.has_been_clustered
         grouped_df = self.df.groupby('cluster_id')
         return grouped_df.apply(self._get_eigengene_explained_var)
 
@@ -1736,9 +1737,10 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         assignment_df = pd.read_csv(wgcna_module_assignment, index_col='gene_id', usecols=['gene_id','colors'])
         # Map colours to index
         mapping_dict = {colour: i for (i, colour) in enumerate(assignment_df['colors'].unique())}
-        logging.info(mapping_dict)
+        logging.debug(f"Colour mapping dict: {mapping_dict}")
         assignment_df['cluster_id'] = assignment_df['colors'].map(mapping_dict)
         assignment_df = assignment_df.drop('colors', axis=1)
+
         self._apply_cluster_mapping_from_df(assignment_df)
 
     def do_genewise_normalisation(self):
@@ -1765,6 +1767,42 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         similarity_matrix = (1 + cor_matrix) / 2
         return similarity_matrix
 
+    def do_random_clustering_with_given_size_dist(self,
+                                                  wgcna_label_file: Path | None,
+                                                  use_own_clustering: bool = False):
+        """Compute a random distribution with a given size distribution and
+        see how that compares to the non-random clustering.
 
+        Size distribution can be done based on an existing WGCNA label file (if provided)
 
+        Alternatively, if a DF has already been clustered, it can be based on this own clustering
 
+        :param wgcna_label_file: Path to WGCNA label file
+        :param use_own_clustering: If True, do random clustering based on
+        size distribution of how expressionmatrix is currently clustered.
+        """
+        if use_own_clustering and wgcna_label_file is None:
+            assert self.has_been_clustered
+            self.df['cluster_id'] = np.random.permutation(self.df['cluster_id'])
+        elif use_own_clustering and wgcna_label_file is not None:
+            raise ValueError(f'Cannot set {use_own_clustering=} and have a '
+                             f'non-None wgcna_label_file')
+        else:
+            df = pd.read_csv(wgcna_label_file, index_col=0)
+            # Permute labels vs genes
+            df['gene_id'] = np.random.permutation(df['gene_id'])
+            # Save the DataFrame to a temporary file
+            with tempfile.NamedTemporaryFile(mode='w+', suffix=".csv",
+                                             delete=True) as temp_file:
+                df.to_csv(temp_file.name, index=False)
+                self.assign_clusters_from_wgcna(temp_file)
+
+    def save_random_modules_for_goa_find_enrichment(self, wgcna_label_file, out_dir: Path):
+        self.do_random_clustering_with_given_size_dist(
+            wgcna_label_file=wgcna_label_file,
+        )
+        assert self.has_been_clustered
+        for module_nr, genes in self.get_genes_per_cluster().items():
+            file_path = out_dir / f'random_dists_ds1_module_{module_nr}.csv'
+            df = pd.DataFrame.from_dict({'gene_id': genes})
+            df.to_csv(file_path, index=False, header=False)

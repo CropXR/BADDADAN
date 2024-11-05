@@ -7,8 +7,9 @@ snakemake -s ../../../../snakemake_workflows/Snakefile_wgcna_deepsplit_go_terms 
 """
 
 
-IDS, = glob_wildcards("split_by_module/{id}.csv")
-
+IDS, = glob_wildcards("random_split_by_module/{id}.csv")
+# IDS, = glob_wildcards("split_by_module/{id}.csv")
+# IDS = [id for id in IDS if "ds1" in id]
 
 rule target:
     input:
@@ -34,6 +35,24 @@ rule target:
 rule go_annotate:
     input:
         "split_by_module/{id}.csv",
+        "../../../resources/go_annotations/tair.gaf.all_background_genes",
+        "../../../resources/go_annotations/tair.gaf",
+    params:
+        obo="../../../resources/go_annotations/go-basic.obo"
+    output:
+        "go_outputs_exp_evidence_only/{id}.tsv"
+    log:
+        "go_outputs_exp_evidence_only/{id}.log"
+    shell:
+        "find_enrichment.py {input} --pval=0.05 --method=fdr_bh --pval_field=fdr_bh --obo {params.obo} --ns=BP "
+        "--outfile {output} "
+        "--ev_inc Experimental --ev_exc Similarity,Combinatorial,High_Throughput,Author,Curatorial,ND,IEA "
+        "> {log}"
+
+
+rule go_annotate_from_random:
+    input:
+        "random_split_by_module/{id}.csv",
         "../../../resources/go_annotations/tair.gaf.all_background_genes",
         "../../../resources/go_annotations/tair.gaf",
     params:

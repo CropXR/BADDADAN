@@ -16,8 +16,7 @@ from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
-from analysis_pipelines import compare_clusterings_for_ode_use, \
-    prepare_files_for_find_enrichment_py
+from analysis_pipelines import prepare_files_for_find_enrichment_py
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
     exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline, \
@@ -25,9 +24,10 @@ from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, 
     wgcna_with_similarity_scores, drought_with_string_db, \
     integrate_multiple_datasets, generate_dists_for_wgcna_cutting, \
     ground_truth_vs_jackknife, fit_ode_drought_data, heat_pypesto, \
-    analyse_go_enrichments_find_enrichment
+    analyse_go_enrichments_find_enrichment, get_coherence_random_modules, \
+    get_robustness_random_modules
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
-    parse_string_input_data, one_gene_list_file_per_cluster
+    one_gene_list_file_per_cluster
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 
 # pd.options.display.width = 0
@@ -463,7 +463,7 @@ def camila_red_panda(soft_file_in_path: Path,
 def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
-    name = '20_go_terms_deepsplit_values'
+    name = '21_score_distributions_of_random_modules'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -545,14 +545,14 @@ def main():
             ground_truth_vs_jackknife(experiment_path, expr_mat_time)
         case "19_heat_pypesto":
 
-            # Run heat data e2e first for this to run
+            # # # Run heat data e2e first for this to run
             # heat_data_e2e_pipeline(experiment_path)
             heat_pypesto(experiment_path)
 
         case "20_go_terms_deepsplit_values":
-            for treatment_name in ['heat']:
+            # for treatment_name in ['heat']:
             # for treatment_name in ['drought']:
-            # for treatment_name in ['drought', 'heat']:
+            for treatment_name in ['drought', 'heat']:
                 data_params, hyper_params, experiment_params = config_preprocess(
                     experiment_path / treatment_name)
                 skip= True
@@ -570,9 +570,8 @@ def main():
 
                 if not skip:
                     prepare_files_for_find_enrichment_py(
-                        gene_module_in_dir=Path(data_params['out_path']),
-                        out_dir=go_enrich_output_path,
-                        filter_by_code=hyper_params['filter_by_go_evidence_codes'])
+                        filter_by_code=hyper_params[
+                            'filter_by_go_evidence_codes'])
                 ### RUN SNAKEMAKE ###
                 # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
 
@@ -587,6 +586,85 @@ def main():
                     mlflow.log_params(hyper_params)
                     mlflow.set_tags(experiment_params)
                     mlflow.log_artifact(str(experiment_path / treatment_name / 'figures'))
+        case "21_score_distributions_of_random_modules":
+            for treatment_name in ['drought', 'heat']:
+            # for treatment_name in ['drought']:
+                data_params, hyper_params, experiment_params = config_preprocess(
+                    experiment_path / treatment_name)
+
+                if 'heat' in data_params['in_path']:
+                    condition_name = 'heat'
+                    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_emexp(
+                        data_params['in_path'],
+                        hyper_params['agg_method'],
+                        hyper_params['do_log2']
+                    )
+                elif 'drought' in data_params['in_path']:
+                    condition_name = 'drought'
+                    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_drought(
+                        data_params['in_path'],
+                        hyper_params['agg_method'],
+                        hyper_params['do_log2']
+                    )
+                else:
+                    raise NotImplementedError
+
+                skip = True
+                if not skip:
+                    expr_mat_copy = copy.deepcopy(expr_mat_time)
+                    expr_mat_copy.save_random_modules_for_goa_find_enrichment(
+                        wgcna_label_file = data_params['wgna_label_file'],
+                        out_dir=Path(data_params['split_by_module_out_path'])
+                    )
+
+                ### RUN SNAKEMAKE ###
+                # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
+
+                analyse_go_enrichments_find_enrichment(
+                    Path('data/experiments/21_score_distributions_of_random_modules/drought/go_outputs_exp_evidence_only'),
+                    experiment_path / treatment_name / 'figures',
+                )
+
+                jackknife_paths = (
+                    list(Path(
+                        data_params['jacknife_path'])
+                         .glob(data_params['jacknife_glob_command'])
+                         )
+                )
+                get_robustness_random_modules(
+                    jackknife_paths=jackknife_paths,
+                    full_dataset_path=data_params['wgna_label_file'],
+                    figure_out_dir=Path(data_params['fig_out_path']))
+
+                get_coherence_random_modules(
+                    wgcna_label_file=data_params['wgna_label_file'],
+                    expr_mat_time=expr_mat_time,
+                    figure_out_dir=Path(data_params['fig_out_path'])
+                )
+
+                # Get GO enrichment scores of random modules
+                one_gene_list_file_per_cluster(
+                    in_dir=Path(data_params['in_path']),
+                    out_dir=Path(data_params['out_path']),
+                )
+
+                # expr_mat_time.write_tf2_input_file()
+
+
+
+                # Get the scores for the local / global / combined scores -> maybe just the combined scores?
+
+                # Do statistical tests to see what they are like / and / or calculate module-specific Z-scores
+
+                with mlflow.start_run(
+                        description=experiment_params['description']):
+                    mlflow.log_params(data_params)
+                    mlflow.log_params(hyper_params)
+                    mlflow.set_tags(experiment_params)
+                    mlflow.log_artifact(
+                        str(experiment_path / treatment_name / 'figures'))
+
+
 
         case _:
             raise NotImplementedError(f'{name} not found')

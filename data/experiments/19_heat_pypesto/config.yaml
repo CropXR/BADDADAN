@@ -4,7 +4,7 @@ experiment_data:
   summary_of_result: ""
 data:
   in_path: 'limma_de_selection/heat_expr_matrix_limma_filtered.csv'
-  wgcna_module_assignment_path: 'data/experiments/18_robustness_with_wgcna_cutting/heat/r_output/full_datasets/combined_sum_dists_wgcna_clustered.csv'
+  wgcna_module_assignment_path: 'data/experiments/18_robustness_with_wgcna_cutting/heat/r_output/full_datasets/combined_sum_dists_wgcna_clustered_ds1.csv'
   tf2_in_name: '01_tf2_input.txt'
   tf2_out_name: '02_tf2network_output.tsv'
   expr_mat_time_path: 'data/experiments/19_heat_pypesto/expr_mat_time.pkl'

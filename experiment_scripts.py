@@ -1,3 +1,4 @@
+import copy
 import logging
 from copy import deepcopy
 from pathlib import Path
@@ -448,7 +449,10 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
             module_size = re.search('(?<=Study:) \d+', text).group()
         module_size = int(module_size)
 
-        method = file.name.split('_wgcna')[0]
+        if 'wgcna' in file.name:
+            method = file.name.split('_wgcna')[0]
+        else:
+            method = 'random'
         deepsplit_value = re.search('(?<=ds)\d+', file.name).group()
         module_nr = re.search('(?<=module_)\d+', file.name).group()
         go_output_file_name = file.with_suffix('.tsv')
@@ -510,7 +514,9 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     plt.close()
 
     # Select deepsplit value on most comparable module sizes
-    if 'drought' == in_path.parent.name:
+    if np.all(all_result_df['method'] == 'random'):
+        valid_rows = all_result_df
+    elif 'drought' == in_path.parent.name:
         valid_rows = all_result_df[
             (all_result_df['method'] == 'local_dists')
             & (all_result_df['deepsplit'] == '2')
@@ -705,7 +711,7 @@ def heat_data_e2e_pipeline(experiment_path):
             expr_mat_time.get_distance_matrix(),
             atted_score,
             out_path=experiment_path)
-
+    logging.warning('New clusters so new TF2Network analysis?')
     tf2_in_path = experiment_path / data_params['tf2_in_name']
     tf2_out_path = experiment_path / data_params['tf2_out_name']
     # Post to tf2network
@@ -1112,3 +1118,85 @@ def heat_pypesto(experiment_path):
             engine=engine,
             options=opt_options,
         )
+
+
+def get_coherence_random_modules(wgcna_label_file : str,
+                                 expr_mat_time: ExpressionMatrixTimeSeries,
+                                 figure_out_dir: Path):
+    expr_mat_time.assign_clusters_from_wgcna(wgcna_label_file)
+    coherence_entry = expr_mat_time.get_all_explained_vars()
+    coherence_entry = [['combined_dists', i] for i in coherence_entry]
+
+    for i in range(4):
+        expr_mat_time_random = copy.deepcopy(expr_mat_time)
+        # expr_mat_time_random.do_random_clustering_with_given_size_dist(
+        #     data_params['wgna_label_file'])
+
+        expr_mat_time_random.do_random_clustering_with_given_size_dist(
+            wgcna_label_file=None,
+            use_own_clustering=True
+        )
+        # Do coherence per module
+        coherence_entry_random_cluster = expr_mat_time_random.get_all_explained_vars()
+        coherence_entry_random_cluster = [[f'random_{i}', j] for j in coherence_entry_random_cluster]
+        coherence_entry.extend(coherence_entry_random_cluster)
+
+    df = pd.DataFrame.from_records(coherence_entry, columns=['Method', 'Coherence'])
+    sns.boxplot(data=df, y='Coherence', x='Method', hue='Method')
+    plt.ylim((0, .9))
+    plt.savefig(figure_out_dir / 'boxplot_coherence_with_random_modules.png')
+    plt.close()
+
+    sns.swarmplot(data=df, y='Coherence', x='Method', hue='Method')
+    plt.ylim((0, .9))
+    plt.savefig(figure_out_dir / 'swarmplot_coherence_with_random_modules.png')
+    plt.close()
+
+def get_robustness_random_modules(jackknife_paths, full_dataset_path, figure_out_dir):
+    out_list = []
+    module_size_list = []
+
+    # Full dataset
+    full_dataset = pd.read_csv(full_dataset_path, usecols=[1, 2])
+    full_dataset = full_dataset.set_index('gene_id')
+    # Module sizes (in full dataset)
+    module_size_list.extend(
+        [size for size in full_dataset.value_counts().to_list()]
+    )
+
+    # Robustness
+    for jackknife_path in jackknife_paths:
+        subset = pd.read_csv(jackknife_path, usecols=[1, 2])
+        subset = subset.set_index('gene_id')
+
+        merged_df = subset.join(full_dataset,
+                                how='inner',
+                                lsuffix='_subset',
+                                rsuffix='_og')
+        ari = adjusted_rand_score(merged_df['colors_subset'],
+                                  merged_df['colors_og'])
+        out_list.append(('robustness_merged_dists', ari))
+
+        # Do random clustering now
+        subset['colors'] = np.random.permutation(subset['colors'] )
+        # Merge genes
+        merged_df = subset.join(full_dataset,
+                                how='inner',
+                                lsuffix='_subset',
+                                rsuffix='_og')
+        ari = adjusted_rand_score(merged_df['colors_subset'],
+                                  merged_df['colors_og'])
+        out_list.append(('robustness_random', ari))
+
+    df = pd.DataFrame.from_records(out_list,
+                                   columns=['Method', 'Robustness'])
+    sns.boxplot(data=df, y='Robustness', x='Method', hue='Method')
+    plt.ylim((0, .9))
+    plt.savefig(figure_out_dir / 'boxplot_robustness_with_random_modules.png')
+    plt.close()
+
+    sns.swarmplot(data=df, y='Robustness', x='Method', hue='Method')
+    plt.ylim((0, .9))
+    plt.savefig(figure_out_dir / 'swarmplot_robustness_with_random_modules.png')
+    plt.close()
+    return out_list
