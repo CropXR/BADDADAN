@@ -586,9 +586,10 @@ def main():
                     mlflow.log_params(hyper_params)
                     mlflow.set_tags(experiment_params)
                     mlflow.log_artifact(str(experiment_path / treatment_name / 'figures'))
+
         case "21_score_distributions_of_random_modules":
             for treatment_name in ['drought', 'heat']:
-            # for treatment_name in ['drought']:
+            # for treatment_name in ['heat']:
                 data_params, hyper_params, experiment_params = config_preprocess(
                     experiment_path / treatment_name)
 
@@ -621,7 +622,8 @@ def main():
                 # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
 
                 analyse_go_enrichments_find_enrichment(
-                    Path('data/experiments/21_score_distributions_of_random_modules/drought/go_outputs_exp_evidence_only'),
+                    # Path('data/experiments/21_score_distributions_of_random_modules/drought/go_outputs_exp_evidence_only'),
+                    Path(data_params['split_by_module_out_path']).parent / 'go_outputs_exp_evidence_only',
                     experiment_path / treatment_name / 'figures',
                 )
 
@@ -641,16 +643,6 @@ def main():
                     expr_mat_time=expr_mat_time,
                     figure_out_dir=Path(data_params['fig_out_path'])
                 )
-
-                # Get GO enrichment scores of random modules
-                one_gene_list_file_per_cluster(
-                    in_dir=Path(data_params['in_path']),
-                    out_dir=Path(data_params['out_path']),
-                )
-
-                # expr_mat_time.write_tf2_input_file()
-
-
 
                 # Get the scores for the local / global / combined scores -> maybe just the combined scores?
 
