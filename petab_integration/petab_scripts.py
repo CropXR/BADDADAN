@@ -1,0 +1,216 @@
+import copy
+import logging
+from pathlib import Path
+
+import pandas as pd
+import pypesto
+import petab
+import yaml
+import amici
+from matplotlib import pyplot as plt
+from pypesto import optimize as optimize, profile as profile
+from pypesto.visualize.model_fit import visualize_optimized_model_fit
+import pypesto.petab
+
+from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
+
+
+def write_petab_files_heat(expr_mat_time: ExpressionMatrixTimeSeries,
+                           sbml_path: Path | str,
+                           out_path: Path
+                           ):
+    """Write necessary petab files for heat experiment.
+
+    Also see petab documentation online for more info:
+    https://petab.readthedocs.io/en/latest/tutorial.html#
+
+    :param expr_mat_time: ExpressionMatrix used to save observations
+    :param sbml_path: path to SBML model
+    :param out_path: path to save all PETAB files
+    """
+    sbml_importer = amici.SbmlImporter(sbml_path,
+                                       show_sbml_warnings=True)
+    # observables = amici.assignmentRules2observables(
+    #     sbml_importer.sbml,
+    #     filter_function=lambda variable: variable.getId().startswith(
+    #         "observable_")
+    # )
+
+    observables = {f'observable_{species.getId()}':
+                       {'formula': species.getId()}
+                   for species in sbml_importer.sbml.getListOfSpecies()
+                   }
+
+    yaml_dict = {
+        'format_version': 1,
+        'parameter_file': 'parameters.tsv',
+        'problems': [
+            {
+            'condition_files': ['conditions.tsv'],
+            'measurement_files': ['measurements.tsv'],
+            'observable_files': ['observable.tsv'],
+            'sbml_files': ['../' + Path(sbml_path).name]
+            }
+        ]
+    }
+    with (out_path / 'baddadan_heat.yaml').open('w+') as f:
+        yaml.dump(yaml_dict, f)
+
+    # Create parameter file
+    create_parameters_tsv_heat(
+        out_path / yaml_dict['parameter_file'], sbml_importer)
+
+    create_conditions_tsv_heat(
+        out_path / yaml_dict['problems'][0]['condition_files'][0]
+    )
+    create_measurements_tsv_heat(
+        expr_mat_time,
+        out_path / yaml_dict['problems'][0]['measurement_files'][0],
+        list(observables.keys())
+    )
+    create_observables_tsv_heat(
+        observables,
+        out_path / yaml_dict['problems'][0]['observable_files'][0]
+    )
+
+
+
+def create_parameters_tsv_heat(out_path: str | Path,
+                               sbml_importer: amici.SbmlImporter):
+    """Create parameters CSV for petab"""
+    records = []
+    for parameter in sbml_importer.sbml.parameters:
+        name = parameter.id
+        if name in ['temp', 'u_t']:
+            continue
+        # parameter_scale = 'log10'
+        parameter_scale = 'lin'
+        lb = 0
+        ub = 10
+        if name.startswith('delta_'):
+            # Delta always has to be negative (and lower bound
+            # then becomes upper bound)
+            lb, ub = ub * -1, lb * -1
+        estimate = 1
+        records.append([name, parameter_scale, lb, ub, estimate])
+    df = pd.DataFrame.from_records(records,
+                                   columns=['parameterId',
+                                            'parameterScale',
+                                            'lowerBound',
+                                            'upperBound',
+                                            'estimate'])
+    df.to_csv(out_path, index=False, sep='\t')
+
+
+def create_measurements_tsv_heat(expr_mat: ExpressionMatrixTimeSeries,
+                                 out_path: str | Path,
+                                 observable_names: list[str]):
+    """Create measurements tsv for PETAB.
+    Observable names are the quantities that describe module expressions;
+    should be names such as 'observable_y_0', 'observable_y_3'.
+    """
+    df_list = []
+    for condition_name in expr_mat.condition_names:
+        expr_mat_copy = copy.deepcopy(expr_mat)
+        expr_mat_copy.keep_only_samples_with_string(condition_name)
+        time, data = expr_mat_copy.get_clusters_expressions_with_time(0)
+        df = pd.DataFrame(data)
+        df.columns = time
+        df.index = df.index.map(lambda x: f'observable_y_{x}')
+        assert all(df.index.isin(observable_names))
+        df = df.melt(
+            ignore_index=False,
+            var_name='time',
+            value_name='measurement').reset_index(names='observableId')
+        df['simulationConditionId'] = f'temp{condition_name}'
+        correct_order = ['observableId', 'simulationConditionId',
+                         'measurement', 'time']
+        df = df[correct_order]
+        df_list.append(df)
+
+    full_df = pd.concat(df_list)
+    full_df.to_csv(out_path, index=False, sep='\t')
+
+
+def create_observables_tsv_heat(observables: dict, out_path: str | Path):
+    """Create observable TSV for PETAB. Defaults to setting noise to .1 now"""
+    col_names_obs = ['observableId', 'observableFormula', 'noiseFormula']
+    obs_record = []
+    noise = .1
+    for obs_name, obs_dict in observables.items():
+        logging.warning(f"Specified noise as {noise}")
+        obs_record.append([obs_name, obs_dict['formula'], noise])
+    obs_df = pd.DataFrame.from_records(obs_record, columns=col_names_obs)
+    obs_df.to_csv(out_path, sep='\t', index=False)
+
+
+def create_conditions_tsv_heat(out_path: str | Path):
+    """Create conditions TSV for petab"""
+    # Create conditions.tsv
+    col_names = ['conditionId', 'conditionName', 'temp']
+    cond_entries = [
+        ['temp21', 'no heat applied', 0],
+        ['temp32', 'heat applied', 1]
+    ]
+    cond_df = pd.DataFrame(data=cond_entries,
+                           columns=col_names)
+    cond_df.to_csv(out_path, sep='\t', index=False)
+
+
+def param_optimise_petab_problem(petab_problem: petab.v1.Problem):
+    """Given a petab problem, perform parameter optimisation"""
+    # load from petab_files
+    importer = pypesto.petab.PetabImporter(petab_problem,
+                                           simulator_type="amici",
+                                           )
+    factory = importer.create_objective_creator()
+    model = factory.create_model(verbose=False)
+    model.setAlwaysCheckFinite(True)
+    # model.setInitialStates([.3,.3,.3])
+    # some model properties
+    print("Model parameters:", list(model.getParameterIds()), "\n")
+    print("Model const parameters:", list(model.getFixedParameterIds()), "\n")
+    print("Model outputs:   ", list(model.getObservableIds()), "\n")
+    print("Model states:    ", list(model.getStateIds()), "\n")
+    obj = factory.create_objective()
+
+    obj.amici_solver.setRelativeTolerance(1e-10)
+    obj.amici_solver.setAbsoluteTolerance(1e-10)
+    obj.amici_solver.setMaxSteps(100 * obj.amici_solver.getMaxSteps())
+    # obj.amici_solver.setAlwaysCheckFinite(True)
+    problem = importer.create_problem(obj)
+    # # Set gradient computation method to adjoint
+    # problem.objective.amici_solver.setSensitivityMethod(
+    #     amici.SensitivityMethod.adjoint
+    # )
+    # optimizer = optimize.ScipyOptimizer()
+    optimizer = optimize.ScipyOptimizer(method = "L-BFGS-B")
+
+    # engine = pypesto.engine.SingleCoreEngine()
+    engine = pypesto.engine.MultiProcessEngine()
+    result = optimize.minimize(
+        problem=problem, optimizer=optimizer, n_starts=5, engine=engine,
+    )
+    visualize_optimized_model_fit(
+        petab_problem=petab_problem, result=result, pypesto_problem=problem
+    )
+    plt.show()
+
+    pypesto.visualize.parameters(result)
+    plt.show()
+    pypesto.visualize.waterfall(result)
+    plt.show()
+
+    param_result = profile.parameter_profile(
+        problem=problem,
+        result=result,
+        optimizer=optimizer,
+        profile_index=[0, 1],
+    )
+    pypesto.visualize.profile_cis(
+        param_result, confidence_level=0.95, show_bounds=True
+    )
+    plt.show()
+    # pypesto.visualize.optimizer_history(result, trace_y="fval")
+    # plt.show()
+    return result, obj

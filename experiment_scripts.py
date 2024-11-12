@@ -1,4 +1,3 @@
-import copy
 import logging
 from copy import deepcopy
 from pathlib import Path
@@ -11,12 +10,12 @@ import mlflow
 import numpy as np
 import pandas as pd
 import pypesto
-import pypesto.optimize as optimize
+import pypesto.petab
+import petab
+import amici.petab.simulator
 import yaml
 import seaborn as sns
 import matplotlib.pyplot as plt
-from amici.plotting import plot_observable_trajectories, \
-    plot_state_trajectories
 from scipy.spatial.distance import squareform
 from sklearn.metrics import adjusted_rand_score
 from scipy.cluster.hierarchy import linkage, fcluster
@@ -31,14 +30,15 @@ from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 from Expressions.ExpressionMatrix import AggregationMethod, \
     ExpressionMatrixTimeSeries
 from GoEnrich.EnrichedGeneModuleGoTerms import EnrichedGeneModuleGoTerms
-from analysis_pipelines import assign_clusters_and_infer_intermodular_network, \
-    explore_emtab_375, compare_clusterings_for_ode_use, \
+from analysis_pipelines import explore_emtab_375, compare_clusterings_for_ode_use, \
     module_network_from_tf2_output, infer_intermodular_network
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 
 from exploring_questions import plot_module_size_distributions, \
     combine_local_distance_and_prior, similarity_matrices_local_and_atted
-from helpers import get_info_from_emtab375, parse_string_input_data
+from helpers import parse_string_input_data
+from petab_integration.petab_scripts import write_petab_files_heat, \
+    param_optimise_petab_problem
 
 
 def prefilter_genes_experiment(experiment_path):
@@ -711,7 +711,7 @@ def heat_data_e2e_pipeline(experiment_path):
             expr_mat_time.get_distance_matrix(),
             atted_score,
             out_path=experiment_path)
-    logging.warning('New clusters so new TF2Network analysis?')
+    # logging.warning('New clusters so new TF2Network analysis?')
     tf2_in_path = experiment_path / data_params['tf2_in_name']
     tf2_out_path = experiment_path / data_params['tf2_out_name']
     # Post to tf2network
@@ -758,17 +758,25 @@ def heat_data_e2e_pipeline(experiment_path):
     my_ode = OdeModel.construct_from_regulatory_network(module_module,
                                                         nonlinear=True)
 
-    # These are parameters that are different between the two datasets
-    custom_params = dict()
-    control_name =  '21'
-    treatment_name = '32'
+    # # These are parameters that are different between the two datasets
+    u_t_function = 'temp'
 
-    custom_params[control_name] = OdeLocalParameters(
-        u_t=(lambda t: 0))
-    custom_params[treatment_name] = OdeLocalParameters(
-        u_t=(lambda t: 1))
 
-    my_ode.save_to_sbml(experiment_path / 'module_network.xml', custom_params)
+    # custom_params[control_name] = OdeLocalParameters(
+    #     u_t=(lambda t: 0))
+    # custom_params[treatment_name] = OdeLocalParameters(
+    #     u_t=(lambda t: 1))
+
+    # # Expression that determine the value of u(t)
+    # custom_params[control_name] = '0 + time * 0'
+    # custom_params[treatment_name] = '10 + time * 10'
+
+    # # Expression that determine the value of u(t)
+    # custom_params[control_name] = 'time'
+    # custom_params[treatment_name] = 'time'
+
+    my_ode.save_to_sbml(experiment_path / 'module_network.xml', u_t_function)
+    return
 
     best_ode_fit = fit_ode_to_two_datasets(
         my_ode,
@@ -945,31 +953,6 @@ def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
     # plt.close()
 
 
-
-def write_petab_files_heat(expr_mat_time: ExpressionMatrixTimeSeries, sbml_path: Path | str, out_path: Path):
-    # Create conditions.tsv
-    col_names = ['conditionId', 'conditionName', 'u_t']
-    cond_entries = [
-        ['control', 'no heat applied', 0],
-        ['heat',    'heat applied',    1]
-    ]
-    out_path.mkdir(exist_ok=True)
-    cond_df = pd.DataFrame(data=cond_entries,
-                           columns=col_names)
-    cond_df.to_csv(out_path / 'conditions.tsv', sep='\t', index=False)
-
-    # observables.tsv
-    for module in expr_mat_time.get_genes_per_cluster().keys():
-        ...
-
-    sbml_importer = amici.SbmlImporter(sbml_path,
-                                       show_sbml_warnings=True)
-    # measurements.tsv=True)
-
-    # parameters.tsv
-    # create yaml file
-    # do evaluation of YAML file using the PETAB library
-
 def heat_pypesto(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path
@@ -977,226 +960,221 @@ def heat_pypesto(experiment_path):
 
     with open(data_params['expr_mat_time_path'], 'rb') as f:
         expr_mat_time = pickle.load(f)
-    model_name = "model_steadystate"
+    model_name = "model_heat"
     model_dir = str(experiment_path / "model_dir")
-    constant_parameters = ['u_t']
+    constant_parameters = ['temp']
 
-    # write_petab_files_heat(expr_mat_time, data_params['sbml_path'], experiment_path / 'petab_files')
+    write_petab_files_heat(
+        expr_mat_time,
+        data_params['sbml_path'],
+        experiment_path / 'petab_files'
+    )
+    # Experimental data
+    petab_problem = petab.v1.Problem.from_yaml(
+        str(experiment_path / 'petab_files' / 'baddadan_heat.yaml')
+    )
+    only_sim = False
+    if not only_sim:
+        result_og = param_optimise_petab_problem(petab_problem)
 
+    importer = pypesto.petab.PetabImporter(petab_problem,
+                                           simulator_type="amici",
+                                           )
+    factory = importer.create_objective_creator()
+    obj = factory.create_objective()
 
-
-    omit_sbml_converstion = True
-    if not omit_sbml_converstion:
-        sbml_importer = amici.SbmlImporter(data_params['sbml_path'],
-                                           show_sbml_warnings=True)
-
-
-
-        observables = amici.assignmentRules2observables(
-            sbml_importer.sbml,  # the libsbml model object
-            filter_function=lambda variable: variable.getId().startswith(
-                "observable_")
-        )
-        print(observables)
-        # Sometimes get AttributeError: 'PosixPath' object has no attribute 'startswith'?
-        sbml_importer.sbml2amici(model_name, model_dir,
-                                 constant_parameters=constant_parameters,
-                                 observables=observables,
-                                 compute_conservation_laws=False)
-
-    # load the generated module
-    model_module = amici.import_model_module(model_name, model_dir)
-    # Create Model instance
-    model = model_module.getModel()
-
-    print("Model parameters:", list(model.getParameterIds()))
-    print("Model outputs:   ", list(model.getObservableIds()))
-    print("Model states:    ", list(model.getStateIds()))
-
-    # Now get data to do the fit
-    print()
-    # Get expr mat time
-    # TODO later on put this all in a class again
-    if expr_mat_time.aggregation_method == AggregationMethod.EIGENGENE:
-        expressions: pd.DataFrame = expr_mat_time.df.groupby('cluster_id').apply(
-            expr_mat_time._get_eigengene_over_time)
-        # Add constant value to eigengenes
-        expressions = abs(expressions.min().min()) + expressions
-    elif expr_mat_time.aggregation_method == AggregationMethod.MEAN:
-        expressions: pd.DataFrame = expr_mat_time.df.groupby('cluster_id').apply(
-            expr_mat_time._get_mean_over_time)
-        # dataset.plot_clusters_over_time()
-    else:
-        raise NotImplementedError
-
-    for word in expr_mat_time.condition_names:
-        # Deepcopy first?
-        # dataset.keep_only_samples_with_string(word)
-        valid_index = expressions.columns.get_level_values(
-            'condition').isin(['zero', word])
-        data = expressions.loc[:, valid_index]
-        # Ensure that time is increasing
-        data = data.sort_index(axis=1, level='time')
-        # Convert time into hours
-        time = data.columns.get_level_values('time') / pd.to_timedelta(1,
-                                                                       unit='h')
-        assert len(data.columns) == len(time)
-        data = data.to_numpy()
-        time = time.to_numpy()
-        # u_t_for_dataset = custom_params_per_dataset[word].u_t
-        u_t_for_dataset = 1
-
-        # set timepoints for which we want to simulate the model
-        model.setTimepoints(time)
-
-        # # Here: set u_t to correct value
-        # model.setFixedParameters(np.array([u_t_for_dataset]))
-        model.setFixedParametersByIdRegex('u_t', u_t_for_dataset)
-
-        # set parameters to optimal values found in the benchmark collection
-        # model.setParameterScale(amici.ParameterScaling.log10)
-        nr_params = len(model.getParameterIds())
-        # IF all zero, does not throw error
-        # model.setParameters(np.zeros(nr_params))
-
-        # model.setParameters(np.random.standard_normal(nr_params)/10)
-        some_params = np.random.rand(nr_params)/10
-        model.setParameters(some_params)
-
-        # Create solver instance
-        solver = model.getSolver()
-
-        # Run simulation using model parameters from the benchmark collection and default solver options
-        rdata = amici.runAmiciSimulation(model, solver)
-
-        plot_observable_trajectories(rdata)
-        plt.show()
-        # plot_state_trajectories(rdata)
-        # plt.show()
-        # Create edata instance with dimensions and timepoints
-
-        edata = amici.ExpData(
-            data.shape[0],  # number of observables
-            0,  # number of event outputs
-            0,  # maximum number of events
-            time,  # timepoints
-        )
-        # set observed data
-        for i in range(data.shape[0]):
-            edata.setObservedData(data[i,:], i)
-
-        rdata = amici.runAmiciSimulation(model, solver, edata)
-
-        print(f"chi2 value using AMICI: {rdata['chi2']}")
-
-        # we make some more adjustments to our model and the solver
-        model.requireSensitivitiesForAllParameters()
-
-        solver.setSensitivityMethod(amici.SensitivityMethod.forward)
-        solver.setSensitivityOrder(amici.SensitivityOrder.first)
-
-        objective = pypesto.AmiciObjective(
-            amici_model=model, amici_solver=solver, edatas=[edata],
-            max_sensi_order=1
-        )
-
-        # the generic objective call
-        print(f"Objective value: {objective(some_params)}")
-        # a call returning the AMICI data as well
-        obj_call_with_dict = objective(some_params, return_dict=True)
-        print(
-            f'Chi^2 value of the same parameters: {obj_call_with_dict["rdatas"][0]["chi2"]}'
-        )
-
-        n_starts = 20  # usually a value >= 100 should be used
-        engine = pypesto.engine.MultiProcessEngine()
-        result = optimize.minimize(
-            problem=problem,
-            optimizer=optimizer,
-            n_starts=n_starts,
-            startpoint_method=startpoint_method,
-            engine=engine,
-            options=opt_options,
-        )
-
-
-def get_coherence_random_modules(wgcna_label_file : str,
-                                 expr_mat_time: ExpressionMatrixTimeSeries,
-                                 figure_out_dir: Path):
-    expr_mat_time.assign_clusters_from_wgcna(wgcna_label_file)
-    coherence_entry = expr_mat_time.get_all_explained_vars()
-    coherence_entry = [['combined_dists', i] for i in coherence_entry]
-
-    for i in range(4):
-        expr_mat_time_random = copy.deepcopy(expr_mat_time)
-        # expr_mat_time_random.do_random_clustering_with_given_size_dist(
-        #     data_params['wgna_label_file'])
-
-        expr_mat_time_random.do_random_clustering_with_given_size_dist(
-            wgcna_label_file=None,
-            use_own_clustering=True
-        )
-        # Do coherence per module
-        coherence_entry_random_cluster = expr_mat_time_random.get_all_explained_vars()
-        coherence_entry_random_cluster = [[f'random_{i}', j] for j in coherence_entry_random_cluster]
-        coherence_entry.extend(coherence_entry_random_cluster)
-
-    df = pd.DataFrame.from_records(coherence_entry, columns=['Method', 'Coherence'])
-    sns.boxplot(data=df, y='Coherence', x='Method', hue='Method')
-    plt.ylim((0, .9))
-    plt.savefig(figure_out_dir / 'boxplot_coherence_with_random_modules.png')
-    plt.close()
-
-    sns.swarmplot(data=df, y='Coherence', x='Method', hue='Method')
-    plt.ylim((0, .9))
-    plt.savefig(figure_out_dir / 'swarmplot_coherence_with_random_modules.png')
-    plt.close()
-
-def get_robustness_random_modules(jackknife_paths, full_dataset_path, figure_out_dir):
-    out_list = []
-    module_size_list = []
-
-    # Full dataset
-    full_dataset = pd.read_csv(full_dataset_path, usecols=[1, 2])
-    full_dataset = full_dataset.set_index('gene_id')
-    # Module sizes (in full dataset)
-    module_size_list.extend(
-        [size for size in full_dataset.value_counts().to_list()]
+    # SIMULATED DATAAAAAAAAAAA
+    petab_problem_synthetic = petab.v1.Problem.from_yaml(
+        str(experiment_path / 'petab_files' / 'baddadan_heat.yaml')
     )
 
-    # Robustness
-    for jackknife_path in jackknife_paths:
-        subset = pd.read_csv(jackknife_path, usecols=[1, 2])
-        subset = subset.set_index('gene_id')
+    simulation_param_dict = {}
+    for param_name in petab_problem_synthetic.parameter_df.index:
+        if 'delta' in param_name:
+            value = -1
+        elif 'gamma' in param_name:
+            value = -.1
+        elif 'beta_0_2' in param_name:
+            value = 2
+        elif 'beta' in param_name:
+            value = 1
+        elif 'k_0_1' == param_name:
+            value = 1
+        elif param_name.startswith('k_'):
+            value = .1
+        else:
+            raise NotImplementedError
+        simulation_param_dict[param_name] = value
+    obj.amici_model.setInitialStates([3, 3, 3])
+    petab_problem_synthetic.parameter_df[petab.v1.C.NOMINAL_VALUE] \
+        = petab_problem_synthetic.parameter_df.index.map(
+        simulation_param_dict
+    )
+    # petab_problem_synthetic.parameter_df['estimate'] = 0
+    simulator = amici.petab.simulator.PetabSimulator(petab_problem_synthetic)
+    petab_problem_synthetic.measurement_df = simulator.simulate(
+        noise=False,
+        # noise_scaling_factor=0.01,
+        # Optional: the AMICI simulator is provided a model, to avoid recompilation
+        amici_model=obj.amici_model,
+        as_measurement=True,
+    )
+    simulator.remove_working_dir()
+    sns.lineplot(data=petab_problem_synthetic.measurement_df, y='measurement',
+                 x='time',
+                 hue='observableId', style='simulationConditionId')
+    plt.show()
+    # sns.lineplot(data=petab_problem.measurement_df, y='measurement', x='time',
+    #              hue='observableId', style='simulationConditionId')
+    # plt.show()
 
-        merged_df = subset.join(full_dataset,
-                                how='inner',
-                                lsuffix='_subset',
-                                rsuffix='_og')
-        ari = adjusted_rand_score(merged_df['colors_subset'],
-                                  merged_df['colors_og'])
-        out_list.append(('robustness_merged_dists', ari))
+    result_sim = param_optimise_petab_problem(petab_problem_synthetic)
 
-        # Do random clustering now
-        subset['colors'] = np.random.permutation(subset['colors'] )
-        # Merge genes
-        merged_df = subset.join(full_dataset,
-                                how='inner',
-                                lsuffix='_subset',
-                                rsuffix='_og')
-        ari = adjusted_rand_score(merged_df['colors_subset'],
-                                  merged_df['colors_og'])
-        out_list.append(('robustness_random', ari))
 
-    df = pd.DataFrame.from_records(out_list,
-                                   columns=['Method', 'Robustness'])
-    sns.boxplot(data=df, y='Robustness', x='Method', hue='Method')
-    plt.ylim((0, .9))
-    plt.savefig(figure_out_dir / 'boxplot_robustness_with_random_modules.png')
-    plt.close()
 
-    sns.swarmplot(data=df, y='Robustness', x='Method', hue='Method')
-    plt.ylim((0, .9))
-    plt.savefig(figure_out_dir / 'swarmplot_robustness_with_random_modules.png')
-    plt.close()
-    return out_list
+
+
+
+
+
+    # # Everything below is amici-specific and not needed at the moment
+    #
+    # omit_sbml_converstion = False
+    # if not omit_sbml_converstion:
+    #     sbml_importer = amici.SbmlImporter(data_params['sbml_path'],
+    #                                        show_sbml_warnings=True)
+    #
+    #     observables = amici.assignmentRules2observables(
+    #         sbml_importer.sbml,  # the libsbml model object
+    #         filter_function=lambda variable: variable.getId().startswith(
+    #             "observable_")
+    #     )
+    #     # print(observables)
+    #
+    #     # Sometimes get AttributeError: 'PosixPath' object has no attribute 'startswith'?
+    #     sbml_importer.sbml2amici(model_name, model_dir,
+    #                              constant_parameters=constant_parameters,
+    #                              observables=observables,
+    #                              compute_conservation_laws=False)
+    #
+    # # load the generated module
+    # model_module = amici.import_model_module(model_name, model_dir)
+    # # Create Model instance
+    # model = model_module.getModel()
+    #
+    # print("Model parameters:", list(model.getParameterIds()))
+    # print("Model outputs:   ", list(model.getObservableIds()))
+    # print("Model states:    ", list(model.getStateIds()))
+    #
+    # # Now get data to do the fit
+    # print()
+    # # Get expr mat time
+    # # TODO later on put this all in a class again
+    # if expr_mat_time.aggregation_method == AggregationMethod.EIGENGENE:
+    #     expressions: pd.DataFrame = expr_mat_time.df.groupby('cluster_id').apply(
+    #         expr_mat_time._get_eigengene_over_time)
+    #     # Add constant value to eigengenes
+    #     expressions = abs(expressions.min().min()) + expressions
+    # elif expr_mat_time.aggregation_method == AggregationMethod.MEAN:
+    #     expressions: pd.DataFrame = expr_mat_time.df.groupby('cluster_id').apply(
+    #         expr_mat_time._get_mean_over_time)
+    #     # dataset.plot_clusters_over_time()
+    # else:
+    #     raise NotImplementedError
+    #
+    # for word in expr_mat_time.condition_names:
+    #     # Deepcopy first?
+    #     # dataset.keep_only_samples_with_string(word)
+    #     valid_index = expressions.columns.get_level_values(
+    #         'condition').isin(['zero', word])
+    #     data = expressions.loc[:, valid_index]
+    #     # Ensure that time is increasing
+    #     data = data.sort_index(axis=1, level='time')
+    #     # Convert time into hours
+    #     time = data.columns.get_level_values('time') / pd.to_timedelta(1,
+    #                                                                    unit='h')
+    #     assert len(data.columns) == len(time)
+    #     data = data.to_numpy()
+    #     time = time.to_numpy()
+    #
+    #     # set timepoints for which we want to simulate the model
+    #     model.setTimepoints(time)
+    #
+    #     # # Here: set u_t to correct value
+    #     # TODO handle this correctly perhaps -> now kinda works for temp
+    #     # TODO Check if different results for different temps
+    #     custom_param_dict = {'21': 0,
+    #                          '32': 1}
+    #     model.setFixedParameterById('temp', custom_param_dict[word])
+    #
+    #     # set parameters to optimal values found in the benchmark collection
+    #     # model.setParameterScale(amici.ParameterScaling.log10)
+    #     nr_params = len(model.getParameterIds())
+    #     # IF all zero, does not throw error
+    #     # model.setParameters(np.zeros(nr_params))
+    #
+    #     # model.setParameters(np.random.standard_normal(nr_params)/10)
+    #     some_params = np.random.rand(nr_params)/10
+    #     model.setParameters(some_params)
+    #
+    #     # TODO is this needed? \/
+    #     # model.setInitialStates()
+    #
+    #     # Create solver instance
+    #     solver = model.getSolver()
+    #     # Run simulation using model parameters from the benchmark collection and default solver options
+    #     rdata = amici.runAmiciSimulation(model, solver)
+    #
+    #     plot_observable_trajectories(rdata)
+    #     plt.show()
+    #
+    #     plt.plot(rdata.by_id('u_t'))
+    #     plt.show()
+    #
+    #
+    #     edata = amici.ExpData(
+    #         data.shape[0],  # number of observables
+    #         0,  # number of event outputs
+    #         0,  # maximum number of events
+    #         time,  # timepoints
+    #     )
+    #     # set observed data
+    #     for i in range(data.shape[0]):
+    #         edata.setObservedData(data[i,:], i)
+    #
+    #     rdata = amici.runAmiciSimulation(model, solver, edata)
+    #
+    #     print(f"chi2 value using AMICI: {rdata['chi2']}")
+    #
+    #     # we make some more adjustments to our model and the solver
+    #     model.requireSensitivitiesForAllParameters()
+    #
+    #     solver.setSensitivityMethod(amici.SensitivityMethod.forward)
+    #     solver.setSensitivityOrder(amici.SensitivityOrder.first)
+    #
+    #     objective = pypesto.AmiciObjective(
+    #         amici_model=model, amici_solver=solver, edatas=[edata],
+    #         max_sensi_order=1
+    #     )
+    #
+    #     # the generic objective call
+    #     print(f"Objective value: {objective(some_params)}")
+    #     # a call returning the AMICI data as well
+    #     obj_call_with_dict = objective(some_params, return_dict=True)
+    #     print(
+    #         f'Chi^2 value of the same parameters: {obj_call_with_dict["rdatas"][0]["chi2"]}'
+    #     )
+    #
+    #     # So we can get objective function now, just have to proceed with that
+    #     n_starts = 20  # usually a value >= 100 should be used
+    #     engine = pypesto.engine.MultiProcessEngine()
+    #     result = optimize.minimize(
+    #         problem=problem,
+    #         optimizer=optimizer,
+    #         n_starts=n_starts,
+    #         startpoint_method=startpoint_method,
+    #         engine=engine,
+    #         options=opt_options,
+    #     )
+
+

@@ -8,6 +8,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from GEOparse import get_GEO
+from matplotlib import pyplot as plt
 from scipy.spatial.distance import squareform
 # from scipy.cluster.hierarchy import linkage
 from fastcluster import linkage
@@ -438,3 +439,86 @@ def compare_modules_to_local_modules_with_tfbs(expr_mat_dict, local_dists_tf2_ou
                               merged_df['cluster_id_local']))
     print(adjusted_rand_score(merged_df['cluster_id_summed'],
                               merged_df['cluster_id_local']))
+
+
+def get_coherence_random_modules(wgcna_label_file : str,
+                                 expr_mat_time: ExpressionMatrixTimeSeries,
+                                 figure_out_dir: Path):
+    expr_mat_time.assign_clusters_from_wgcna(wgcna_label_file)
+    coherence_entry = expr_mat_time.get_all_explained_vars()
+    coherence_entry = [['combined_dists', i] for i in coherence_entry]
+
+    for i in range(4):
+        expr_mat_time_random = copy.deepcopy(expr_mat_time)
+        # expr_mat_time_random.do_random_clustering_with_given_size_dist(
+        #     data_params['wgna_label_file'])
+
+        expr_mat_time_random.do_random_clustering_with_given_size_dist(
+            wgcna_label_file=None,
+            use_own_clustering=True
+        )
+        # Do coherence per module
+        coherence_entry_random_cluster = expr_mat_time_random.get_all_explained_vars()
+        coherence_entry_random_cluster = [[f'random_{i}', j] for j in coherence_entry_random_cluster]
+        coherence_entry.extend(coherence_entry_random_cluster)
+
+    df = pd.DataFrame.from_records(coherence_entry, columns=['Method', 'Coherence'])
+    sns.boxplot(data=df, y='Coherence', x='Method', hue='Method')
+    plt.ylim((0, .9))
+    plt.savefig(figure_out_dir / 'boxplot_coherence_with_random_modules.png')
+    plt.close()
+
+    sns.swarmplot(data=df, y='Coherence', x='Method', hue='Method')
+    plt.ylim((0, .9))
+    plt.savefig(figure_out_dir / 'swarmplot_coherence_with_random_modules.png')
+    plt.close()
+
+
+def get_robustness_random_modules(jackknife_paths, full_dataset_path, figure_out_dir):
+    out_list = []
+    module_size_list = []
+
+    # Full dataset
+    full_dataset = pd.read_csv(full_dataset_path, usecols=[1, 2])
+    full_dataset = full_dataset.set_index('gene_id')
+    # Module sizes (in full dataset)
+    module_size_list.extend(
+        [size for size in full_dataset.value_counts().to_list()]
+    )
+
+    # Robustness
+    for jackknife_path in jackknife_paths:
+        subset = pd.read_csv(jackknife_path, usecols=[1, 2])
+        subset = subset.set_index('gene_id')
+
+        merged_df = subset.join(full_dataset,
+                                how='inner',
+                                lsuffix='_subset',
+                                rsuffix='_og')
+        ari = adjusted_rand_score(merged_df['colors_subset'],
+                                  merged_df['colors_og'])
+        out_list.append(('robustness_merged_dists', ari))
+
+        # Do random clustering now
+        subset['colors'] = np.random.permutation(subset['colors'] )
+        # Merge genes
+        merged_df = subset.join(full_dataset,
+                                how='inner',
+                                lsuffix='_subset',
+                                rsuffix='_og')
+        ari = adjusted_rand_score(merged_df['colors_subset'],
+                                  merged_df['colors_og'])
+        out_list.append(('robustness_random', ari))
+
+    df = pd.DataFrame.from_records(out_list,
+                                   columns=['Method', 'Robustness'])
+    sns.boxplot(data=df, y='Robustness', x='Method', hue='Method')
+    plt.ylim((0, .9))
+    plt.savefig(figure_out_dir / 'boxplot_robustness_with_random_modules.png')
+    plt.close()
+
+    sns.swarmplot(data=df, y='Robustness', x='Method', hue='Method')
+    plt.ylim((0, .9))
+    plt.savefig(figure_out_dir / 'swarmplot_robustness_with_random_modules.png')
+    plt.close()
+    return out_list

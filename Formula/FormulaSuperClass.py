@@ -24,14 +24,14 @@ class FormulaSuperClass:
         # Add decay factor, its suffix is always equal to the module it belongs to
         d_param_name = f'delta_{self.module_index}'
         self.params.append(d_param_name)
-        self.formula_parts.append(f' - {d_param_name} * y[{self.module_index}]')
+        self.formula_parts.append(f'{d_param_name} * y[{self.module_index}]')
 
         # Add factor which expresses the change in expression based on u_t
         gamma_param_name = f'gamma_{self.module_index}'
         self.params.append(gamma_param_name)
 
-        self.formula_parts.append(f' + {gamma_param_name} * u_t * y[{self.module_index}] ')
-        # self.formula_parts.append(f' + {gamma_param_name} * u_t ')
+        # self.formula_parts.append(f' + {gamma_param_name} * u_t * y[{self.module_index}] ')
+        self.formula_parts.append(f' + {gamma_param_name} * u_t ')
 
         # Register if the module has been compiled (which speeds up its evaluation)
         self.formula_is_compiled = False

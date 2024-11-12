@@ -227,8 +227,13 @@ class OdeModel:
         out = np.array(out)
         return out
 
-    def save_to_sbml(self, out_path, custom_params):
+    def save_to_sbml(self, out_path, u_t_function: str):
+        """Save model to sbml format
 
+        :param out_path: Path to save SBML in
+        :param u_t_function: function that indicates what the external
+         input should be used in the equation (can include 'time' to use time explicitly)
+        """
         def check(value, message):
             """If 'value' is None, prints an error message constructed using
             'message' and then exits with status code 1.  If 'value' is an integer,
@@ -236,19 +241,22 @@ class OdeModel:
             LIBSBML_OPERATION_SUCCESS, returns without further action; if it is not,
             prints an error message constructed using 'message' along with text from
             libSBML explaining the meaning of the code, and exits with status code 1.
+
+            Copied from documentation of SBML
             """
-            if value == None:
+            if value is None:
                 raise SystemExit(
-                    'LibSBML returned a null value trying to ' + message + '.')
+                    f'LibSBML returned a null value trying to {message}.'
+                    f'\n For formulas {libsbml.getLastParseL3Error()=}')
             elif type(value) is int:
                 if value == libsbml.LIBSBML_OPERATION_SUCCESS:
                     return
                 else:
-                    err_msg = 'Error encountered trying to ' + message + '.' \
-                              + 'LibSBML returned error code ' + str(
-                        value) + ': "' \
-                              + libsbml.OperationReturnValue_toString(
-                        value).strip() + '"'
+                    err_msg = (
+                        f'Error encountered trying to {message}.' 
+                        f'LibSBML returned error code {value}: ' 
+                        f'{libsbml.OperationReturnValue_toString(value).strip()}'
+                    )
                     raise SystemExit(err_msg)
             else:
                 return
@@ -257,44 +265,58 @@ class OdeModel:
         model = document.createModel()
         model.setId('baddadan_model')
         # model.setSubstanceUnits('mole')
-        model.setTimeUnits("second")
-
+        # model.setTimeUnits("second")
 
         compartment = model.createCompartment()
         compartment.setId('whole_plant')
         compartment.setConstant(True)
-        compartment.setUnits('litre')
+        compartment.setUnits('dimensionless')
 
-        per_second = model.createUnitDefinition()
-        per_second.setId('per_second')
-        unit = per_second.createUnit()
-        unit.setKind(libsbml.UNIT_KIND_SECOND)
-        unit.setExponent(-1)
-        unit.setScale(0)
-        unit.setMultiplier(1)
+        temp_param = model.createParameter()
+        temp_param.setId('temp')
+        temp_param.setConstant(False)
+        temp_param.setUnits('dimensionless')
+        temp_param.setValue(0)
 
         u_param = model.createParameter()
         u_param.setId('u_t')
         u_param.setConstant(False)
         u_param.setUnits('dimensionless')
 
+        rule = model.createAssignmentRule()
+        rule.setVariable(u_param.getId())
+        equation = libsbml.parseL3Formula(u_t_function)
+        assert equation is not None, f'parseL3Formula failed for {libsbml.getLastParseL3Error()}'
+        logging.debug(libsbml.formulaToL3String(equation))
+        rule.setMath(equation)
 
-        # compartment.setConstant(True)
-        # compartment.setSize(1)
-        # compartment.setSpatialDimensions(3)
-        # compartment.setUnits('au')
+        # u_t_l3_formula = ['piecewise(']
+        # items = list(custom_params.items())
+        # for i, (key, value) in enumerate(items):
+        #     u_t_l3_formula.append(f'{value}, temp=={key}')
+        #     if i < len(items) - 1:
+        #         u_t_l3_formula.append(', ')
+        # u_t_l3_formula.append(', 0)')
+        # u_t_l3_formula= ''.join(u_t_l3_formula)
+
+        # check(libsbml.parseL3Formula(
+        #     u_t_l3_formula), 'interpret u_t formula')
+
+        # To get parsing errors:
+        # libsbml.getLastParseL3Error()
+
 
         for module_formula in self.formula_per_module:
             # Add modules as entities
             module = model.createSpecies()
             module.setId(module_formula.module_y_name)
             module.setCompartment('whole_plant')
-            # And how about this :O? Retrieve from custom_params?
-            module.setInitialAmount(1.0)  # Set appropriate initial condition?
+            # TODO And how about this :O? Retrieve from custom_params?
+            module.setInitialAmount(3.0)  # Set appropriate initial condition?
             module.setBoundaryCondition(False)
             module.setHasOnlySubstanceUnits(False)
             module.setConstant(False)
-
+            module.setUnits('dimensionless')
 
             # Add parameters
             for parameter_name in module_formula.params:
@@ -305,16 +327,18 @@ class OdeModel:
                 new_param.setConstant(False)
                 new_param.setUnits('dimensionless')
 
-            # For AMICI each observable species needs to be specified:
-            obs_name = f'observable_{module_formula.module_y_name}'
-            obs_param = model.createParameter()
-            obs_param.setConstant(False)
-            obs_param.setId(obs_name)
-            rule = model.createAssignmentRule()
-            rule.setVariable(obs_name)
-            equation = libsbml.parseL3Formula(module_formula.module_y_name)
-            rule.setMath(equation)
-            libsbml.formulaToString(equation)
+            # # For AMICI each observable species needs to be specified:
+            # # But or PETAB not needed
+            # obs_name = f'observable_{module_formula.module_y_name}'
+            # obs_param = model.createParameter()
+            # obs_param.setUnits('dimensionless')
+            # obs_param.setConstant(False)
+            # obs_param.setId(obs_name)
+            # rule = model.createAssignmentRule()
+            # rule.setVariable(obs_name)
+            # equation = libsbml.parseL3Formula(module_formula.module_y_name)
+            # rule.setMath(equation)
+            # libsbml.formulaToString(equation)
 
             # Add reactions
             module_rate = model.createRateRule()
@@ -326,17 +350,15 @@ class OdeModel:
             rate_equation = libsbml.parseL3Formula(
                 module_formula.sbml_string
             )
-
-
             module_rate.setMath(rate_equation)
-
-            # TODO Add environment-dependant variable things
-
-
 
         # Check consistency
         consistency_check = document.checkConsistency()
-        error_list = [f'{document.getError(i).getSeverityAsString()}: {document.getError(i).getMessage()}' for i in range(consistency_check)]
+        error_list = [
+            (f'{document.getError(i).getSeverityAsString()}:'
+                f' {document.getError(i).getMessage()}')
+            for i in range(consistency_check)
+        ]
         error_string = '\n '.join(error_list)
         if consistency_check > 0:
             logging.warning(f"SBML document not valid: {error_string}")

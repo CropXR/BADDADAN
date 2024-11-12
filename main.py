@@ -24,7 +24,8 @@ from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, 
     wgcna_with_similarity_scores, drought_with_string_db, \
     integrate_multiple_datasets, generate_dists_for_wgcna_cutting, \
     ground_truth_vs_jackknife, fit_ode_drought_data, heat_pypesto, \
-    analyse_go_enrichments_find_enrichment, get_coherence_random_modules, \
+    analyse_go_enrichments_find_enrichment
+from exploring_questions import get_coherence_random_modules, \
     get_robustness_random_modules
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
     one_gene_list_file_per_cluster
@@ -463,7 +464,7 @@ def camila_red_panda(soft_file_in_path: Path,
 def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
-    name = '21_score_distributions_of_random_modules'
+    name = '19_heat_pypesto'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -545,7 +546,7 @@ def main():
             ground_truth_vs_jackknife(experiment_path, expr_mat_time)
         case "19_heat_pypesto":
 
-            # # # Run heat data e2e first for this to run
+            # Run heat data e2e first for this to run:
             # heat_data_e2e_pipeline(experiment_path)
             heat_pypesto(experiment_path)
 
@@ -656,7 +657,12 @@ def main():
                     mlflow.log_artifact(
                         str(experiment_path / treatment_name / 'figures'))
 
-
+        # case "22_random_data_generated":
+        #     module_module = module_network_from_tf2_output(
+        #         expr_mat_time, tf2_in_path,
+        #         tf2_out_path,
+        #         threshold=hyper_params['edge_corr_threshold'],
+        #         module_plot_path=experiment_path / 'global_cluster_module_network.svg')
 
         case _:
             raise NotImplementedError(f'{name} not found')
