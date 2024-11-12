@@ -990,18 +990,24 @@ def heat_pypesto(experiment_path):
 
     simulation_param_dict = {}
     for param_name in petab_problem_synthetic.parameter_df.index:
-        if 'delta' in param_name:
+        if param_name == 'delta_0':
             value = -1
+        elif 'delta' in param_name:
+            value = -.1
+        elif param_name == 'gamma_0':
+            value = 3
         elif 'gamma' in param_name:
             value = -.1
-        elif 'beta_0_2' in param_name:
-            value = 2
+        elif 'beta_0_1' in param_name:
+            value = .01
+        elif 'k_1_2' == param_name:
+            value = 6
         elif 'beta' in param_name:
             value = 1
         elif 'k_0_1' == param_name:
             value = 1
         elif param_name.startswith('k_'):
-            value = .1
+            value = 2
         else:
             raise NotImplementedError
         simulation_param_dict[param_name] = value
@@ -1013,7 +1019,7 @@ def heat_pypesto(experiment_path):
     # petab_problem_synthetic.parameter_df['estimate'] = 0
     simulator = amici.petab.simulator.PetabSimulator(petab_problem_synthetic)
     petab_problem_synthetic.measurement_df = simulator.simulate(
-        noise=False,
+        noise=True,
         # noise_scaling_factor=0.01,
         # Optional: the AMICI simulator is provided a model, to avoid recompilation
         amici_model=obj.amici_model,

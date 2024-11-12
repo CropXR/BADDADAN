@@ -91,6 +91,8 @@ def create_parameters_tsv_heat(out_path: str | Path,
             # Delta always has to be negative (and lower bound
             # then becomes upper bound)
             lb, ub = ub * -1, lb * -1
+        elif name.startswith('gamma_'):
+            lb = -10
         estimate = 1
         records.append([name, parameter_scale, lb, ub, estimate])
     df = pd.DataFrame.from_records(records,
@@ -189,16 +191,16 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem):
     # engine = pypesto.engine.SingleCoreEngine()
     engine = pypesto.engine.MultiProcessEngine()
     result = optimize.minimize(
-        problem=problem, optimizer=optimizer, n_starts=5, engine=engine,
+        problem=problem, optimizer=optimizer, n_starts=100, engine=engine,
     )
+
+    pypesto.visualize.waterfall(result)
+    plt.show()
+    pypesto.visualize.parameters(result)
+    plt.show()
     visualize_optimized_model_fit(
         petab_problem=petab_problem, result=result, pypesto_problem=problem
     )
-    plt.show()
-
-    pypesto.visualize.parameters(result)
-    plt.show()
-    pypesto.visualize.waterfall(result)
     plt.show()
 
     param_result = profile.parameter_profile(
