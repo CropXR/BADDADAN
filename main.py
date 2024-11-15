@@ -16,7 +16,7 @@ from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
-from analysis_pipelines import prepare_files_for_find_enrichment_py
+from analysis_pipelines import set_background_genes
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
     exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline, \
@@ -464,7 +464,7 @@ def camila_red_panda(soft_file_in_path: Path,
 def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
-    name = '19_heat_pypesto'
+    name = '20_go_terms_deepsplit_values'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -553,29 +553,35 @@ def main():
         case "20_go_terms_deepsplit_values":
             # for treatment_name in ['heat']:
             # for treatment_name in ['drought']:
-            for treatment_name in ['drought', 'heat']:
+            for treatment_name in ['heat', 'drought']:
                 data_params, hyper_params, experiment_params = config_preprocess(
                     experiment_path / treatment_name)
-                skip= True
+
+                def use_for_analysis(filename: str):
+                    """Only keep the deepsplit = 1 or 2 values (because
+                    that's all what's needed for the analysis).
+                    """
+                    if any((f'ds{i}' in filename)
+                           for i in hyper_params['r_deep_split']):
+                        return True
+                    else:
+                        return False
+
+                skip = True
                 if not skip:
                     one_gene_list_file_per_cluster(
                         in_dir=Path(data_params['in_path']),
                         out_dir=Path(data_params['out_path']),
+                        use_for_analysis_func=use_for_analysis
                     )
 
-                skip = True
-                go_enrich_output_path = experiment_path / treatment_name / 'go_outputs'
-                if hyper_params['filter_by_go_evidence_codes']:
-                    go_enrich_output_path = go_enrich_output_path.with_name(
-                        'go_outputs_exp_evidence_only')
+                go_enrich_output_path = (
+                        experiment_path / treatment_name
+                        / 'go_outputs_exp_evidence_only_background_de_genes'
+                )
 
-                if not skip:
-                    prepare_files_for_find_enrichment_py(
-                        filter_by_code=hyper_params[
-                            'filter_by_go_evidence_codes'])
                 ### RUN SNAKEMAKE ###
                 # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
-
                 analyse_go_enrichments_find_enrichment(
                     go_enrich_output_path,
                     experiment_path / treatment_name / 'figures',

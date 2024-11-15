@@ -521,14 +521,14 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
             (all_result_df['method'] == 'local_dists')
             & (all_result_df['deepsplit'] == '2')
             | (all_result_df['method'].isin(
-                ['atted_dists', 'combined_sum_dists']))
+                ['atted_dists', 'combined_sum_dists', 'random']))
             & (all_result_df['deepsplit'] == '1')
             ]
     elif 'heat' == in_path.parent.name:
         valid_rows = all_result_df[
             (all_result_df['deepsplit'] == '1')
             & (all_result_df['method'].isin(
-                ['atted_dists', 'combined_sum_dists', 'local_dists']))
+                ['atted_dists', 'combined_sum_dists', 'local_dists', 'random']))
             ]
     assert len(valid_rows) > 0
     sns.boxplot(data=valid_rows, y='nr_enriched_go_terms', x='method',

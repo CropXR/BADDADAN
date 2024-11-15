@@ -410,53 +410,19 @@ def module_network_from_tf2_output(expr_mat_time,
     logging.info(list(module_module.graph.edges(data=True)))
     return module_module
 
-def prepare_files_for_find_enrichment_py(gene_annotation_path: Path = Path(
-    'data/resources/go_annotations/ATH_GO_GOSLIM.txt'),
-        filter_by_code: list[str] = None):
+def set_background_genes(
+        in_path,
+        out_path,
+        gene_annotation_path: Path
+            = Path('data/resources/go_annotations/ATH_GO_GOSLIM.txt')
+):
     """"""
-    # godag = GODag(go_dag_file)
-    annotation_df = merge_ath_annotation_for_goatools(gene_annotation_path,
-                                                      evidence_code_filter=filter_by_code)
-    filtered_by_evidence_out_path = Path(
-        'data/resources/go_annotations/ATH_GO_GOSLIM_one_gene_per_line_only_experimental_evidence.txt')
-    annotation_df.to_csv(filtered_by_evidence_out_path, sep='\t', header=False)
-
-    background_genes_by_exp_evidence_out_path = Path(
-        'data/resources/go_annotations/ATH_GO_GOSLIM_genes_only_experimental_evidence.txt')
-    annotation_df.reset_index()['locus name'].to_csv(
-        background_genes_by_exp_evidence_out_path,
-        sep='\t',
-        header=False,
-        index=False
-    )
-
     #
-    # background_genes = read_geneset(background_genes_by_exp_evidence_out_path)
-    # annoobj = IdToGosReader(filtered_by_evidence_out_path, godag=godag)
-    # id2gos = annoobj.get_id2gos()
-    #
-    # for one_gene_module_file in tqdm(list(
-    #         gene_module_in_dir.glob('atted_dists_wgcna_clustered_ds0_module_1.csv'))):
-    # # for one_gene_module_file in tqdm(list(gene_module_in_dir.glob('*.csv'))):
-    #     module_genes = read_geneset(one_gene_module_file)
-    #
-    #     ### DO THE SNAKEMAKE HERE
-    #
-    #
-    #     goeaobj = GOEnrichmentStudy(
-    #         background_genes,
-    #         annoobj.get_id2gos(namespace='BP'),
-    #         godag,
-    #         methods=['fdr_bh'],
-    #         log= str(out_dir / one_gene_module_file.with_suffix('.log'))
-    #     )
-    #
-    #     results = goeaobj.run_study_nts(module_genes)
-    #
-    #     count = 0
-    #     for ntd in sorted(results, key=lambda entry: entry.p_fdr_bh):
-    #         if ntd.p_fdr_bh < 0.05 and ntd.NS == 'BP':
-    #             print(f'{ntd.goterm.name:<30}\t\t{ntd.p_fdr_bh}'
-    #                   )
-    #             count += 1
-    #     print(count)
+    # annotation_df = merge_ath_annotation_for_goatools(gene_annotation_path)
+    # background_genes_path = Path(out_path)
+    # annotation_df.reset_index()['locus name'].to_csv(
+    #     background_genes_path,
+    #     sep='\t',
+    #     header=False,
+    #     index=False
+    # )

@@ -461,13 +461,28 @@ def call_string_db(list_of_genes: list, species:int, method="ppi_enrichment",) -
         results = results.sort_values(by="fdr", ascending=True)
         return results
 
-def one_gene_list_file_per_cluster(in_dir: Path, out_dir: Path):
+def one_gene_list_file_per_cluster(in_dir: Path,
+                                   out_dir: Path,
+                                   use_for_analysis_func: callable):
+    """
+    
+    :param in_dir: Directory that contains files of clustered dataset
+    :param out_dir: Directory to save each module as seperate file (needed for GO enrichment)
+    :param use_for_analysis_func: Takes file name as input, and returns bool to indicate if file should be processed. If true the file is processed.
+    Used to select e.g. only certain methods or deepsplit values for analysis
+    :return: 
+    """
+    out_dir.mkdir(exist_ok=True)
     for file in in_dir.iterdir():
+        if not use_for_analysis_func(file.name):
+            logging.info(f'Skipping {file.name}')
+            continue
         logging.info(f'Processing {file.name}')
         df = pd.read_csv(file, index_col=0)
         for module_name, group_df in df.groupby('colors'):
             out_file_name = f'{file.stem}_module_{module_name}.csv'
-            group_df['gene_id'].to_csv(out_dir / out_file_name, index=False, header=False)
+            group_df['gene_id'].to_csv(
+                out_dir / out_file_name, index=False, header=False)
 
 def keep_common_genes_in_dfs(df1, df2):
     # get intersection
