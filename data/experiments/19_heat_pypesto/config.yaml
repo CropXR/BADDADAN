@@ -12,8 +12,5 @@ data:
 hyperparams:
   agg_method: 'mean'
   do_log2: False
-  edge_corr_threshold: .1
-  top_nr_clusters: 3
-  nr_fitters: 1
-  nr_ode_iters: 5
-  param_limit: 5
+  edge_corr_threshold: .5
+  top_nr_clusters: 25

@@ -761,8 +761,6 @@ def heat_data_e2e_pipeline(experiment_path):
     # # TO get gene list
     # [print(i) for i in expr_mat_time.get_genes_per_cluster()[75]]
 
-    with (experiment_path / 'expr_mat_time.pkl').open('wb') as f:
-        pickle.dump(expr_mat_time, f)
 
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
@@ -771,7 +769,7 @@ def heat_data_e2e_pipeline(experiment_path):
         module_plot_path=experiment_path / 'global_cluster_module_network.svg')
 
     expr_mat_time.keep_only_modules_in_network(module_module)
-
+    expr_mat_time.plot_clusters_over_time()
     # expr_mat_time, module_module =  assign_clusters_and_infer_intermodular_network(
     #     experiment_path=experiment_path,
     #     expr_mat_time=expr_mat_time,
@@ -782,6 +780,8 @@ def heat_data_e2e_pipeline(experiment_path):
     #     top_nr_clusters=hyper_params['top_nr_clusters'],
     #     tf2_in_name=data_params['tf2_in_name'],
     #     tf2_out_name=data_params['tf2_out_name'])
+    with (experiment_path / 'expr_mat_time.pkl').open('wb') as f:
+        pickle.dump(expr_mat_time, f)
 
     with (experiment_path / 'module_network.pkl').open('wb') as f:
         pickle.dump(module_module, f)
@@ -992,7 +992,7 @@ def heat_pypesto(experiment_path):
     )
 
     with open(data_params['expr_mat_time_path'], 'rb') as f:
-        expr_mat_time = pickle.load(f)
+        expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
     model_name = "model_heat"
     model_dir = str(experiment_path / "model_dir")
     constant_parameters = ['temp']
@@ -1008,73 +1008,80 @@ def heat_pypesto(experiment_path):
     )
     only_sim = False
     if not only_sim:
-        result_og = param_optimise_petab_problem(petab_problem)
+        # DO experiment on real data
+        result_og = param_optimise_petab_problem(petab_problem, experiment_path)
+    else:
+        # Do simulated data
+        importer = pypesto.petab.PetabImporter(petab_problem,
+                                               simulator_type="amici",
+                                               )
+        factory = importer.create_objective_creator()
+        obj = factory.create_objective()
 
-    importer = pypesto.petab.PetabImporter(petab_problem,
-                                           simulator_type="amici",
-                                           )
-    factory = importer.create_objective_creator()
-    obj = factory.create_objective()
+        # SIMULATED DATAAAAAAAAAAA
+        petab_problem_synthetic = petab.v1.Problem.from_yaml(
+            str(experiment_path / 'petab_files' / 'baddadan_heat.yaml')
+        )
 
-    # SIMULATED DATAAAAAAAAAAA
-    petab_problem_synthetic = petab.v1.Problem.from_yaml(
-        str(experiment_path / 'petab_files' / 'baddadan_heat.yaml')
-    )
+        simulation_param_dict = {}
+        for param_name in petab_problem_synthetic.parameter_df.index:
+            if param_name == 'delta_0':
+                value = -1
+            elif 'delta' in param_name:
+                value = -.1
+            elif param_name == 'gamma_0':
+                value = 3
+            elif 'gamma' in param_name:
+                value = -.1
+            elif 'beta_0_1' in param_name:
+                value = .01
+            elif 'k_1_2' == param_name:
+                value = 6
+            elif 'beta' in param_name:
+                value = 1
+            elif 'k_0_1' == param_name:
+                value = 1
+            elif param_name.startswith('k_'):
+                value = 2
+            else:
+                raise NotImplementedError
+            simulation_param_dict[param_name] = value
 
-    simulation_param_dict = {}
-    for param_name in petab_problem_synthetic.parameter_df.index:
-        if param_name == 'delta_0':
-            value = -1
-        elif 'delta' in param_name:
-            value = -.1
-        elif param_name == 'gamma_0':
-            value = 3
-        elif 'gamma' in param_name:
-            value = -.1
-        elif 'beta_0_1' in param_name:
-            value = .01
-        elif 'k_1_2' == param_name:
-            value = 6
-        elif 'beta' in param_name:
-            value = 1
-        elif 'k_0_1' == param_name:
-            value = 1
-        elif param_name.startswith('k_'):
-            value = 2
-        else:
-            raise NotImplementedError
-        simulation_param_dict[param_name] = value
-    obj.amici_model.setInitialStates([3, 3, 3])
-    petab_problem_synthetic.parameter_df[petab.v1.C.NOMINAL_VALUE] \
-        = petab_problem_synthetic.parameter_df.index.map(
-        simulation_param_dict
-    )
-    # petab_problem_synthetic.parameter_df['estimate'] = 0
-    simulator = amici.petab.simulator.PetabSimulator(petab_problem_synthetic)
-    petab_problem_synthetic.measurement_df = simulator.simulate(
-        noise=True,
-        # noise_scaling_factor=0.01,
-        # Optional: the AMICI simulator is provided a model, to avoid recompilation
-        amici_model=obj.amici_model,
-        as_measurement=True,
-    )
-    simulator.remove_working_dir()
-    sns.lineplot(data=petab_problem_synthetic.measurement_df, y='measurement',
-                 x='time',
-                 hue='observableId', style='simulationConditionId')
-    plt.show()
-    # sns.lineplot(data=petab_problem.measurement_df, y='measurement', x='time',
-    #              hue='observableId', style='simulationConditionId')
-    # plt.show()
+        # expr_mat_time.
+        # obj.amici_model.setInitialStates([1, 2, 3])
+        petab_problem_synthetic.parameter_df[petab.v1.C.NOMINAL_VALUE] \
+            = petab_problem_synthetic.parameter_df.index.map(
+            simulation_param_dict
+        )
+        # petab_problem_synthetic.parameter_df['estimate'] = 0
+        simulator = amici.petab.simulator.PetabSimulator(petab_problem_synthetic)
+        petab_problem_synthetic.measurement_df = simulator.simulate(
+            noise=True,
+            # noise_scaling_factor=0.01,
+            # Optional: the AMICI simulator is provided a model, to avoid recompilation
+            amici_model=obj.amici_model,
+            as_measurement=True,
+        )
+        simulator.remove_working_dir()
+        sns.lineplot(data=petab_problem_synthetic.measurement_df, y='measurement',
+                     x='time',
+                     hue='observableId', style='simulationConditionId')
+        plt.show()
+        # sns.lineplot(data=petab_problem.measurement_df, y='measurement', x='time',
+        #              hue='observableId', style='simulationConditionId')
+        # plt.show()
 
-    result_sim = param_optimise_petab_problem(petab_problem_synthetic)
+        result_sim = param_optimise_petab_problem(petab_problem_synthetic)
 
-
-
-
-
-
-
+    with mlflow.start_run(
+            description=experiment_params['description']):
+        mlflow.log_params(data_params)
+        mlflow.log_params(hyper_params)
+        mlflow.set_tags(experiment_params)
+        mlflow.log_artifact(
+            str(experiment_path ))
+        # mlflow.log_artifact(
+        #     str(experiment_path / 'figures'))
 
     # # Everything below is amici-specific and not needed at the moment
     #

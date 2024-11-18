@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable, Dict
 
 import dill as pickle
+import networkx as nx
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -406,7 +407,7 @@ def module_network_from_tf2_output(expr_mat_time,
     # my_grn.plot_network(nx.d  raw_kamada_kawai, with_labels=False)
     module_module = my_grn.get_module_module_network()
     # # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
-    module_module.plot_network(with_labels=True, out_path=module_plot_path)
+    module_module.plot_network(nx.draw_kamada_kawai , with_labels=True, out_path=module_plot_path)
     logging.info(list(module_module.graph.edges(data=True)))
     return module_module
 

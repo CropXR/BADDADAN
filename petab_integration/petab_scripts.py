@@ -53,6 +53,7 @@ def write_petab_files_heat(expr_mat_time: ExpressionMatrixTimeSeries,
             }
         ]
     }
+    out_path.mkdir(exist_ok=True)
     with (out_path / 'baddadan_heat.yaml').open('w+') as f:
         yaml.dump(yaml_dict, f)
 
@@ -61,7 +62,8 @@ def write_petab_files_heat(expr_mat_time: ExpressionMatrixTimeSeries,
         out_path / yaml_dict['parameter_file'], sbml_importer)
 
     create_conditions_tsv_heat(
-        out_path / yaml_dict['problems'][0]['condition_files'][0]
+        out_path / yaml_dict['problems'][0]['condition_files'][0],
+        expr_mat_time
     )
     create_measurements_tsv_heat(
         expr_mat_time,
@@ -146,7 +148,8 @@ def create_observables_tsv_heat(observables: dict, out_path: str | Path):
     obs_df.to_csv(out_path, sep='\t', index=False)
 
 
-def create_conditions_tsv_heat(out_path: str | Path):
+def create_conditions_tsv_heat(out_path: str | Path,
+                               expr_mat_time: ExpressionMatrixTimeSeries):
     """Create conditions TSV for petab"""
     # Create conditions.tsv
     col_names = ['conditionId', 'conditionName', 'temp']
@@ -156,19 +159,30 @@ def create_conditions_tsv_heat(out_path: str | Path):
     ]
     cond_df = pd.DataFrame(data=cond_entries,
                            columns=col_names)
+    _, data = expr_mat_time.get_clusters_expressions_with_time(0)
+    initial_values = data[:, 0]
+    for i, initial_value in enumerate(initial_values):
+        species_name = f'y_{i}'
+        cond_df[species_name] = initial_value
+        # cond_df[species_name] = 0
+    # Start at 0 to test them all
+    # Add them to all this
     cond_df.to_csv(out_path, sep='\t', index=False)
 
 
-def param_optimise_petab_problem(petab_problem: petab.v1.Problem):
+def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
+                                 out_folder: Path):
     """Given a petab problem, perform parameter optimisation"""
     # load from petab_files
+    model_folder = out_folder / 'amici_models' / 'baddadan_heat'
     importer = pypesto.petab.PetabImporter(petab_problem,
                                            simulator_type="amici",
+                                           output_folder=str(model_folder)
                                            )
     factory = importer.create_objective_creator()
     model = factory.create_model(verbose=False)
     model.setAlwaysCheckFinite(True)
-    # model.setInitialStates([.3,.3,.3])
+
     # some model properties
     print("Model parameters:", list(model.getParameterIds()), "\n")
     print("Model const parameters:", list(model.getFixedParameterIds()), "\n")
@@ -176,43 +190,67 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem):
     print("Model states:    ", list(model.getStateIds()), "\n")
     obj = factory.create_objective()
 
-    obj.amici_solver.setRelativeTolerance(1e-10)
-    obj.amici_solver.setAbsoluteTolerance(1e-10)
-    obj.amici_solver.setMaxSteps(100 * obj.amici_solver.getMaxSteps())
+    # obj.amici_solver.getRelativeTolerance()
+    obj.amici_solver.setRelativeTolerance(
+        obj.amici_solver.getRelativeTolerance() / 10
+    )
+    obj.amici_solver.setAbsoluteTolerance(
+        obj.amici_solver.getAbsoluteTolerance() / 10
+    )
+    obj.amici_solver.setMaxSteps(10 * obj.amici_solver.getMaxSteps())
+
     # obj.amici_solver.setAlwaysCheckFinite(True)
     problem = importer.create_problem(obj)
     # # Set gradient computation method to adjoint
-    # problem.objective.amici_solver.setSensitivityMethod(
-    #     amici.SensitivityMethod.adjoint
-    # )
+    # Maybe switch back? Not sure if it's better
+    problem.objective.amici_solver.setSensitivityMethod(
+        amici.SensitivityMethod.adjoint
+    )
     # optimizer = optimize.ScipyOptimizer()
     optimizer = optimize.ScipyOptimizer(method = "L-BFGS-B")
 
     # engine = pypesto.engine.SingleCoreEngine()
     engine = pypesto.engine.MultiProcessEngine()
     result = optimize.minimize(
-        problem=problem, optimizer=optimizer, n_starts=100, engine=engine,
+        problem=problem, optimizer=optimizer, n_starts=1, engine=engine,
     )
-
+    fig_folder = out_folder / 'figures'
+    fig_folder.mkdir(exist_ok=True)
     pypesto.visualize.waterfall(result)
-    plt.show()
+    plt.savefig(fig_folder / 'waterfall_plot.png')
+    plt.close()
     pypesto.visualize.parameters(result)
-    plt.show()
+    plt.savefig(fig_folder / 'param_visualise.png')
+    plt.close()
     visualize_optimized_model_fit(
         petab_problem=petab_problem, result=result, pypesto_problem=problem
     )
-    plt.show()
+    plt.savefig(fig_folder / 'model_fit.png')
+    plt.close()
 
-    param_result = profile.parameter_profile(
-        problem=problem,
-        result=result,
-        optimizer=optimizer,
-        profile_index=[0, 1],
-    )
-    pypesto.visualize.profile_cis(
-        param_result, confidence_level=0.95, show_bounds=True
-    )
-    plt.show()
+    with (out_folder / 'pypesto_results.hdf5').open('w+') as f:
+        # write the result with the write_result function.
+        # Choose which parts of the result object to save with
+        # corresponding booleans.
+        pypesto.store.write_result(
+            result=result,
+            filename=f.name,
+            problem=True,
+            optimize=True,
+            profile=False,
+            sample=False,
+        )
+
+    # param_result = profile.parameter_profile(
+    #     problem=problem,
+    #     result=result,
+    #     optimizer=optimizer,
+    #     profile_index=[0, 1],
+    # )
+    # pypesto.visualize.profile_cis(
+    #     param_result, confidence_level=0.95, show_bounds=True
+    # )
+    # plt.show()
     # pypesto.visualize.optimizer_history(result, trace_y="fval")
     # plt.show()
     return result, obj
