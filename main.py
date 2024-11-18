@@ -547,7 +547,7 @@ def main():
         case "19_heat_pypesto":
 
             # Run heat data e2e first for this to run:
-            # heat_data_e2e_pipeline(experiment_path)
+            heat_data_e2e_pipeline(experiment_path)
             heat_pypesto(experiment_path)
 
         case "20_go_terms_deepsplit_values":
@@ -663,12 +663,9 @@ def main():
                     mlflow.log_artifact(
                         str(experiment_path / treatment_name / 'figures'))
 
-        # case "22_random_data_generated":
-        #     module_module = module_network_from_tf2_output(
-        #         expr_mat_time, tf2_in_path,
-        #         tf2_out_path,
-        #         threshold=hyper_params['edge_corr_threshold'],
-        #         module_plot_path=experiment_path / 'global_cluster_module_network.svg')
+        case '22_drought_pypesto':
+            drought_data_e2e_pipeline(experiment_path)
+            drought_pypesto(experiment_path)
 
         case _:
             raise NotImplementedError(f'{name} not found')

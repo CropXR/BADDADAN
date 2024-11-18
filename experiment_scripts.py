@@ -734,62 +734,9 @@ def heat_data_e2e_pipeline(experiment_path):
                                         hyper_params['agg_method'],
                                         hyper_params['do_log2'],
                                         )
-    wgcna_module_assignment = data_params['wgcna_module_assignment_path']
-    expr_mat_time.assign_clusters_from_wgcna(wgcna_module_assignment)
-    skip_stuff = True
-    if not skip_stuff:
-        atted_score = pd.read_parquet(data_params['atted_path'])
-        atted_score = atted_score.set_index(atted_score.columns[0])
-        linkage_matrices = combine_local_distance_and_prior(
-            expr_mat_time.get_distance_matrix(),
-            atted_score,
-            out_path=experiment_path)
-    # logging.warning('New clusters so new TF2Network analysis?')
-    tf2_in_path = experiment_path / data_params['tf2_in_name']
-    tf2_out_path = experiment_path / data_params['tf2_out_name']
-    # Post to tf2network
-    expr_mat_time.write_tf2_input_file(
-        out_path=tf2_in_path)
 
-    # expr_mat_time.do_genewise_normalisation()
-    expr_mat_time.keep_highest_z_clusters(
-        hyper_params['top_nr_clusters'],
-        tf2_output_path=tf2_out_path,
-        plotting_path=experiment_path)
-
-    expr_mat_time.plot_clusters_over_time()
-    # # TO get gene list
-    # [print(i) for i in expr_mat_time.get_genes_per_cluster()[75]]
-
-
-    module_module = module_network_from_tf2_output(
-        expr_mat_time, tf2_in_path,
-        tf2_out_path,
-        threshold=hyper_params['edge_corr_threshold'],
-        module_plot_path=experiment_path / 'global_cluster_module_network.svg')
-
-    expr_mat_time.keep_only_modules_in_network(module_module)
-    expr_mat_time.plot_clusters_over_time()
-    # expr_mat_time, module_module =  assign_clusters_and_infer_intermodular_network(
-    #     experiment_path=experiment_path,
-    #     expr_mat_time=expr_mat_time,
-    #     summed_linkage_matrix=data_params['linkage_path'],
-    #     summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
-    #     nr_clusters=hyper_params['nr_clusters'],
-    #     edge_cor_threshold=hyper_params['edge_corr_threshold'],
-    #     top_nr_clusters=hyper_params['top_nr_clusters'],
-    #     tf2_in_name=data_params['tf2_in_name'],
-    #     tf2_out_name=data_params['tf2_out_name'])
-    with (experiment_path / 'expr_mat_time.pkl').open('wb') as f:
-        pickle.dump(expr_mat_time, f)
-
-    with (experiment_path / 'module_network.pkl').open('wb') as f:
-        pickle.dump(module_module, f)
-    # Assure that data has already been clustered
-    assert expr_mat_time.has_been_clustered
-    # expr_mat_time.get_genes_per_cluster()[328]
-    my_ode = OdeModel.construct_from_regulatory_network(module_module,
-                                                        nonlinear=True)
+    my_ode = from_expr_mat_time_to_ode(data_params, experiment_path,
+                                       expr_mat_time, hyper_params)
 
     # # These are parameters that are different between the two datasets
     u_t_function = 'temp'
@@ -809,22 +756,52 @@ def heat_data_e2e_pipeline(experiment_path):
     # custom_params[treatment_name] = 'time'
 
     my_ode.save_to_sbml(experiment_path / 'module_network.xml', u_t_function)
-    return
 
-    best_ode_fit = fit_ode_to_two_datasets(
-        my_ode,
-        expr_mat_time,
-        custom_params=custom_params,
-        nr_ode_iters=hyper_params['nr_ode_iters'],
-        experiment_path=experiment_path,
-        param_limit=hyper_params.get('param_limit'),
-        gradient_matching=hyper_params['do_gradient_matching'],
-        nr_fitters=hyper_params['nr_fitters'],
-        nr_time_points_interpolation=hyper_params['nr_time_points_interpolation']
-    )
-    with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
-        pickle.dump(best_ode_fit, f)
-    return expr_mat_time, module_module
+
+def from_expr_mat_time_to_ode(data_params, experiment_path, expr_mat_time,
+                              hyper_params):
+    wgcna_module_assignment = data_params['wgcna_module_assignment_path']
+    expr_mat_time.assign_clusters_from_wgcna(wgcna_module_assignment)
+    skip_stuff = True
+    if not skip_stuff:
+        atted_score = pd.read_parquet(data_params['atted_path'])
+        atted_score = atted_score.set_index(atted_score.columns[0])
+        linkage_matrices = combine_local_distance_and_prior(
+            expr_mat_time.get_distance_matrix(),
+            atted_score,
+            out_path=experiment_path)
+    # logging.warning('New clusters so new TF2Network analysis?')
+    tf2_in_path = experiment_path / data_params['tf2_in_name']
+    tf2_out_path = experiment_path / data_params['tf2_out_name']
+    # Post to tf2network
+    expr_mat_time.write_tf2_input_file(
+        out_path=tf2_in_path)
+    # expr_mat_time.do_genewise_normalisation()
+    expr_mat_time.keep_highest_z_clusters(
+        hyper_params['top_nr_clusters'],
+        tf2_output_path=tf2_out_path,
+        plotting_path=experiment_path)
+    expr_mat_time.plot_clusters_over_time()
+    # # TO get gene list
+    # [print(i) for i in expr_mat_time.get_genes_per_cluster()[75]]
+    module_module = module_network_from_tf2_output(
+        expr_mat_time, tf2_in_path,
+        tf2_out_path,
+        threshold=hyper_params['edge_corr_threshold'],
+        module_plot_path=experiment_path / 'global_cluster_module_network.svg')
+    expr_mat_time.keep_only_modules_in_network(module_module)
+    expr_mat_time.plot_clusters_over_time()
+    with (experiment_path / 'expr_mat_time.pkl').open('wb') as f:
+        pickle.dump(expr_mat_time, f)
+    with (experiment_path / 'module_network.pkl').open('wb') as f:
+        pickle.dump(module_module, f)
+    # Assure that data has already been clustered
+    assert expr_mat_time.has_been_clustered
+    # expr_mat_time.get_genes_per_cluster()[328]
+    my_ode = OdeModel.construct_from_regulatory_network(module_module,
+                                                        nonlinear=True)
+    return my_ode
+
 
 def fit_ode_to_two_datasets(
         my_ode: OdeModel,
@@ -993,9 +970,6 @@ def heat_pypesto(experiment_path):
 
     with open(data_params['expr_mat_time_path'], 'rb') as f:
         expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
-    model_name = "model_heat"
-    model_dir = str(experiment_path / "model_dir")
-    constant_parameters = ['temp']
 
     write_petab_files_heat(
         expr_mat_time,

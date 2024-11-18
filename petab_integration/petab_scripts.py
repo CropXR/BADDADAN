@@ -212,7 +212,7 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
     # engine = pypesto.engine.SingleCoreEngine()
     engine = pypesto.engine.MultiProcessEngine()
     result = optimize.minimize(
-        problem=problem, optimizer=optimizer, n_starts=1, engine=engine,
+        problem=problem, optimizer=optimizer, n_starts=100, engine=engine,
     )
     fig_folder = out_folder / 'figures'
     fig_folder.mkdir(exist_ok=True)
