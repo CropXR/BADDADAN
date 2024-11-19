@@ -23,13 +23,18 @@ class OdeModel:
     def __init__(self,
                  formula_per_module: list[LinearFormula | NonLinearFormula],
                  is_nonlinear: bool,
-                 old_to_new_mapping: dict[str, str]):
+                 old_to_new_mapping: dict[str, str] | None):
+        if old_to_new_mapping is not None:
+            raise DeprecationWarning(
+                'Modules are no longer renamed now before converting '
+                'them to an ODE'
+            )
         self.formula_per_module = formula_per_module
         self.is_nonlinear = is_nonlinear
-        self.old_to_new_mapping = old_to_new_mapping
-        logging.info(f'Mapped old module names to new module names:')
-        for k,v in self.old_to_new_mapping.items():
-            logging.info(f'{k} -> {v}')
+        # self.old_to_new_mapping = old_to_new_mapping
+        # logging.info(f'Mapped old module names to new module names:')
+        # for k,v in self.old_to_new_mapping.items():
+        #     logging.info(f'{k} -> {v}')
 
     def __repr__(self):
         return ('OdeModel:\n'
@@ -70,14 +75,14 @@ class OdeModel:
                        for _, _, origin in regulatory_directions), \
                 ('Make sure you have removed all TFs from regulatory '
                  'network and converted it to Module-Module network')
-        mapping_dict = {}
-        # Rename all modules
-        for new_module_index, old_module_name in enumerate(sorted(list(graph))):
-            new_module_name = re.sub(r'\d+$',
-                                              str(new_module_index),
-                                              old_module_name)
-            mapping_dict[old_module_name] = new_module_name
-        graph = nx.relabel_nodes(graph, mapping_dict)
+        # # Rename all modules not needed because sbml handles it
+        # mapping_dict = {}
+        # for new_module_index, old_module_name in enumerate(sorted(list(graph))):
+        #     new_module_name = re.sub(r'\d+$',
+        #                                       str(new_module_index),
+        #                                       old_module_name)
+        #     mapping_dict[old_module_name] = new_module_name
+        # graph = nx.relabel_nodes(graph, mapping_dict)
         # Iterate over modules in lexicographic order
         for module in sorted(list(graph)):
             if nonlinear:
@@ -87,7 +92,7 @@ class OdeModel:
                 regulators = list(graph.predecessors(module))
                 formula = LinearFormula(module, regulators)
             formulas.append(formula)
-        return cls(formulas, nonlinear, mapping_dict)
+        return cls(formulas, nonlinear, None)
 
     def compute_one_step(self, t: float, y: list[float],
                          params: dict[str, float]) -> list[float]:
@@ -218,7 +223,7 @@ class OdeModel:
     def derivatives_at_time_points(self, time_points, spline_per_rows, params
                                    ) -> np.array:
         """Get derivatives of function at all time points,
-        used for gradient matching
+        used for gradient matching fitting
         """
         out = []
         for t in time_points:
@@ -272,11 +277,16 @@ class OdeModel:
         compartment.setConstant(True)
         compartment.setUnits('dimensionless')
 
-        temp_param = model.createParameter()
-        temp_param.setId('temp')
-        temp_param.setConstant(False)
-        temp_param.setUnits('dimensionless')
-        temp_param.setValue(0)
+        external_input_param = model.createParameter()
+
+        external_input_param.setConstant(False)
+        external_input_param.setUnits('dimensionless')
+        external_input_param.setValue(0)
+
+        if 'temp' in u_t_function:
+            external_input_param.setId('temp')
+        elif 'drought' in u_t_function:
+            external_input_param.setId('drought')
 
         u_param = model.createParameter()
         u_param.setId('u_t')
@@ -290,6 +300,7 @@ class OdeModel:
         logging.debug(libsbml.formulaToL3String(equation))
         rule.setMath(equation)
 
+        # # Piecewise was broken
         # u_t_l3_formula = ['piecewise(']
         # items = list(custom_params.items())
         # for i, (key, value) in enumerate(items):
@@ -311,8 +322,10 @@ class OdeModel:
             module = model.createSpecies()
             module.setId(module_formula.module_y_name)
             module.setCompartment('whole_plant')
-            # TODO And how about this :O? Retrieve from custom_params?
-            module.setInitialAmount(3.0)  # Set appropriate initial condition?
+            # No need to set appropriate initial condition?
+            # -> Will be overwritten from the PETAB conditions file
+            # during optimisation
+            module.setInitialAmount(0)
             module.setBoundaryCondition(False)
             module.setHasOnlySubstanceUnits(False)
             module.setConstant(False)
@@ -326,19 +339,6 @@ class OdeModel:
                 new_param.setValue(0.1)
                 new_param.setConstant(False)
                 new_param.setUnits('dimensionless')
-
-            # # For AMICI each observable species needs to be specified:
-            # # But or PETAB not needed
-            # obs_name = f'observable_{module_formula.module_y_name}'
-            # obs_param = model.createParameter()
-            # obs_param.setUnits('dimensionless')
-            # obs_param.setConstant(False)
-            # obs_param.setId(obs_name)
-            # rule = model.createAssignmentRule()
-            # rule.setVariable(obs_name)
-            # equation = libsbml.parseL3Formula(module_formula.module_y_name)
-            # rule.setMath(equation)
-            # libsbml.formulaToString(equation)
 
             # Add reactions
             module_rate = model.createRateRule()
@@ -365,4 +365,3 @@ class OdeModel:
 
         # Save to out path
         libsbml.writeSBMLToFile(document, str(out_path))
-

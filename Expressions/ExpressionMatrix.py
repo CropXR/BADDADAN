@@ -1065,7 +1065,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         if 'time' not in out_df.columns:
             new_cols = self.column_parser(out_df['sample'].to_list())
             out_df = pd.concat([out_df, pd.DataFrame.from_dict(new_cols)], axis=1)
-        out_df['elapsed_mins'] = out_df['time'].dt.seconds / 60
+        out_df['elapsed_mins'] = out_df['time'].dt.total_seconds() / 60
         return out_df
 
     def _get_gene_expression_long_form(self):
@@ -1175,26 +1175,26 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
     def get_clusters_expressions_with_time(
             self,
             n_clusters: int
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, pd.DataFrame]:
         """For fitting ODEs, get expression of clusters over time.
         First array in tuple indicates time_points in minutes, second array
         indicates module expressions.
 
         :return: tuple of time points, module expressions
         """
-        some_df = self._get_cluster_expression_long_form(
+        module_expressions = self._get_cluster_expression_long_form(
             n_clusters)
         # Slightly different preprocessing in case mean aggregation was used
         if self.aggregation_method == AggregationMethod.MEAN:
             # Take mean of all biological replicates
-            some_df = some_df.groupby(['cluster_id', 'elapsed_mins']).mean(
+            module_expressions = module_expressions.groupby(['cluster_id', 'elapsed_mins']).mean(
                 numeric_only=True).reset_index()
-        some_df = some_df.pivot(index='cluster_id', columns='elapsed_mins',
+        module_expressions = module_expressions.pivot(index='cluster_id', columns='elapsed_mins',
                                values='expression')
-        time_points = some_df.columns.to_numpy()
+        time_points = module_expressions.columns.to_numpy()
         # Convert time to hours
         time_points = time_points / 60
-        module_expressions = some_df.to_numpy()
+        # module_expressions = module_expressions.to_numpy()
         return time_points, module_expressions
 
     def write_tf2_input_file(self, out_path: Path,

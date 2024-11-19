@@ -18,12 +18,12 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
 from analysis_pipelines import set_background_genes
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
-from experiment_scripts import module_size_pipeline, drought_data_e2e_pipeline, \
-    exploratory_heat_data_scripts, figure_2_pipeline, heat_data_e2e_pipeline, \
+from experiment_scripts import module_size_pipeline, drought_data_to_sbml, \
+    exploratory_heat_data_scripts, figure_2_pipeline, heat_data_to_sbml, \
     config_preprocess, prefilter_genes_experiment, drought_from_wgcna, \
     wgcna_with_similarity_scores, drought_with_string_db, \
     integrate_multiple_datasets, generate_dists_for_wgcna_cutting, \
-    ground_truth_vs_jackknife, fit_ode_drought_data, heat_pypesto, \
+    ground_truth_vs_jackknife, fit_ode_drought_data, pypesto_from_sbml, \
     analyse_go_enrichments_find_enrichment
 from exploring_questions import get_coherence_random_modules, \
     get_robustness_random_modules
@@ -464,7 +464,8 @@ def camila_red_panda(soft_file_in_path: Path,
 def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
-    name = '19_heat_pypesto'
+    # name = '19_heat_pypesto'
+    name = '22_drought_pypesto'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -484,7 +485,7 @@ def main():
             exploratory_heat_data_scripts(experiment_path)
         case '06_drought_data_end_to_end':
             # Full pipeline for drought
-            drought_data_e2e_pipeline(experiment_path)
+            drought_data_to_sbml(experiment_path)
         case '07_module_size_distribution':
             # FUll module size distributions
             module_size_pipeline(experiment_path)
@@ -492,17 +493,17 @@ def main():
             figure_2_pipeline(experiment_path)
         case '09_heat_data_end_to_end':
             # Full pipeline for heat should turn up here
-            heat_data_e2e_pipeline(experiment_path)
+            heat_data_to_sbml(experiment_path)
         case '10_prefiltering_genes':
             prefilter_genes_experiment(experiment_path)
         case '11_heat_data_with_gene_prefilter_and_zscore_proper':
-            heat_data_e2e_pipeline(experiment_path)
+            heat_data_to_sbml(experiment_path)
         case '12_drought_data_with_gene_prefilter_and_zscore_proper':
             # Full pipeline for drought
-            drought_data_e2e_pipeline(experiment_path)
+            drought_data_to_sbml(experiment_path)
         case '13_drought_data_with_spline_gene_prefilter_and_zscore_proper':
             # Full pipeline for drought
-            drought_data_e2e_pipeline(experiment_path)
+            drought_data_to_sbml(experiment_path)
         case "14_drought_from_wgcna":
             _, hyper_params, _ = config_preprocess(
                 experiment_path)
@@ -544,11 +545,12 @@ def main():
             #####################
 
             ground_truth_vs_jackknife(experiment_path, expr_mat_time)
-        case "19_heat_pypesto":
 
+        case "19_heat_pypesto":
             # Run heat data e2e first for this to run:
-            heat_data_e2e_pipeline(experiment_path)
-            heat_pypesto(experiment_path)
+            heat_data_to_sbml(experiment_path)
+            pypesto_from_sbml(experiment_path, 'heat')
+
 
         case "20_go_terms_deepsplit_values":
             # for treatment_name in ['heat']:
@@ -664,8 +666,8 @@ def main():
                         str(experiment_path / treatment_name / 'figures'))
 
         case '22_drought_pypesto':
-            drought_data_e2e_pipeline(experiment_path)
-            drought_pypesto(experiment_path)
+            drought_data_to_sbml(experiment_path)
+            pypesto_from_sbml(experiment_path, 'drought')
 
         case _:
             raise NotImplementedError(f'{name} not found')
