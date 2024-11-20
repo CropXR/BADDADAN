@@ -24,7 +24,7 @@ from experiment_scripts import module_size_pipeline, drought_data_to_sbml, \
     wgcna_with_similarity_scores, drought_with_string_db, \
     integrate_multiple_datasets, generate_dists_for_wgcna_cutting, \
     ground_truth_vs_jackknife, fit_ode_drought_data, pypesto_from_sbml, \
-    analyse_go_enrichments_find_enrichment
+    analyse_go_enrichments_find_enrichment, do_coherence_with_stat_tests
 from exploring_questions import get_coherence_random_modules, \
     get_robustness_random_modules
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
@@ -465,7 +465,8 @@ def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
     # name = '19_heat_pypesto'
-    name = '22_drought_pypesto'
+    # name = '22_drought_pypesto'
+    name = '23_coherence_with_stat_tests'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -668,6 +669,38 @@ def main():
         case '22_drought_pypesto':
             drought_data_to_sbml(experiment_path)
             pypesto_from_sbml(experiment_path, 'drought')
+
+        case '23_coherence_with_stat_tests':
+            for treatment_name in ['drought', 'heat']:
+                data_params, hyper_params, experiment_params = config_preprocess(
+                    experiment_path / treatment_name)
+
+                if 'heat' in data_params['in_path_expr_mat']:
+                    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_emexp(
+                        data_params['in_path_expr_mat'],
+                        hyper_params['agg_method'],
+                        hyper_params['do_log2']
+                    )
+                elif 'drought' in data_params['in_path_expr_mat']:
+                    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_drought(
+                        data_params['in_path_expr_mat'],
+                        hyper_params['agg_method'],
+                        hyper_params['do_log2']
+                    )
+                else:
+                    raise NotImplementedError
+                do_coherence_with_stat_tests(
+                    in_dir=Path(data_params['in_path_clusterings']),
+                    expr_mat_time=expr_mat_time,
+                    out_dir=Path(data_params['out_path'])
+                )
+                with mlflow.start_run(
+                        description=experiment_params['description']):
+                    mlflow.log_params(data_params)
+                    mlflow.log_params(hyper_params)
+                    mlflow.set_tags(experiment_params)
+                    mlflow.log_artifact(
+                        str(experiment_path / treatment_name / 'figures'))
 
         case _:
             raise NotImplementedError(f'{name} not found')

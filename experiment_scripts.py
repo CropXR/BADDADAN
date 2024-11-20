@@ -1,3 +1,4 @@
+import copy
 import logging
 from copy import deepcopy
 from itertools import combinations
@@ -17,6 +18,7 @@ import amici.petab.simulator
 import yaml
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
 from scipy.spatial.distance import squareform
 from sklearn.metrics import adjusted_rand_score
 from scipy.cluster.hierarchy import linkage, fcluster
@@ -1169,3 +1171,48 @@ def fit_on_simulated_data_pypesto(experiment_path, petab_problem):
     return result
 
 
+def do_coherence_with_stat_tests(in_dir: Path,
+                                 expr_mat_time: ExpressionMatrixTimeSeries,
+                                 out_dir: Path):
+    """Measure coherence between different clusterings and do statistical test"""
+    out_records = []
+    for method in ['atted_dists', 'combined_sum_dists',
+                   'local_dists', 'random']:
+        for ds_filename in ['ds1', 'ds2']:
+            if (method, ds_filename) == ('random', 'ds2'):
+                continue
+            expr_mat_time_copy = copy.deepcopy(expr_mat_time)
+            pattern = f"{method}*{ds_filename}*"
+            files = list(in_dir.glob(pattern))
+            assert len(files) > 0, f'No files found for {method} & {ds_filename}'
+            expr_mat_time_copy.assign_clusters_from_split_by_module_files(files)
+            module_coherences = expr_mat_time_copy.get_all_explained_vars()
+            ds_value = ds_filename.split('ds')[1]
+            out_records.extend(
+                [
+                    [method, ds_value, coherence]
+                    for coherence in module_coherences]
+            )
+
+    df = pd.DataFrame.from_records(out_records, columns=['method', 'deepsplit', 'coherence'])
+    df = extract_only_selected_ds_row_from_df(df, in_dir)
+
+    out_dir.mkdir(exist_ok=True)
+    ax = sns.boxplot(data=df, y='coherence', x='method')
+
+    pairs = list(combinations(
+        # ['atted_dists', 'combined_sum_dists', 'local_dists'],
+        ['atted_dists', 'combined_sum_dists', 'local_dists', 'random'],
+        2))
+
+    annotator = Annotator(
+        ax, pairs, data=df, y='coherence', x='method'
+    )
+    annotator.configure(test='Mann-Whitney',
+                        loc='outside')
+    annotator.apply_and_annotate()
+    plt.ylim((0, .9))
+
+    plt.savefig(out_dir / 'boxplot_coherence_with_stat_test.svg',
+                bbox_inches='tight')
+    plt.close()

@@ -5,7 +5,6 @@ from pathlib import Path
 import dill as pickle
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
 from GEOparse import get_GEO
 from matplotlib import pyplot as plt
