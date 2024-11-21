@@ -941,12 +941,17 @@ def pypesto_from_sbml(experiment_path, condition):
     petab_problem = petab.v1.Problem.from_yaml(
         str(experiment_path / 'petab_files' / f'baddadan_{condition}_petab.yaml')
     )
-    only_sim = False
-    if not only_sim:
-        # DO experiment on real data
-        result = param_optimise_petab_problem(petab_problem, experiment_path)
-    else:
-        result = fit_on_simulated_data_pypesto(experiment_path, petab_problem)
+
+    if hyper_params['do_sim_data']:
+        petab_problem = simulated_data_pypesto(
+            petab_problem,
+            experiment_path /  'amici_models' / 'baddadan_sim'
+        )
+
+    # DO experiment on real data
+    result = param_optimise_petab_problem(
+        petab_problem, experiment_path, n_starts=hyper_params['n_starts']
+    )
 
     # result = pypesto.store.read_result(
     #     experiment_path / 'pypesto_results.hdf5', optimize=True
@@ -1110,35 +1115,35 @@ def pypesto_from_sbml(experiment_path, condition):
     #     )
 
 
-def fit_on_simulated_data_pypesto(experiment_path, petab_problem):
+def simulated_data_pypesto(petab_problem, model_folder):
     # Do simulated data
+    # model_folder = model_folder / 'amici_models' / 'baddadan'
     importer = pypesto.petab.PetabImporter(petab_problem,
                                            simulator_type="amici",
+                                           output_folder=str(model_folder)
                                            )
     factory = importer.create_objective_creator()
     obj = factory.create_objective()
     # SIMULATED DATAAAAAAAAAAA
-    petab_problem_synthetic = petab.v1.Problem.from_yaml(
-        str(experiment_path / 'petab_files' / 'baddadan_heat.yaml')
-    )
+    petab_problem_synthetic = copy.deepcopy(petab_problem)
     simulation_param_dict = {}
     for param_name in petab_problem_synthetic.parameter_df.index:
         if param_name == 'delta_0':
-            value = -1
+            value = -.1
         elif 'delta' in param_name:
             value = -.1
-        elif param_name == 'gamma_0':
-            value = 3
+        # elif param_name == 'gamma_0':
+        #     value = 3
         elif 'gamma' in param_name:
-            value = -.1
-        elif 'beta_0_1' in param_name:
-            value = .01
-        elif 'k_1_2' == param_name:
-            value = 6
+            value = .5
+        # elif 'beta_0_1' in param_name:
+        #     value = .01
+        # elif 'k_1_2' == param_name:
+        #     value = 6
         elif 'beta' in param_name:
-            value = 1
-        elif 'k_0_1' == param_name:
-            value = 1
+            value = 10
+        # elif 'k_0_1' == param_name:
+        #     value = 1
         elif param_name.startswith('k_'):
             value = 2
         else:
@@ -1167,8 +1172,7 @@ def fit_on_simulated_data_pypesto(experiment_path, petab_problem):
     # sns.lineplot(data=petab_problem.measurement_df, y='measurement', x='time',
     #              hue='observableId', style='simulationConditionId')
     # plt.show()
-    result = param_optimise_petab_problem(petab_problem_synthetic)
-    return result
+    return petab_problem_synthetic
 
 
 def do_coherence_with_stat_tests(in_dir: Path,

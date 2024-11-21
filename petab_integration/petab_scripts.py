@@ -36,7 +36,6 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
         (f'Currently only support experimental setup for drought or heat.'
          f' Not {experimental_setup=}')
 
-
     sbml_importer = amici.SbmlImporter(sbml_path,
                                        show_sbml_warnings=True)
     # observables = amici.assignmentRules2observables(
@@ -45,32 +44,60 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
     #         "observable_")
     # )
 
+    yaml_dict = write_petab_yaml(experimental_setup, out_path, sbml_path)
+
+    create_parameters_tsv(
+        out_path / yaml_dict['parameter_file'], sbml_importer)
+
+    cond_df, expr_mat_cond_name_to_simul_cond_name, noise_level \
+        = get_condition_info(experimental_setup)
+
+    create_conditions_tsv(
+        out_path / yaml_dict['problems'][0]['condition_files'][0],
+        expr_mat_time,
+        cond_df
+    )
+
     observables = {f'observable_{species.getId()}':
                        {'formula': species.getId()}
                    for species in sbml_importer.sbml.getListOfSpecies()
                    }
 
+    create_measurements_tsv_heat(
+        expr_mat_time,
+        out_path / yaml_dict['problems'][0]['measurement_files'][0],
+        list(observables.keys()),
+        expr_mat_cond_name_to_simul_cond_name
+    )
+    create_observables_tsv(
+        observables,
+        out_path / yaml_dict['problems'][0]['observable_files'][0],
+        noise_level
+    )
+
+
+def write_petab_yaml(experimental_setup, out_path, sbml_path):
     yaml_dict = {
         'format_version': 1,
         'parameter_file': 'parameters.tsv',
         'problems': [
             {
-            'condition_files': ['conditions.tsv'],
-            'measurement_files': ['measurements.tsv'],
-            'observable_files': ['observable.tsv'],
-            'sbml_files': ['../' + Path(sbml_path).name]
+                'condition_files': ['conditions.tsv'],
+                'measurement_files': ['measurements.tsv'],
+                'observable_files': ['observable.tsv'],
+                'sbml_files': ['../' + Path(sbml_path).name]
             }
         ]
     }
     out_path.mkdir(exist_ok=True)
-    with (out_path / f'baddadan_{experimental_setup}_petab.yaml').open('w+') as f:
+    with (out_path / f'baddadan_{experimental_setup}_petab.yaml').open(
+            'w+') as f:
         yaml.dump(yaml_dict, f)
+    return yaml_dict
 
-    # Create parameter file
-    create_parameters_tsv(
-        out_path / yaml_dict['parameter_file'], sbml_importer)
 
-    if experimental_setup == 'heat':
+def get_condition_info(experiment_name: str):
+    if experiment_name == 'heat':
         # Create conditions.tsv
         col_names = ['conditionId', 'conditionName', 'temp']
         cond_entries = [
@@ -84,7 +111,7 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
             '21': 'temp21',
             '32': 'temp32'
         }
-    elif experimental_setup == 'drought':
+    elif experiment_name == 'drought':
         col_names = ['conditionId', 'conditionName', 'drought']
         cond_entries = [
             ['control', 'no drought applied', 0],
@@ -95,25 +122,10 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
         expr_mat_cond_name_to_simul_cond_name = None
     else:
         raise NotImplementedError
-
     cond_df = pd.DataFrame(data=cond_entries,
                            columns=col_names)
-    create_conditions_tsv(
-        out_path / yaml_dict['problems'][0]['condition_files'][0],
-        expr_mat_time,
-        cond_df
-    )
-    create_measurements_tsv_heat(
-        expr_mat_time,
-        out_path / yaml_dict['problems'][0]['measurement_files'][0],
-        list(observables.keys()),
-        expr_mat_cond_name_to_simul_cond_name
-    )
-    create_observables_tsv(
-        observables,
-        out_path / yaml_dict['problems'][0]['observable_files'][0],
-        noise_level
-    )
+    return cond_df, expr_mat_cond_name_to_simul_cond_name, noise_level
+
 
 def create_parameters_tsv(out_path: str | Path,
                           sbml_importer: amici.SbmlImporter):
@@ -133,6 +145,13 @@ def create_parameters_tsv(out_path: str | Path,
             lb, ub = -1 * ub , -1 * lb
         elif name.startswith('gamma_'):
             lb = -10
+        elif name.startswith('k_'):
+            lb = 0
+            ub = 10
+        elif name.startswith('beta_'):
+            # parameter_scale = 'log10'
+            lb = 0
+            ub = 20
         estimate = 1
         records.append([name, parameter_scale, lb, ub, estimate])
     df = pd.DataFrame.from_records(records,
@@ -218,7 +237,8 @@ def create_conditions_tsv(out_path: str | Path,
 
 
 def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
-                                 out_folder: Path):
+                                 out_folder: Path,
+                                 n_starts: int):
     """Given a petab problem, perform parameter optimisation"""
     # load from petab_files
     model_folder = out_folder / 'amici_models' / 'baddadan'
@@ -260,7 +280,7 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
     # engine = pypesto.engine.SingleCoreEngine()
     engine = pypesto.engine.MultiProcessEngine()
     result = optimize.minimize(
-        problem=problem, optimizer=optimizer, n_starts=100, engine=engine,
+        problem=problem, optimizer=optimizer, n_starts=n_starts, engine=engine,
     )
     logging.info(result.summary(show_hess=False))
 

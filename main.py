@@ -465,14 +465,15 @@ def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
     # name = '19_heat_pypesto'
-    # name = '22_drought_pypesto'
-    name = '23_coherence_with_stat_tests'
+    name = '22_drought_pypesto'
+    # name = '23_coherence_with_stat_tests'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
     ##  This all shouldn't have to be changed ##
 
     experiment_path.mkdir(exist_ok=True)
+    (experiment_path / "log.log").unlink(missing_ok=True)
     logging.basicConfig(level=logging.INFO,
                         handlers=[logging.FileHandler(experiment_path / "log.log"),
                                   logging.StreamHandler()])
