@@ -14,3 +14,6 @@ hyperparams:
   do_log2: False
   edge_corr_threshold: .75
   top_nr_clusters: 25
+  do_sim_data: False
+  # Number of fitter starts
+  n_starts: 100
