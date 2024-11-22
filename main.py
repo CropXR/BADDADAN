@@ -2,6 +2,7 @@ import copy
 import logging
 from pathlib import Path
 
+import yaml
 import numpy as np
 import pandas as pd
 import typer
@@ -16,7 +17,6 @@ from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrix, \
     ExpressionMatrixTimeSeries
-from analysis_pipelines import set_background_genes
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 from experiment_scripts import module_size_pipeline, drought_data_to_sbml, \
     exploratory_heat_data_scripts, figure_2_pipeline, heat_data_to_sbml, \
@@ -30,6 +30,7 @@ from exploring_questions import get_coherence_random_modules, \
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
     one_gene_list_file_per_cluster
 from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
+from petab_integration.petab_scripts import plot_nicely_from_artifact
 
 # pd.options.display.width = 0
 # GEOparse.logger.set_verbosity('INFO')
@@ -464,9 +465,10 @@ def camila_red_panda(soft_file_in_path: Path,
 def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
-    name = '19_heat_pypesto'
+    # name = '19_heat_pypesto'
     # name = '22_drought_pypesto'
     # name = '23_coherence_with_stat_tests'
+    name = '24_visualise_fit_result_nicely'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -702,6 +704,16 @@ def main():
                     mlflow.set_tags(experiment_params)
                     mlflow.log_artifact(
                         str(experiment_path / treatment_name / 'figures'))
+        case '24_visualise_fit_result_nicely':
+            config_path = experiment_path / 'config.yaml'
+            with config_path.open('r') as f:
+                config_dict = yaml.safe_load(f)
+            for name, condition_dict in config_dict.items():
+                plot_nicely_from_artifact(
+                    condition_dict['out_folder_experiment'],
+                    condition_dict['mlflow_result_uri'],
+                    condition_dict['petab_yaml']
+                    )
 
         case _:
             raise NotImplementedError(f'{name} not found')
@@ -735,6 +747,7 @@ def main():
         #                     'chi_sqr': best_ode_fit.sol.chisqr})
         # mlflow.log_image()
         # mlflow.register_model()
+
 
 if __name__ == "__main__":
     main()

@@ -1,7 +1,11 @@
 import copy
 import logging
 from pathlib import Path
+import re
 
+import mlflow
+import matplotlib
+import seaborn as sns
 import pandas as pd
 import pypesto
 import petab
@@ -240,44 +244,9 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
                                  out_folder: Path,
                                  n_starts: int):
     """Given a petab problem, perform parameter optimisation"""
-    # load from petab_files
-    model_folder = out_folder / 'amici_models' / 'baddadan'
-    importer = pypesto.petab.PetabImporter(petab_problem,
-                                           simulator_type="amici",
-                                           output_folder=str(model_folder)
-                                           )
-    factory = importer.create_objective_creator()
-    model = factory.create_model(verbose=False)
-    model.setAlwaysCheckFinite(True)
+    optimizer, problem = prepare_petab_files_for_fitting(out_folder,
+                                                         petab_problem)
 
-    # some model properties
-    print("Model parameters:", list(model.getParameterIds()), "\n")
-    print("Model const parameters:", list(model.getFixedParameterIds()), "\n")
-    print("Model outputs:   ", list(model.getObservableIds()), "\n")
-    print("Model states:    ", list(model.getStateIds()), "\n")
-    obj = factory.create_objective()
-
-    # obj.amici_solver.getRelativeTolerance()
-    obj.amici_solver.setRelativeTolerance(
-        obj.amici_solver.getRelativeTolerance() / 10
-    )
-    obj.amici_solver.setAbsoluteTolerance(
-        obj.amici_solver.getAbsoluteTolerance() / 10
-    )
-    obj.amici_solver.setMaxSteps(10 * obj.amici_solver.getMaxSteps())
-    obj.amici_solver.setSensitivityMethod(
-        amici.SensitivityMethod.adjoint
-    )
-
-    # obj.amici_solver.setAlwaysCheckFinite(True)
-    problem = importer.create_problem(obj)
-    # # Set gradient computation method to adjoint
-    # Maybe switch back? Not sure if it's better
-
-    # optimizer = optimize.ScipyOptimizer()
-    optimizer = optimize.ScipyOptimizer(method = "L-BFGS-B")
-    problem.objective.amici_solver.getSensitivityMethod()
-    # engine = pypesto.engine.SingleCoreEngine()
     engine = pypesto.engine.MultiProcessEngine()
     result = optimize.minimize(
         problem=problem, optimizer=optimizer, n_starts=n_starts, engine=engine,
@@ -327,3 +296,99 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
     # plt.show()
     # pypesto.visualize.optimizer_history(result, trace_y="fval")
     # plt.show()
+
+
+def prepare_petab_files_for_fitting(
+        out_folder: Path,
+        petab_problem: petab.v1.Problem
+):
+    # load from petab_files
+    model_folder = out_folder / 'amici_models' / 'baddadan'
+    importer = pypesto.petab.PetabImporter(petab_problem,
+                                           simulator_type="amici",
+                                           output_folder=str(model_folder)
+                                           )
+    factory = importer.create_objective_creator()
+    model = factory.create_model(verbose=False)
+    model.setAlwaysCheckFinite(True)
+    # some model properties
+    print("Model parameters:", list(model.getParameterIds()), "\n")
+    print("Model const parameters:", list(model.getFixedParameterIds()), "\n")
+    print("Model outputs:   ", list(model.getObservableIds()), "\n")
+    print("Model states:    ", list(model.getStateIds()), "\n")
+    obj = factory.create_objective()
+    # obj.amici_solver.getRelativeTolerance()
+    obj.amici_solver.setRelativeTolerance(
+        obj.amici_solver.getRelativeTolerance() / 10
+    )
+    obj.amici_solver.setAbsoluteTolerance(
+        obj.amici_solver.getAbsoluteTolerance() / 10
+    )
+    obj.amici_solver.setMaxSteps(10 * obj.amici_solver.getMaxSteps())
+    obj.amici_solver.setSensitivityMethod(
+        amici.SensitivityMethod.adjoint
+    )
+    # obj.amici_solver.setAlwaysCheckFinite(True)
+    problem = importer.create_problem(obj)
+    # # Set gradient computation method to adjoint
+    # Maybe switch back? Not sure if it's better
+    # optimizer = optimize.ScipyOptimizer()
+    optimizer = optimize.ScipyOptimizer(method="L-BFGS-B")
+    # engine = pypesto.engine.SingleCoreEngine()
+    return optimizer, problem
+
+
+def plot_nicely_from_artifact(out_folder_of_experiment: str,
+                              mlflow_result_uri: str,
+                              petab_yaml_path: str):
+    """
+
+    :param out_folder_of_experiment: Should contain subdirectory called
+    amici_models/baddadan where the amici model lives
+    :param mlflow_result_uri: uri to hdf5 result file saved by previous run
+    :param petab_yaml_path: path to petab yaml config file
+    """
+    artifact = mlflow.artifacts.download_artifacts(mlflow_result_uri)
+    loaded_result = pypesto.store.read_result(artifact)
+
+    petab_problem = petab.v1.Problem.from_yaml(petab_yaml_path)
+    out_folder_of_experiment = Path(out_folder_of_experiment)
+    _, problem = prepare_petab_files_for_fitting(out_folder_of_experiment,
+                                                 petab_problem)
+    # To improve:
+    # Standard deviations (?) -> quite hard maybe? ->
+    # build upon existing functionality I built earlier maybe?
+    # Ensure no fancy sns things remain because they break it for some reason
+    matplotlib.rc_file_defaults()
+    r_dict = visualize_optimized_model_fit(
+        petab_problem=petab_problem,
+        result=loaded_result,
+        pypesto_problem=problem,
+        return_dict=True
+    )
+
+    # Map plot names to observable names
+    for i, (ax_name, ax) in enumerate(r_dict['axes'].items()):
+        legend = ax.get_legend()
+        # print()
+        match = re.search('y_\d+', legend.get_texts()[0].get_text())
+        match_text = match.group(0)
+        match_text = match_text.replace('y_', 'Module ')
+        ax.set_title(match_text)
+        if i < len(r_dict['axes'].items()) - 1:
+            legend.remove()
+        else:
+            legend_entries = legend.get_texts()
+            for entry in legend_entries:
+                text = entry.get_text()
+                parts = text.split('observable')
+                if 'simulation' in parts[-1]:
+                    parts[-1] = 'Model fit'
+                else:
+                    parts[-1] = 'Experimental data'
+                new_text = ''.join(parts)
+                entry.set_text(new_text)
+
+    plt.tight_layout()
+    plt.show()
+    print()
