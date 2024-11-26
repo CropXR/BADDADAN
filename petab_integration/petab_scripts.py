@@ -139,23 +139,26 @@ def create_parameters_tsv(out_path: str | Path,
         name = parameter.id
         if name in ['drought', 'temp', 'u_t']:
             continue
-        # parameter_scale = 'log10'
-        parameter_scale = 'lin'
-        lb = 0
-        ub = 10
+        parameter_scale = 'log10'
+        # parameter_scale = 'lin'
+        lb = 0.01
+        ub = .5
         if name.startswith('delta_'):
             # Delta always has to be negative (and lower bound
             # then becomes upper bound)
-            lb, ub = -1 * ub , -1 * lb
+            parameter_scale = 'lin'
+            lb, ub = -.5, -0.0001
         elif name.startswith('gamma_'):
-            lb = -10
+            parameter_scale = 'lin'
+            lb = -.5
         elif name.startswith('k_'):
-            lb = 0
+            # parameter_scale = 'lin'
+            lb = .1
             ub = 10
         elif name.startswith('beta_'):
-            # parameter_scale = 'log10'
-            lb = 0
-            ub = 20
+            parameter_scale = 'log10'
+            lb = 0.00001
+            ub = 1
         estimate = 1
         records.append([name, parameter_scale, lb, ub, estimate])
     df = pd.DataFrame.from_records(records,
@@ -207,6 +210,8 @@ def create_measurements_tsv_heat(
                 condition_name_to_simulation_condition_id)[condition_name]
         else:
             df['simulationConditionId'] = condition_name
+            # Convert time to days to prevent ODE from exploding?
+            df['time'] = df['time'] / 24
         correct_order = ['observableId', 'simulationConditionId',
                          'measurement', 'time']
         df = df[correct_order]
@@ -261,12 +266,11 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
     pypesto.visualize.parameters(result)
     plt.savefig(fig_folder / 'param_visualise.png')
     plt.close()
-    return_dict = visualize_optimized_model_fit(
-        petab_problem=petab_problem, result=result, pypesto_problem=problem,
-        return_dict=True
-    )
+
+    plot_pypesto_module_fit(petab_problem, result, problem)
     # logging.info(return_dict)
-    plt.savefig(fig_folder / 'model_fit.png')
+    # plt.savefig(fig_folder / 'model_fit.png')
+    plt.savefig(fig_folder / 'model_fit.svg')
     plt.close()
 
     pypesto_out_path = out_folder / 'pypesto_results.hdf5'
@@ -318,12 +322,12 @@ def prepare_petab_files_for_fitting(
     print("Model states:    ", list(model.getStateIds()), "\n")
     obj = factory.create_objective()
     # obj.amici_solver.getRelativeTolerance()
-    obj.amici_solver.setRelativeTolerance(
-        obj.amici_solver.getRelativeTolerance() / 10
-    )
-    obj.amici_solver.setAbsoluteTolerance(
-        obj.amici_solver.getAbsoluteTolerance() / 10
-    )
+    # obj.amici_solver.setRelativeTolerance(
+    #     obj.amici_solver.getRelativeTolerance() / 10
+    # )
+    # obj.amici_solver.setAbsoluteTolerance(
+    #     obj.amici_solver.getAbsoluteTolerance() / 10
+    # )
     obj.amici_solver.setMaxSteps(10 * obj.amici_solver.getMaxSteps())
     obj.amici_solver.setSensitivityMethod(
         amici.SensitivityMethod.adjoint
@@ -333,7 +337,8 @@ def prepare_petab_files_for_fitting(
     # # Set gradient computation method to adjoint
     # Maybe switch back? Not sure if it's better
     # optimizer = optimize.ScipyOptimizer()
-    optimizer = optimize.ScipyOptimizer(method="L-BFGS-B")
+    optimizer = optimize.ScipyOptimizer(method="L-BFGS-B",
+                                        options=dict(maxfun=1e10))
     # engine = pypesto.engine.SingleCoreEngine()
     return optimizer, problem
 
@@ -358,15 +363,19 @@ def plot_nicely_from_artifact(out_folder_of_experiment: str,
     # To improve:
     # Standard deviations (?) -> quite hard maybe? ->
     # build upon existing functionality I built earlier maybe?
+
+    plot_pypesto_module_fit(petab_problem, loaded_result, problem)
+
+
+def plot_pypesto_module_fit(petab_problem, optimise_result, problem):
     # Ensure no fancy sns things remain because they break it for some reason
     matplotlib.rc_file_defaults()
     r_dict = visualize_optimized_model_fit(
         petab_problem=petab_problem,
-        result=loaded_result,
+        result=optimise_result,
         pypesto_problem=problem,
         return_dict=True
     )
-
     # Map plot names to observable names
     for i, (ax_name, ax) in enumerate(r_dict['axes'].items()):
         legend = ax.get_legend()
@@ -388,7 +397,5 @@ def plot_nicely_from_artifact(out_folder_of_experiment: str,
                     parts[-1] = 'Experimental data'
                 new_text = ''.join(parts)
                 entry.set_text(new_text)
-
     plt.tight_layout()
-    plt.show()
-    print()
+    # plt.show()

@@ -466,9 +466,9 @@ def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
     # name = '19_heat_pypesto'
-    # name = '22_drought_pypesto'
+    name = '22_drought_pypesto'
     # name = '23_coherence_with_stat_tests'
-    name = '24_visualise_fit_result_nicely'
+    # name = '24_visualise_fit_result_nicely'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -714,7 +714,6 @@ def main():
                     condition_dict['mlflow_result_uri'],
                     condition_dict['petab_yaml']
                     )
-
         case _:
             raise NotImplementedError(f'{name} not found')
     try:

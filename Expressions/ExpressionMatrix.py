@@ -1744,14 +1744,16 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         self._apply_cluster_mapping_from_df(assignment_df)
 
     def do_genewise_normalisation(self):
-
+        """Do min-max scaling for all genes"""
         # Correct axis
         if self.has_been_clustered:
             clusters = self.df['cluster_id']
             self.df = self.df.drop('cluster_id', axis=1)
 
-        self.df = self.df.apply(lambda x: (x - x.mean()) / x.std(), axis=1)
-        assert np.all(self.df.mean(axis=1) < 0.01)
+        # self.df = self.df.apply(lambda x: (x - x.mean()) / x.std(), axis=1)
+        self.df = self.df.apply(lambda x: (x - x.min()) / (x.max() - x.min()), axis=1)
+
+        # assert np.all(self.df.mean(axis=1) < 0.01)
 
         if self.has_been_clustered:
             self.df['cluster_id'] = clusters

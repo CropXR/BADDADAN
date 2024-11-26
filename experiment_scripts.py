@@ -414,7 +414,8 @@ def drought_data_to_sbml(experiment_path):
 
     my_ode = from_expr_mat_time_to_ode(data_params, experiment_path,
                                        expr_mat_time, hyper_params)
-    u_t_function = 'drought * time / (13*24)'
+    u_t_function = 'drought * time / 13'
+    logging.info(my_ode)
     my_ode.save_to_sbml(experiment_path / 'module_network.xml', u_t_function)
 
 def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
@@ -744,6 +745,7 @@ def from_expr_mat_time_to_ode(data_params, experiment_path, expr_mat_time,
     # expr_mat_time.plot_clusters_over_time()
     # # TO get gene list
     # [print(i) for i in expr_mat_time.get_genes_per_cluster()[75]]
+    expr_mat_time.do_genewise_normalisation()
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
         tf2_out_path,
@@ -930,6 +932,9 @@ def pypesto_from_sbml(experiment_path, condition):
     )
     with open(data_params['expr_mat_time_path'], 'rb') as f:
         expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
+
+    if hyper_params['do_gene_normalisation']:
+        expr_mat_time.do_genewise_normalisation()
 
     write_petab_files(
         expr_mat_time,

@@ -401,7 +401,8 @@ def module_network_from_tf2_output(expr_mat_time,
     my_grn.clean_up_network()
     my_grn.check_if_tfs_created_by_module(expr_mat_time,
                                           do_plotting=False,
-                                          remove_low_corr=True)
+                                          remove_low_corr=False,
+                                          assert_correlated=False)
     my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=False,
                                     threshold=threshold)
     # my_grn.plot_network(nx.d  raw_kamada_kawai, with_labels=False)
