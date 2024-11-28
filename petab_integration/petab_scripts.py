@@ -139,26 +139,20 @@ def create_parameters_tsv(out_path: str | Path,
         name = parameter.id
         if name in ['drought', 'temp', 'u_t']:
             continue
-        parameter_scale = 'log10'
-        # parameter_scale = 'lin'
-        lb = 0.01
-        ub = .5
         if name.startswith('delta_'):
-            # Delta always has to be negative (and lower bound
-            # then becomes upper bound)
             parameter_scale = 'lin'
-            lb, ub = -.5, -0.0001
+            lb, ub = -5, 0
         elif name.startswith('gamma_'):
             parameter_scale = 'lin'
-            lb = -.5
+            lb, ub = -0.5, 0.5
         elif name.startswith('k_'):
-            # parameter_scale = 'lin'
-            lb = .1
-            ub = 10
+            parameter_scale = 'log10'
+            lb, ub = 0.1, 10
         elif name.startswith('beta_'):
             parameter_scale = 'log10'
-            lb = 0.00001
-            ub = 1
+            lb, ub = 0.000001, 5
+        else:
+            raise NotImplementedError('Does not know what param limits to set')
         estimate = 1
         records.append([name, parameter_scale, lb, ub, estimate])
     df = pd.DataFrame.from_records(records,

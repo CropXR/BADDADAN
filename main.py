@@ -142,7 +142,6 @@ def full_pipeline_prototype(out_dir: Path,
     # fit_ode_to_data(module_module, expr_mat_drought)
     # fig_path = out_path / 'fitted_model.svg'
     # fit_ode_to_two_datasets(module_module, expr_mat_drought, expr_mat_control, fig_path)
-    #
 
 def fit_ode_to_two_simulated_data(module_network: ModuleRegulatoryNetwork):
     """Trying this with parameters from the 500 highest MAD log2 genes,
