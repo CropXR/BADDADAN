@@ -1,21 +1,14 @@
 import copy
 import logging
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict
 
 import dill as pickle
 import networkx as nx
-import numpy as np
 import pandas as pd
 import seaborn as sns
-from goatools.anno.idtogos_reader import IdToGosReader
-from goatools.go_enrichment import GOEnrichmentStudy
-from goatools.utils import read_geneset
 from matplotlib import pyplot as plt
-from tqdm import tqdm
-from goatools.obo_parser import GODag
 
 
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork

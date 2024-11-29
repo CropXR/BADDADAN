@@ -16,5 +16,5 @@ hyperparams:
   top_nr_clusters: 13
   do_sim_data: False
   # Number of fitter starts
-  n_starts: 10
+  n_starts: 50
   do_gene_normalisation: True

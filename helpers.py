@@ -10,15 +10,10 @@ import requests
 import seaborn as sns
 import pandas as pd
 
-
-
-import amici
-from amici import ReturnDataView, Model
 from scipy.spatial.distance import euclidean, squareform
 from scipy.stats import bootstrap
 from lmfit import Parameters
 from matplotlib import pyplot as plt
-from matplotlib.axes import Axes
 
 from scipy.integrate._ivp.ivp import OdeResult
 from sklearn.decomposition import PCA

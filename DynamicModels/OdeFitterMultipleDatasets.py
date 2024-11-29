@@ -8,8 +8,6 @@ import pandas as pd
 from lmfit import Parameters, minimize, fit_report
 from lmfit.minimizer import MinimizerResult
 from matplotlib import pyplot as plt
-import seaborn as sns
-from scipy.interpolate import UnivariateSpline
 
 from DynamicModels.OdeFitter import OdeFitter
 from DynamicModels.OdeLocalParameters import OdeLocalParameters

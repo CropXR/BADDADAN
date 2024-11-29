@@ -1387,7 +1387,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         #     x.name = 'expressions'
         #     return self._calculate_mse_two_expression_series(x)
         # mse =  annotated_df.apply(small_changing_function)
-        # # TO speed up first split the df into two, then do substraction and squaring simultaneously
+        # # TO speed up first split the df into two, then do subtraction and squaring simultaneously
         # logging.info('Calculating difference between gene expression in '
         #              'samples, this is implemented quite poorly '
         #              'so will probably take a while 🙃')
