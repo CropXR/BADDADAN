@@ -1,0 +1,9 @@
+experiment_data:
+  name: 'Drought model fit ODE with PyPesto'
+  description: ""
+  summary_of_result: ""
+data:
+  soft_path: 'data/raw_data/expression_datasets/gse65046/GSE65046_family.soft'
+hyperparams:
+  agg_method: 'mean'
+  do_log2: False

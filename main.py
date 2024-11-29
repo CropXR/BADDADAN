@@ -10,11 +10,14 @@ from Expressions.ExpressionMatrix import ExpressionMatrix, \
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 from experiment_scripts import (module_size_pipeline, drought_data_to_sbml,
                                 figure_2_pipeline, heat_data_to_sbml, \
-    config_preprocess, drought_from_wgcna, \
-    wgcna_with_similarity_scores, \
-    integrate_multiple_datasets, generate_dists_for_wgcna_cutting, \
-    ground_truth_vs_jackknife, pypesto_from_sbml, \
-    analyse_go_enrichments_find_enrichment, do_coherence_with_stat_tests)
+                                config_preprocess, drought_from_wgcna, \
+                                wgcna_with_similarity_scores, \
+                                integrate_multiple_datasets,
+                                save_jackknife_files, \
+                                ground_truth_vs_jackknife, pypesto_from_sbml, \
+                                analyse_go_enrichments_find_enrichment,
+                                do_coherence_with_stat_tests,
+                                full_pipeline_prototype)
 from exploring_questions import get_coherence_random_modules, \
     get_robustness_random_modules
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
@@ -28,17 +31,17 @@ from petab_integration.petab_scripts import plot_nicely_from_artifact
 
 mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
 
-def full_pipeline_prototype():
-    ...
+
 
 
 def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
     # name = '19_heat_pypesto'
-    name = '22_drought_pypesto'
+    # name = '22_drought_pypesto'
     # name = '23_coherence_with_stat_tests'
     # name = '24_visualise_fit_result_nicely'
+    name = '25_everything_including_limma'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -77,7 +80,8 @@ def main():
                 # Get drought expr_mat
                 condition_name = 'drought'
                 expr_mat_time = expr_mat_from_drought(data_params['in_path'],
-                                                      hyper_params['agg_method'],
+                                                      hyper_params[
+                                                          'agg_method'],
                                                       hyper_params['do_log2'])
             else:
                 raise NotImplementedError(
@@ -85,7 +89,7 @@ def main():
                 )
             skip = True
             if not skip:
-                generate_dists_for_wgcna_cutting(
+                save_jackknife_files(
                     experiment_path, expr_mat_time, condition_name)
 
             #####################
@@ -152,17 +156,13 @@ def main():
                 if 'heat' in data_params['in_path']:
                     condition_name = 'heat'
                     expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_emexp(
-                        data_params['in_path'],
-                        hyper_params['agg_method'],
-                        hyper_params['do_log2']
-                    )
+                        data_params['in_path'], hyper_params['agg_method'],
+                        hyper_params['do_log2'])
                 elif 'drought' in data_params['in_path']:
                     condition_name = 'drought'
                     expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_drought(
-                        data_params['in_path'],
-                        hyper_params['agg_method'],
-                        hyper_params['do_log2']
-                    )
+                        data_params['in_path'], hyper_params['agg_method'],
+                        hyper_params['do_log2'])
                 else:
                     raise NotImplementedError
 
@@ -224,15 +224,11 @@ def main():
                 if 'heat' in data_params['in_path_expr_mat']:
                     expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_emexp(
                         data_params['in_path_expr_mat'],
-                        hyper_params['agg_method'],
-                        hyper_params['do_log2']
-                    )
+                        hyper_params['agg_method'], hyper_params['do_log2'])
                 elif 'drought' in data_params['in_path_expr_mat']:
                     expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_drought(
                         data_params['in_path_expr_mat'],
-                        hyper_params['agg_method'],
-                        hyper_params['do_log2']
-                    )
+                        hyper_params['agg_method'], hyper_params['do_log2'])
                 else:
                     raise NotImplementedError
                 do_coherence_with_stat_tests(
@@ -257,6 +253,8 @@ def main():
                     condition_dict['mlflow_result_uri'],
                     condition_dict['petab_yaml']
                     )
+        case '25_everything_including_limma':
+            full_pipeline_prototype(experiment_path)
         case _:
             raise NotImplementedError(f'{name} not found')
 

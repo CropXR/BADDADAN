@@ -34,8 +34,7 @@ from scipy.spatial.distance import pdist, squareform
 from sklearn.decomposition import PCA
 from sklearn.metrics import mean_squared_error, silhouette_score
 
-from helpers import get_info_from_gse5628, standardize, \
-    calculate_coefficient_of_variation, calculate_qcd, mean_bootstrap_error
+from helpers import calculate_coefficient_of_variation, calculate_qcd, mean_bootstrap_error
 
 class AggregationMethod(Enum):
     """Used to set the type of aggregation methot that is used
@@ -134,8 +133,6 @@ class ExpressionMatrix:
         if name_to_drop:
             logging.info(f'Dropping all probes that contain {name_to_drop}')
             df = df.loc[df.index.map(lambda x: name_to_drop not in x), :]
-        assert not (annotate_from_gpl and array_annotation), \
-            "Only provide one way of converting from probe ID to gene names"
 
         if annotate_from_gpl:
             assert len(gse.gpls) == 1, "GSE contains more than one platform?"
@@ -143,23 +140,6 @@ class ExpressionMatrix:
             gpl_object = sorted(gse.gpls.values())[0]
             gpl_table = gpl_object.table
             df = cls._do_gpl_annotation(gpl_table, df)
-
-        elif array_annotation:
-            # Get gene names based on ExpressionAnnotation object
-            logging.info('Converting probe names to genes...')
-            new_indices = df.index.map(array_annotation.probe_to_agi)
-            # Count how many probe names were not mapped to a gene by the
-            # annotation file, i.e. their name did not change.
-            unmapped_probes = new_indices.intersection(df.index)
-
-            logging.info(
-                f'Could not find annotation of {len(unmapped_probes)} probes '
-                f'({len(unmapped_probes) / len(df.index):.2%}). '
-                f'Proceeding with their original names')
-            if len(unmapped_probes) < 10:
-                for probe in unmapped_probes:
-                    logging.info(probe)
-            df.index = new_indices
 
         if log2_transform:
             df = np.log2(df)
@@ -335,10 +315,6 @@ class ExpressionMatrix:
             my_mappings = reference_df.loc[self.df.index].mean(axis=1)
             # For test dataset map onto mean values that were calculated from train dataset
             self.df = qnorm.quantile_normalize(self.df, target=my_mappings)
-
-    def to_expressionmatrix_training(self):
-        assert type(self) != ExpressionMatrixTraining, 'Is already an ExpressionMatrixTraining object. Conversion is pointless.'
-        return ExpressionMatrixTraining(self.df)
 
     def save_for_limma(self, out_path: Path):
         self.df.to_csv(out_path)
@@ -1352,6 +1328,12 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                              one column. (Typically from .grouppby() method)
         :return: mean squared error
         """
+        # TODO Normalise here?
+        logging.warning("Normalise here?")
+
+        cluster_id = one_group_df['cluster_id']
+        df_without_cluster_id = one_group_df.drop('cluster_id', axis=1)
+
         expressions = self._aggregate_module_expressions_one_group(
             one_group_df)
         expressions.name = 'expressions'

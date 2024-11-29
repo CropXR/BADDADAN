@@ -38,6 +38,29 @@ from exploring_questions import plot_module_size_distributions, \
 from petab_integration.petab_scripts import write_petab_files, \
     param_optimise_petab_problem
 
+
+def full_pipeline_prototype(experiment_path):
+    for treatment_name in ['drought', 'heat']:
+        treatment_path = experiment_path / treatment_name
+        data_params, hyper_params, experiment_params = config_preprocess(
+            treatment_path)
+        expr_mat_time = expr_mat_time_factory(treatment_path,
+                                              data_params,
+                                              hyper_params)
+        expr_mat_time.save_for_limma(treatment_path / '01_input_for_limma.csv')
+        # Here: run limma
+
+
+    # Read DE genes from limma output and get the ATTED/Merged/Local coexpression
+
+    # Cut them using WGCNA for various DS cutoffs (1 and 2 probably)
+
+    # Also generate random clusters that have the same size as a representative of these clusters
+
+    # From the clusters -> Do GO enrichment, Coherence, ODE model
+
+
+
 def figure_2_pipeline(experiment_path):
     for folder in experiment_path.iterdir():
         if not folder.name.endswith('_data') or folder.name.startswith('drought'):
@@ -53,21 +76,8 @@ def figure_2_pipeline(experiment_path):
         plt.savefig(folder.parent / 'figures' / f'{dataset_name}_robustness_violinplot.svg')
         plt.close()
 
-        if folder.name.startswith('drought'):
-            expr_mat_time = expr_mat_from_drought(
-                in_file_path=data_params['soft_path'],
-                agg_method=hyper_params['agg_method'],
-                do_log2=hyper_params['do_log2']
-            )
-        elif folder.name.startswith('heat'):
-            expr_mat_time = expr_mat_from_emexp(
-                in_path=data_params['soft_path'],
-                agg_method=hyper_params['agg_method'],
-                do_log2=hyper_params['do_log2'],
-                gpl_path=data_params['gpl_path']
-            )
-        else:
-            raise NotImplementedError
+        expr_mat_time = expr_mat_time_factory(folder, data_params,
+                                              hyper_params)
 
         compare_clusterings_for_ode_use(
             expr_mat_time,
@@ -81,6 +91,23 @@ def figure_2_pipeline(experiment_path):
             top_nr_clusters=None,
             tf2_in_name=None,
             tf2_out_name=None)
+
+
+def expr_mat_time_factory(folder, data_params, hyper_params):
+    if folder.name.startswith('drought'):
+        expr_mat_time = expr_mat_from_drought(
+            in_file_path=data_params['soft_path'],
+            agg_method=hyper_params['agg_method'],
+            do_log2=hyper_params['do_log2'])
+    elif folder.name.startswith('heat'):
+        expr_mat_time = expr_mat_from_emexp(in_path=data_params['soft_path'],
+                                            agg_method=hyper_params[
+                                                'agg_method'],
+                                            do_log2=hyper_params['do_log2'],
+                                            gpl_path=data_params['gpl_path'])
+    else:
+        raise NotImplementedError
+    return expr_mat_time
 
 
 def module_size_pipeline(experiment_path):
@@ -97,9 +124,9 @@ def drought_from_wgcna(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
     wgcna_module_assignment = data_params['wgcna_module_assignment_path']
-    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_drought(data_params['in_path'],
-                                          hyper_params['agg_method'],
-                                          hyper_params['do_log2'])
+    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_drought(
+        data_params['in_path'], hyper_params['agg_method'],
+        hyper_params['do_log2'])
     expr_mat_time.assign_clusters_from_wgcna(wgcna_module_assignment)
     expr_mat_time.plot_cluster_sizes()
 
@@ -141,9 +168,8 @@ def integrate_multiple_datasets(experiment_path):
     # data_params, hyper_params, experiment_params = config_preprocess(
     #     experiment_path)
     expr_mat_time_og = expr_mat_from_drought(
-        'limma_de_selection/drought_expr_matrix_limma_filtered.csv',
-                      'mean',
-                      False)
+        'limma_de_selection/drought_expr_matrix_limma_filtered.csv', 'mean',
+        False)
 
     linkage_matrices = combine_local_distance_and_prior(
         expr_mat_time_og.get_distance_matrix(absolute_dist=False),
@@ -153,72 +179,26 @@ def integrate_multiple_datasets(experiment_path):
 
 
 
-def generate_dists_for_wgcna_cutting(experiment_path, expr_mat_time, condition_name):
+def save_jackknife_files(experiment_path, expr_mat_time, condition_name):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
 
-    condition_base_path = experiment_path / condition_name
+    (atted_dist_df, atted_score,
+     condition_base_path, local_dist,
+     min_dist_df, sum_dist_df) = save_files_for_wgcna_cutting(
+        condition_name, data_params, experiment_path, expr_mat_time)
 
-    for folder_name in ['figs', 'full_datasets', 'jackknifes']:
-        new_folder = condition_base_path / folder_name
-        new_folder.mkdir(parents=True, exist_ok=True)
-    # expr_mat_time = expr_mat_from_emexp(data_params['in_path'],
-    #                                       hyper_params['agg_method'],
-    #                                       hyper_params['do_log2'])
-    atted_score = pd.read_parquet(data_params['atted_path'])
-    atted_score = atted_score.set_index(atted_score.columns[0])
+    generate_jackknifes(atted_dist_df, atted_score, condition_base_path,
+                        hyper_params, local_dist, min_dist_df, sum_dist_df)
 
-    # Make atted symmetric
-    a = squareform(atted_score, checks=False)
-    a = squareform(a)
-    atted_score = pd.DataFrame(a,
-                               index=atted_score.index,
-                               columns=atted_score.columns)
 
-    local_dist = expr_mat_time.get_distance_matrix(absolute_dist=False)
-
-    # Merge them to be the same set
-    selected_genes = atted_score.index.intersection(local_dist.index)
-    local_dist = local_dist.loc[selected_genes, selected_genes]
-    atted_score = atted_score.loc[selected_genes, selected_genes]
-
-    # Save full dists
-    local_dist.to_parquet(condition_base_path
-                          / 'full_datasets' / 'local_dists.parquet.gzip',
-                               compression='gzip')
-
-    # And combined dists
-    min_dist_df = combine_local_distance_and_prior(
-        local_dist,
-        atted_score,
-        dists_out_path=(condition_base_path
-                        / 'full_datasets' / 'combined_min_dists.parquet.gzip'),
-        combo='min',
-        calculate_linkages=False,
-        plot_out_path=None,
-    )
-
-    # And combined dists
-    sum_dist_df = combine_local_distance_and_prior(
-        local_dist,
-        atted_score,
-        dists_out_path=(condition_base_path
-                        / 'full_datasets' / 'combined_sum_dists.parquet.gzip'),
-        combo='sum',
-        calculate_linkages=False,
-        plot_out_path=None,
-    )
-
-    atted_dist_df = atted_score.max().max() - atted_score
-    atted_dist_df.to_parquet(condition_base_path
-                             / 'full_datasets' / 'atted_dists.parquet.gzip',
-                                   compression='gzip')
-
+def generate_jackknifes(atted_dist_df, atted_score, condition_base_path,
+                        hyper_params, local_dist, min_dist_df, sum_dist_df):
     out_records = []
     do_debug_thing = False
     # Save jackknifed distance matrices
     for i in range(hyper_params['nr_jackknifes']):
-        logging.info(f'Iteration {i+1}')
+        logging.info(f'Iteration {i + 1}')
         rand_index = sample(
             local_dist.index.tolist(),
             round(hyper_params['subset_size'] * len(local_dist.index.tolist()))
@@ -230,15 +210,15 @@ def generate_dists_for_wgcna_cutting(experiment_path, expr_mat_time, condition_n
         local_jackknife_dir = condition_base_path / 'jackknifes' / 'local'
         local_jackknife_dir.mkdir(exist_ok=True)
         subset_local_df.to_parquet(local_jackknife_dir
-                               / f'jackknife_{i}.parquet.gzip',
+                                   / f'jackknife_{i}.parquet.gzip',
                                    compression='gzip')
 
         atted_jackknife_dir = condition_base_path / 'jackknifes' / 'atted'
         atted_jackknife_dir.mkdir(exist_ok=True)
         subset_atted_dist_df = subset_atted_df.max().max() - subset_atted_df
         subset_atted_dist_df.to_parquet(atted_jackknife_dir
-                               / f'jackknife_{i}.parquet.gzip',
-                               compression='gzip')
+                                        / f'jackknife_{i}.parquet.gzip',
+                                        compression='gzip')
 
         min_jackknife_dir = condition_base_path / 'jackknifes' / 'combined_min'
         min_jackknife_dir.mkdir(exist_ok=True)
@@ -285,8 +265,7 @@ def generate_dists_for_wgcna_cutting(experiment_path, expr_mat_time, condition_n
                 return pd.DataFrame(clustering, index=dist.index,
                                     columns=['colors'])
 
-
-            for nclust in range(1,500, 50):
+            for nclust in range(1, 500, 50):
                 out_records.append(
                     ('local', debug_func(
                         subset_local_df, local_dist, nclust=nclust),
@@ -303,12 +282,64 @@ def generate_dists_for_wgcna_cutting(experiment_path, expr_mat_time, condition_n
                     ('atted', debug_func(
                         subset_atted_dist_df, atted_dist_df, nclust=nclust),
                      nclust))
-
     if do_debug_thing:
         plot_df = pd.DataFrame.from_records(out_records,
                                             columns=['dist', 'ari', 'nclust'])
         sns.lineplot(data=plot_df, x='nclust', y='ari', hue='dist')
         plt.show()
+
+
+def save_files_for_wgcna_cutting(condition_name, data_params, experiment_path,
+                                 expr_mat_time):
+    condition_base_path = experiment_path / condition_name
+    for folder_name in ['figs', 'full_datasets', 'jackknifes']:
+        new_folder = condition_base_path / folder_name
+        new_folder.mkdir(parents=True, exist_ok=True)
+    # expr_mat_time = expr_mat_from_emexp(data_params['in_path'],
+    #                                       hyper_params['agg_method'],
+    #                                       hyper_params['do_log2'])
+    atted_score = pd.read_parquet(data_params['atted_path'])
+    atted_score = atted_score.set_index(atted_score.columns[0])
+    # Make atted symmetric
+    a = squareform(atted_score, checks=False)
+    a = squareform(a)
+    atted_score = pd.DataFrame(a,
+                               index=atted_score.index,
+                               columns=atted_score.columns)
+    local_dist = expr_mat_time.get_distance_matrix(absolute_dist=False)
+    # Merge them to be the same set
+    selected_genes = atted_score.index.intersection(local_dist.index)
+    local_dist = local_dist.loc[selected_genes, selected_genes]
+    atted_score = atted_score.loc[selected_genes, selected_genes]
+    # Save full dists
+    local_dist.to_parquet(condition_base_path
+                          / 'full_datasets' / 'local_dists.parquet.gzip',
+                          compression='gzip')
+    # And combined dists
+    min_dist_df = combine_local_distance_and_prior(
+        local_dist,
+        atted_score,
+        dists_out_path=(condition_base_path
+                        / 'full_datasets' / 'combined_min_dists.parquet.gzip'),
+        combo='min',
+        calculate_linkages=False,
+        plot_out_path=None,
+    )
+    # And combined dists
+    sum_dist_df = combine_local_distance_and_prior(
+        local_dist,
+        atted_score,
+        dists_out_path=(condition_base_path
+                        / 'full_datasets' / 'combined_sum_dists.parquet.gzip'),
+        combo='sum',
+        calculate_linkages=False,
+        plot_out_path=None,
+    )
+    atted_dist_df = atted_score.max().max() - atted_score
+    atted_dist_df.to_parquet(condition_base_path
+                             / 'full_datasets' / 'atted_dists.parquet.gzip',
+                             compression='gzip')
+    return atted_dist_df, atted_score, condition_base_path, local_dist, min_dist_df, sum_dist_df
 
 
 def wgcna_with_similarity_scores(experiment_path):
@@ -559,8 +590,7 @@ def heat_data_to_sbml(experiment_path):
         experiment_path)
     expr_mat_time = expr_mat_from_emexp(data_params['in_path'],
                                         hyper_params['agg_method'],
-                                        hyper_params['do_log2'],
-                                        )
+                                        hyper_params['do_log2'])
 
     my_ode = from_expr_mat_time_to_ode(data_params, experiment_path,
                                        expr_mat_time, hyper_params)

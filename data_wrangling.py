@@ -124,23 +124,17 @@ def calculate_linkage_matrix_from_atted_ii(in_path: Path, out_dir: Path):
         out_path = out_dir / f'{in_path.stem}_{method}_linkage.npy'
         np.save(out_path, linkage_matrix)
 
-def expr_mat_from_emexp(in_path, agg_method, do_log2, gpl_path=None, out_path=None):
-    if in_path.endswith('csv'):
-        expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
-            in_path, log2_transform=do_log2)
-    else:
-        expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
+def expr_mat_from_emexp(in_path, agg_method, do_log2, gpl_path=None):
+    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
             in_path, log2_transform=do_log2, gpl_path=gpl_path)
     expr_mat_time.keep_only_samples_with_string('normal light')
     expr_mat_time.summary_method = agg_method
     expr_mat_time.condition_names = ['21', '32']
     expr_mat_time.column_parser = get_info_from_emtab375
-    if out_path:
-        expr_mat_time.save_for_limma(out_path)
     return expr_mat_time
 
 
-def expr_mat_from_drought(in_file_path: str, agg_method, do_log2, out_path = None):
+def expr_mat_from_drought(in_file_path: str, agg_method, do_log2):
     if in_file_path.endswith('csv'):
         expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
             in_file_path, log2_transform=do_log2)
@@ -151,8 +145,5 @@ def expr_mat_from_drought(in_file_path: str, agg_method, do_log2, out_path = Non
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.summary_method = agg_method
     expr_mat_time.condition_names = ['control', 'drought']
-    if out_path:
-        expr_mat_time.save_for_limma(out_path)
-
-    expr_mat_time.merge_biological_samples()
+    # expr_mat_time.merge_biological_samples()
     return expr_mat_time
