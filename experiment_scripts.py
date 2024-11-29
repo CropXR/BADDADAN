@@ -4,7 +4,6 @@ from copy import deepcopy
 from itertools import combinations
 from pathlib import Path
 from random import sample
-from typing import Dict
 import re
 
 import dill as pickle
@@ -18,7 +17,6 @@ import amici.petab.simulator
 import yaml
 import seaborn as sns
 import matplotlib.pyplot as plt
-from matplotlib import pyplot as plt
 from scipy.spatial.distance import squareform
 from sklearn.metrics import adjusted_rand_score
 from scipy.cluster.hierarchy import linkage, fcluster
@@ -26,100 +24,19 @@ import amici
 from tqdm import tqdm
 from statannotations.Annotator import Annotator
 
-from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
-from DynamicModels.OdeLocalParameters import OdeLocalParameters
 
 from DynamicModels.OdeModel import OdeModel
-from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 from Expressions.ExpressionMatrix import AggregationMethod, \
     ExpressionMatrixTimeSeries
 from GoEnrich.EnrichedGeneModuleGoTerms import EnrichedGeneModuleGoTerms
-from analysis_pipelines import explore_emtab_375, compare_clusterings_for_ode_use, \
-    module_network_from_tf2_output, infer_intermodular_network
+from analysis_pipelines import compare_clusterings_for_ode_use, \
+    module_network_from_tf2_output
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 
 from exploring_questions import plot_module_size_distributions, \
     combine_local_distance_and_prior, similarity_matrices_local_and_atted
-from helpers import parse_string_input_data
 from petab_integration.petab_scripts import write_petab_files, \
     param_optimise_petab_problem
-
-
-def prefilter_genes_experiment(experiment_path):
-
-    data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
-
-    expr_mat_time_drought = expr_mat_from_drought(
-        data_params['limma_drought_out_path'],
-        hyper_params['agg_method'],
-        hyper_params['do_log2_drought'])
-
-    expr_mat_time_heat = expr_mat_from_emexp(
-        data_params['limma_heat_out_path'],
-        hyper_params['agg_method'],
-        hyper_params['do_log2_heat'],
-        data_params['heat_gpl_path']
-    )
-
-    cv_list = []
-    df_list = []
-
-
-    expr_mat_time_heat
-    #
-    #
-    # for expr_mat_time, condition_name in zip(
-    #         [expr_mat_time_drought, expr_mat_time_heat],
-    #         ['drought', 'heat']
-    # ):
-    #     expr_mat_time.scatterplot_of_two_per_gene_stats(
-    #         'std', 'cond_rmsd',
-    #         plotting_func=sns.jointplot,
-    #         title = f'{condition_name} _std_rmsd_no cutoff ({len(expr_mat_time.df)} genes)',
-    #         out_path=experiment_path /  f'{condition_name}_no_cutoff.png')
-    #
-    #     # expr_mat_time.scatterplot_of_two_per_gene_stats(
-    #     #     'mean', 'std',
-    #     #     plotting_func=sns.jointplot,
-    #     #     title = f'{condition_name} no cutoff ({len(expr_mat_time.df)} genes)',
-    #     #     out_path=experiment_path /  f'{condition_name}_no_cutoff.png')
-    #
-    #     for cutoff in [0.25, 0.5, 0.75]:
-    #         temp_expr_mat = deepcopy(expr_mat_time)
-    #         # std_series = temp_expr_mat.plot_per_gene_std()
-    #         temp_expr_mat.keep_genes_above_percentile_score(
-    #             cutoff,
-    #             method='cond_rmsd')
-    #         # temp_expr_mat.scatterplot_of_two_per_gene_stats(
-    #         #     'mean', 'std',
-    #         #     plotting_func=sns.jointplot,
-    #         #     title=f'{condition_name} cutoff={cutoff} perc. ({len(temp_expr_mat.df)} genes)',
-    #         #     out_path=experiment_path / f'{condition_name}_{cutoff}_cutoff.png'
-    #         # )
-    #         # mad_series = expr_mat_time.plot_per_gene_mad()
-    #         # cv_serie = expr_mat_time._calculate_gene_variation('cv')
-    #         # cv_list.append(cv_serie)
-    #         #
-    #         # expr_mat_time.scatterplot_of_two_per_gene_stats('std', 'qcd')
-    #         # expr_mat_time.scatterplot_of_two_per_gene_stats('mean', 'qcd')
-    #         # expr_mat_time.scatterplot_of_two_per_gene_stats('std', 'mad')
-    #         # expr_mat_time.scatterplot_of_two_per_gene_stats('std', 'cv')
-    #         # expr_mat_time.scatterplot_of_two_per_gene_stats('std', 'qcd')
-    #         # Median should roughly be good cutoff?
-    #         # Or only remove lower 25th percentile?
-    #         # Look at distribution of MAD
-    #
-    #
-    # # cv_list[0].name = 'drought'
-    # # cv_list[1].name = 'heat'
-    # # merged_df = pd.concat(cv_list, axis=1, join='inner')
-    # # sns.histplot(merged_df)
-    # # print()
-
-
-
-
-
 
 def figure_2_pipeline(experiment_path):
     for folder in experiment_path.iterdir():
@@ -164,8 +81,6 @@ def figure_2_pipeline(experiment_path):
             top_nr_clusters=None,
             tf2_in_name=None,
             tf2_out_name=None)
-
-
 
 
 def module_size_pipeline(experiment_path):
@@ -625,37 +540,6 @@ def read_go_enrich_files_into_df(in_path):
     return all_result_df
 
 
-def fit_ode_drought_data(experiment_path, expr_mat_time, hyper_params,
-                         module_module):
-    my_ode = OdeModel.construct_from_regulatory_network(module_module,
-                                                        nonlinear=True)
-    # These are parameters that are different between the two datasets
-    # They are the initial values, and the drought treatment (i.e. u_t function)
-    custom_params = dict()
-    small_constant = 1
-    control_name = 'control'
-    drought_name = 'drought'
-    # custom_params[drought_name] = OdeLocalParameters(
-    #      u_t=(lambda t: small_constant*(100 - t * (100 - 20) / (13 * 24))))
-    #
-    # custom_params[control_name] = OdeLocalParameters(
-    #      u_t=(lambda t: small_constant*(90 - t * 0)))
-    custom_params[control_name] = OdeLocalParameters(
-        u_t=(lambda t: 0))
-    custom_params[drought_name] = OdeLocalParameters(
-        u_t=(lambda t: small_constant * t / (13 * 24)))
-    best_ode_fit = fit_ode_to_two_datasets(
-        my_ode,
-        expr_mat_time,
-        custom_params=custom_params,
-        nr_ode_iters=hyper_params['nr_ode_iters'],
-        experiment_path=experiment_path,
-        param_limit=hyper_params.get('param_limit')
-    )
-    with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
-        pickle.dump(best_ode_fit, f)
-
-
 def config_preprocess(experiment_path):
     config_path = experiment_path / 'config.yaml'
     with config_path.open('r') as f:
@@ -669,39 +553,6 @@ def config_preprocess(experiment_path):
         hyper_params.get('agg_method')
     )
     return data_params, hyper_params, experiment_params
-
-def drought_with_string_db(experiment_path):
-    # Load the config file
-    data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
-    expr_mat_time = expr_mat_from_drought(data_params['in_path'],
-                                          hyper_params['agg_method'],
-                                          hyper_params['do_log2'])
-    abs_dists = False
-    skip_stuff = False
-    # expr_mat_time.do_genewise_normalisation()
-    expr_mat_time.keep_n_most_deviating_genes(2000)
-    if not skip_stuff:
-        prior_score = parse_string_input_data()
-        linkage_matrices = combine_local_distance_and_prior(
-            expr_mat_time.get_distance_matrix(absolute_dist=abs_dists),
-            prior_score,
-            out_path=experiment_path,
-            combo='sum')
-    print()
-
-
-def exploratory_heat_data_scripts(experiment_path):
-    data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
-    explore_emtab_375(experiment_path=experiment_path,
-                      in_file_path=Path(data_params['soft_path']),
-                      summed_linkage_matrix=data_params['linkage_path'],
-                      summed_dist_matrix_path=Path(
-                          data_params['dist_matrix_path']),
-                      nr_clusters=hyper_params['nr_clusters'],
-                      do_log2=hyper_params['do_log2'],
-                      agg_method=hyper_params['agg_method'],
-                      gpl_path=data_params['gpl_path'])
-
 
 def heat_data_to_sbml(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(
@@ -743,9 +594,11 @@ def from_expr_mat_time_to_ode(data_params, experiment_path, expr_mat_time,
         tf2_output_path=tf2_out_path,
         plotting_path=experiment_path)
     # expr_mat_time.plot_clusters_over_time()
+    expr_mat_time.get_ci_per_cluster()
     # # TO get gene list
     # [print(i) for i in expr_mat_time.get_genes_per_cluster()[75]]
     expr_mat_time.do_genewise_normalisation()
+    expr_mat_time.get_ci_per_cluster()
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
         tf2_out_path,
@@ -763,65 +616,6 @@ def from_expr_mat_time_to_ode(data_params, experiment_path, expr_mat_time,
     my_ode = OdeModel.construct_from_regulatory_network(module_module,
                                                         nonlinear=True)
     return my_ode
-
-
-def fit_ode_to_two_datasets(
-        my_ode: OdeModel,
-        my_time_series_expressions: ExpressionMatrixTimeSeries,
-        nr_ode_iters: int,
-        custom_params: Dict,
-        nr_fitters: int = 5,
-        experiment_path: Path|None = None,
-        param_limit: float = .1,
-        gradient_matching: bool = False,
-        nr_time_points_interpolation = None
-        ):
-
-    # condition_names = list(custom_params.keys())
-    # # Step uno
-    # my_fitter = OdeFitterMultipleDatasets(my_ode,
-    #                                       my_time_series_expressions,
-    #                                       custom_params,
-    #                                       param_limit=param_limit)
-    # my_fitter.fit(max_iter=400)
-    # my_fitter.calculate_current_best_fits()
-
-    # # Make the =0 params where we think is appropriate
-    # new_params = Parameters()
-    # for param_name in my_fitter.master_params:
-    #     if 'k_' in param_name:
-    #         new_params.add(param_name, value=22)
-    #     # elif 'delta' in param_name:
-    #     #     new_params.add(param_name, value=0, vary=True)
-    #     elif param_name in ['gamma_1', 'gamma_2']:
-    #         new_params.add(param_name, value=0, vary=False)
-    #     elif param_name == 'gamma_0':
-    #         new_params.add(param_name, value=0.005, vary=False)
-    #
-    # my_fitter.master_params = new_params
-
-    # my_fitter.fit(max_iter=500)
-    # my_fitter.calculate_current_best_fits()
-    # my_fitter.all_fitters[0].plot_hill_equation_range()
-
-    raise DeprecationWarning('Not used anymore')
-    multiple_fitters = [
-        OdeFitterMultipleDatasets(
-            my_ode, my_time_series_expressions,
-            custom_params,
-            param_limit=param_limit,
-            do_spline_smooth=gradient_matching,
-            nr_time_points_interpolation=nr_time_points_interpolation
-        ) for _ in range(nr_fitters)]
-
-    best_fit = fit_multiple_fitters(multiple_fitters, nr_ode_iters)
-    best_fit.calculate_current_best_fits(data_point_overlay=True,
-                                         use_err_bars=True,
-                                         out_path=experiment_path / 'final_ode_fit.svg')
-    return best_fit
-    # multiple_fitter.fit(100)
-    # best_fits = multiple_fitter.calculate_current_best_fits()
-
 
 def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
     data_params, hyper_params, experiment_params = config_preprocess(
@@ -978,147 +772,6 @@ def pypesto_from_sbml(experiment_path, condition):
         mlflow.log_metric('fval', result_dict['fval'])
         # mlflow.log_artifact(
         #     str(experiment_path / 'figures'))
-
-    # # Everything below is amici-specific and not needed at the moment
-    #
-    # omit_sbml_converstion = False
-    # if not omit_sbml_converstion:
-    #     sbml_importer = amici.SbmlImporter(data_params['sbml_path'],
-    #                                        show_sbml_warnings=True)
-    #
-    #     observables = amici.assignmentRules2observables(
-    #         sbml_importer.sbml,  # the libsbml model object
-    #         filter_function=lambda variable: variable.getId().startswith(
-    #             "observable_")
-    #     )
-    #     # print(observables)
-    #
-    #     # Sometimes get AttributeError: 'PosixPath' object has no attribute 'startswith'?
-    #     sbml_importer.sbml2amici(model_name, model_dir,
-    #                              constant_parameters=constant_parameters,
-    #                              observables=observables,
-    #                              compute_conservation_laws=False)
-    #
-    # # load the generated module
-    # model_module = amici.import_model_module(model_name, model_dir)
-    # # Create Model instance
-    # model = model_module.getModel()
-    #
-    # print("Model parameters:", list(model.getParameterIds()))
-    # print("Model outputs:   ", list(model.getObservableIds()))
-    # print("Model states:    ", list(model.getStateIds()))
-    #
-    # # Now get data to do the fit
-    # print()
-    # # Get expr mat time
-    # # TODO later on put this all in a class again
-    # if expr_mat_time.aggregation_method == AggregationMethod.EIGENGENE:
-    #     expressions: pd.DataFrame = expr_mat_time.df.groupby('cluster_id').apply(
-    #         expr_mat_time._get_eigengene_over_time)
-    #     # Add constant value to eigengenes
-    #     expressions = abs(expressions.min().min()) + expressions
-    # elif expr_mat_time.aggregation_method == AggregationMethod.MEAN:
-    #     expressions: pd.DataFrame = expr_mat_time.df.groupby('cluster_id').apply(
-    #         expr_mat_time._get_mean_over_time)
-    #     # dataset.plot_clusters_over_time()
-    # else:
-    #     raise NotImplementedError
-    #
-    # for word in expr_mat_time.condition_names:
-    #     # Deepcopy first?
-    #     # dataset.keep_only_samples_with_string(word)
-    #     valid_index = expressions.columns.get_level_values(
-    #         'condition').isin(['zero', word])
-    #     data = expressions.loc[:, valid_index]
-    #     # Ensure that time is increasing
-    #     data = data.sort_index(axis=1, level='time')
-    #     # Convert time into hours
-    #     time = data.columns.get_level_values('time') / pd.to_timedelta(1,
-    #                                                                    unit='h')
-    #     assert len(data.columns) == len(time)
-    #     data = data.to_numpy()
-    #     time = time.to_numpy()
-    #
-    #     # set timepoints for which we want to simulate the model
-    #     model.setTimepoints(time)
-    #
-    #     # # Here: set u_t to correct value
-    #     # TODO handle this correctly perhaps -> now kinda works for temp
-    #     # TODO Check if different results for different temps
-    #     custom_param_dict = {'21': 0,
-    #                          '32': 1}
-    #     model.setFixedParameterById('temp', custom_param_dict[word])
-    #
-    #     # set parameters to optimal values found in the benchmark collection
-    #     # model.setParameterScale(amici.ParameterScaling.log10)
-    #     nr_params = len(model.getParameterIds())
-    #     # IF all zero, does not throw error
-    #     # model.setParameters(np.zeros(nr_params))
-    #
-    #     # model.setParameters(np.random.standard_normal(nr_params)/10)
-    #     some_params = np.random.rand(nr_params)/10
-    #     model.setParameters(some_params)
-    #
-    #     # TODO is this needed? \/
-    #     # model.setInitialStates()
-    #
-    #     # Create solver instance
-    #     solver = model.getSolver()
-    #     # Run simulation using model parameters from the benchmark collection and default solver options
-    #     rdata = amici.runAmiciSimulation(model, solver)
-    #
-    #     plot_observable_trajectories(rdata)
-    #     plt.show()
-    #
-    #     plt.plot(rdata.by_id('u_t'))
-    #     plt.show()
-    #
-    #
-    #     edata = amici.ExpData(
-    #         data.shape[0],  # number of observables
-    #         0,  # number of event outputs
-    #         0,  # maximum number of events
-    #         time,  # timepoints
-    #     )
-    #     # set observed data
-    #     for i in range(data.shape[0]):
-    #         edata.setObservedData(data[i,:], i)
-    #
-    #     rdata = amici.runAmiciSimulation(model, solver, edata)
-    #
-    #     print(f"chi2 value using AMICI: {rdata['chi2']}")
-    #
-    #     # we make some more adjustments to our model and the solver
-    #     model.requireSensitivitiesForAllParameters()
-    #
-    #     solver.setSensitivityMethod(amici.SensitivityMethod.forward)
-    #     solver.setSensitivityOrder(amici.SensitivityOrder.first)
-    #
-    #     objective = pypesto.AmiciObjective(
-    #         amici_model=model, amici_solver=solver, edatas=[edata],
-    #         max_sensi_order=1
-    #     )
-    #
-    #     # the generic objective call
-    #     print(f"Objective value: {objective(some_params)}")
-    #     # a call returning the AMICI data as well
-    #     obj_call_with_dict = objective(some_params, return_dict=True)
-    #     print(
-    #         f'Chi^2 value of the same parameters: {obj_call_with_dict["rdatas"][0]["chi2"]}'
-    #     )
-    #
-    #     # So we can get objective function now, just have to proceed with that
-    #     n_starts = 20  # usually a value >= 100 should be used
-    #     engine = pypesto.engine.MultiProcessEngine()
-    #     result = optimize.minimize(
-    #         problem=problem,
-    #         optimizer=optimizer,
-    #         n_starts=n_starts,
-    #         startpoint_method=startpoint_method,
-    #         engine=engine,
-    #         options=opt_options,
-    #     )
-
 
 def simulated_data_pypesto(petab_problem, model_folder):
     # Do simulated data

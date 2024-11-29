@@ -44,10 +44,7 @@ def save_local_distance_matrix(soft_file_path: Path, do_log_2: bool,
     :param out_path: Path to save distance matrix (should be .pkl file)
     """
     expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
-        soft_file_path,
-        log2_transform=do_log_2,
-        annotate_from_gpl=True
-    )
+        soft_file_path, annotate_from_gpl=True, log2_transform=do_log_2)
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.merge_biological_samples()
     expr_mat_time.save_distance_matrix(out_path)
@@ -341,8 +338,8 @@ def compare_annotations(soft_path, csv_path):
 
 def see_expression_genes_of_interest(exp_mat_path: Path):
     exp_mat = ExpressionMatrixTimeSeries.from_geo_file(exp_mat_path,
-                                                        log2_transform=True,
-                                                             annotate_from_gpl=True)
+                                                       annotate_from_gpl=True,
+                                                       log2_transform=True)
     genes_of_interest = ["AT1G30100",
                         "AT1G31800",
                         "AT1G52340",
@@ -395,9 +392,7 @@ def analyse_all_go_enrichments(in_dir: Path):
 def exploratory_module_selection(input_file, modules_file):
     """Get an idea of the characteristics of the gene modules"""
     expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
-        input_file,
-        log2_transform=True,
-        annotate_from_gpl=True)
+        input_file, annotate_from_gpl=True, log2_transform=True)
     cignet_modules = Path('data/resources/cig_data/ModuleGenes_two_cols.txt')
     expr_mat_time.assign_clusters_from_cignet_file(cignet_modules, remove_dupes=True)
     expr_mat_time.show_characteristics_of_clusters()

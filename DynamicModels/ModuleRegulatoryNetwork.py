@@ -60,27 +60,6 @@ class ModuleRegulatoryNetwork:
         plt.show()
 
     @classmethod
-    def from_lpan_edge_csv(
-            cls, lpan_file_path: Path, top_rank: int = None
-    ) -> ModuleRegulatoryNetwork:
-        """Constructor to create object from lpan edge csv.
-
-        :param lpan_file_path: Path to csv output by LPAN.
-        E.g. aracne_network_edges.csv
-        :param top_rank: If provided, keep only the top_rank  number of
-        connections. I.e. the strongest one predicted by lpan.
-        """
-        some_df = pd.read_csv(lpan_file_path)
-        if top_rank:
-            some_df = some_df[some_df['rank'] < top_rank]
-        some_df['origin'] = EdgeRelation.BINDS_TO
-        a_graph = nx.from_pandas_edgelist(some_df, source='regulator',
-                                          target='target',
-                                          edge_attr='origin',
-                                          create_using=nx.DiGraph)
-        return cls(a_graph)
-
-    @classmethod
     def from_tf2_tsv(cls, in_path: Path, nr_top_hits: int | None = None,
                      q_value_cutoff: float | None = None) -> ModuleRegulatoryNetwork:
         """Create object from output of TF2Network file
@@ -403,7 +382,8 @@ class ModuleRegulatoryNetwork:
             for pair in self.graph.edges(data=True):
                 f.write(f"{pair[0]}\t{pair[1]}\t{pair[2]}\n")
 
-    def keep_only_modules_of_interest(self, expr_mat: ExpressionMatrixTimeSeries):
+    def keep_only_modules_of_interest(self,
+                                      expr_mat: ExpressionMatrixTimeSeries):
         """Only maintain nodes that belong to a module that is still in the expr_mat
 
         Used if you have filtered certain modules in the expression data, and

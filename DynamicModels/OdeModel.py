@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import logging
 import random
-import re
-from typing import Callable
 
-import networkx as nx
 import numpy as np
 from lmfit import Parameters
 from scipy.integrate._ivp.ivp import OdeResult, solve_ivp
@@ -19,16 +16,9 @@ from Formula.LinearFormula import LinearFormula
 
 class OdeModel:
     """Stores the ODEs for all modules. Can also be used to calculate next time steps."""
-
     def __init__(self,
                  formula_per_module: list[LinearFormula | NonLinearFormula],
-                 is_nonlinear: bool,
-                 old_to_new_mapping: dict[str, str] | None):
-        if old_to_new_mapping is not None:
-            raise DeprecationWarning(
-                'Modules are no longer renamed now before converting '
-                'them to an ODE'
-            )
+                 is_nonlinear: bool):
         self.formula_per_module = formula_per_module
         self.is_nonlinear = is_nonlinear
         # self.old_to_new_mapping = old_to_new_mapping
@@ -40,15 +30,6 @@ class OdeModel:
         return ('OdeModel:\n'
                 + '\n'.join([f'{formula}'
                              for formula in self.formula_per_module]))
-
-    def set_u_t(self, u_t: Callable):
-        """Set the u(t), i.e. external input function for this ODE model
-
-        :param u_t: A callable that takes the time t as input and returns
-        the value of u at that time point
-        """
-        for formula in self.formula_per_module:
-            formula.specify_u_t(u_t)
 
     @property
     def nr_params(self):
@@ -75,14 +56,6 @@ class OdeModel:
                        for _, _, origin in regulatory_directions), \
                 ('Make sure you have removed all TFs from regulatory '
                  'network and converted it to Module-Module network')
-        # # Rename all modules not needed because sbml handles it
-        # mapping_dict = {}
-        # for new_module_index, old_module_name in enumerate(sorted(list(graph))):
-        #     new_module_name = re.sub(r'\d+$',
-        #                                       str(new_module_index),
-        #                                       old_module_name)
-        #     mapping_dict[old_module_name] = new_module_name
-        # graph = nx.relabel_nodes(graph, mapping_dict)
         # Iterate over modules in lexicographic order
         for module in sorted(list(graph)):
             if nonlinear:
@@ -92,7 +65,7 @@ class OdeModel:
                 regulators = list(graph.predecessors(module))
                 formula = LinearFormula(module, regulators)
             formulas.append(formula)
-        return cls(formulas, nonlinear, None)
+        return cls(formulas, nonlinear)
 
     def compute_one_step(self, t: float, y: list[float],
                          params: dict[str, float]) -> list[float]:

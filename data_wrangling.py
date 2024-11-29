@@ -42,8 +42,6 @@ def merge_ath_annotation_for_goatools(in_path: Path,
     out_df = df_group['GO ID'].apply(lambda x: ';'.join(x))
     return out_df
 
-
-
 def parse_go_enrichment_output(in_file: Path, cutoff: float = 0.05) -> pd.DataFrame:
     """Take go enrichment output, and select only BP annotations with a fdr-corrected p-value of <0.05"""
     logging.info(f'Parsing {in_file}')
@@ -148,10 +146,7 @@ def expr_mat_from_drought(in_file_path: str, agg_method, do_log2, out_path = Non
             in_file_path, log2_transform=do_log2)
     else:
         expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
-            in_file_path,
-            log2_transform=do_log2,
-            annotate_from_gpl=True
-        )
+            in_file_path, annotate_from_gpl=True, log2_transform=do_log2)
     # TODO implement these properly at some point
     expr_mat_time.column_parser = get_info_from_gse65046
     expr_mat_time.summary_method = agg_method

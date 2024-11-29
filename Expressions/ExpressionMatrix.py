@@ -34,9 +34,8 @@ from scipy.spatial.distance import pdist, squareform
 from sklearn.decomposition import PCA
 from sklearn.metrics import mean_squared_error, silhouette_score
 
-from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
 from helpers import get_info_from_gse5628, standardize, \
-    calculate_coefficient_of_variation, calculate_qcd, do_pca, mean_bootstrap_error
+    calculate_coefficient_of_variation, calculate_qcd, mean_bootstrap_error
 
 class AggregationMethod(Enum):
     """Used to set the type of aggregation methot that is used
@@ -109,11 +108,8 @@ class ExpressionMatrix:
         return cls(df)
 
     @classmethod
-    def from_geo_file(cls, file_path: Path,
-                      array_annotation: ExpressionArrayAnnotation = None,
-                      annotate_from_gpl: bool = False,
-                      log2_transform: bool = False,
-                      name_to_drop: str = None):
+    def from_geo_file(cls, file_path: Path, annotate_from_gpl: bool = False,
+                      log2_transform: bool = False, name_to_drop: str = None):
         """From a file path, correctly parse GEO expression file and
         return ExpressionMatrix object.
 
@@ -1655,7 +1651,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             return stdevs.mean(axis=1)
         else:
             return stdevs
-
 
     def get_ci_per_cluster(self, confidence_level=.95):
         """Get confidence interval per cluster at each time point"""
