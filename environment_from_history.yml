@@ -1,0 +1,34 @@
+name: baddadan
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - yaml
+  - numpy
+  - pandas=2.2
+  - typer
+  - lmfit
+  - matplotlib
+  - scikit-learn
+  - mlflow
+  - dill
+  - scipy
+  - tqdm
+  - statannotations
+  - goatools
+  - networkx
+  - libsbml
+  - geoparse
+  - selenium
+  - qnorm
+  - python==3.10
+  - seaborn==0.11
+  - snakemake
+  - pip
+  - swig
+  - cmake
+  - openblas
+  - pip:
+      - pypesto
+      - petab
+      - amici
