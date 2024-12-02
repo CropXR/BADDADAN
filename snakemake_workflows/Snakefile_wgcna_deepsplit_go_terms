@@ -1,5 +1,5 @@
 """
-Execute from within the experiment 20 'drought' or 'heat' directory
+Execute from within the experiment 'drought' or 'heat' directory
 
 E.g. this command:
 snakemake -s ../../../../snakemake_workflows/Snakefile_wgcna_deepsplit_go_terms -r -c5 -k
@@ -9,7 +9,7 @@ from glob import glob
 
 # IDS, = glob_wildcards("random_split_by_module/{id}.csv")
 IDS, = glob_wildcards("split_by_module/{id}.csv")
-# IDS = [id for id in IDS if "ds1" in id]
+IDS = [id for id in IDS if "ds1" in id]
 
 rule target:
     # Uncomment correct line to do
@@ -74,7 +74,8 @@ rule go_annotate_from_random:
 rule go_annotate_only_DE_background:
     input:
         "split_by_module/{id}.csv",
-        lambda wildcards: glob("all_DE_genes*.txt")[0],  # Takes the first matching file
+        "all_DE_genes.txt",
+        # lambda wildcards: glob("all_DE_genes*.txt")[0],  # Takes the first matching file
         # '../../../resources/go_annotations/ATH_GO_GOSLIM_one_gene_per_line.txt',
         "../../../resources/go_annotations/tair.gaf",
     params:
@@ -88,3 +89,13 @@ rule go_annotate_only_DE_background:
         "--outfile {output} "
         "--ev_inc Experimental --ev_exc Similarity,Combinatorial,High_Throughput,Author,Curatorial,ND,IEA "
         "> {log}"
+
+rule get_de_genes:
+    input:
+        'dyntreecut_output/combined_sum_dists_wgcna_clustered_ds1.csv'
+    output:
+        "all_DE_genes.txt"
+    shell:
+        """
+        cut -f2 -d, {input} | tail -n +2 | sed 's/"//g' > {output}
+        """

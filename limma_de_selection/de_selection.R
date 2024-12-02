@@ -299,6 +299,7 @@ compare_spline_vs_normal_de_drought <- function(drought_out_path,
 }
 
 setwd('C:/Users/noord087/PycharmProjects/d3c2_project/data/experiments/25_everything_including_limma')
+
 do_drought('drought/01_input_for_limma.csv',
            'drought/02a_drought_expr_matrix_limma_filtered.csv')
 

@@ -24,6 +24,8 @@ dynamictree_on_combined_dists <- function(in_path, out_dir, yaml_path) {
   
   for (deepSplit in deepSplitList){
     
+    message(paste('Processing deepsplit', deepSplit, 'based on', in_path))
+    
     # Module identification using dynamic tree cut:
     dynamicMods = cutreeDynamic(dendro = gene_tree, distM = coexp_mat,
                                 deepSplit = deepSplit, pamRespectsDendro = TRUE,
@@ -55,26 +57,27 @@ dynamictree_on_combined_dists <- function(in_path, out_dir, yaml_path) {
   }
 }
 
-main <- function(in_dir, out_dir){
+main <- function(in_dir, out_dir, yaml_path){
   files <- list.files(path = in_dir, 
                       pattern = "*.parquet.gzip",
                       full.names = TRUE)
   if (!dir.exists(out_dir)) {dir.create(out_dir)}
   
-  yaml_config <- file.path(dirname(dirname(dirname(in_dir))), 'config.yaml')
+  # yaml_config <- file.path(dirname(dirname(in_dir)), 'config.yaml')
   
-  if (!file.exists(yaml_config)) {
-    yaml_config <- file.path(dirname(dirname(in_dir)), 'config.yaml')
-  }
+  # if (!file.exists(yaml_config)) {
+  #   yaml_config <- file.path(dirname(dirname(in_dir)), 'config.yaml')
+  # }
   
   mapply(dynamictree_on_combined_dists, 
          files,
-         MoreArgs = list(out_dir, yaml_config),
+         MoreArgs = list(out_dir, yaml_path),
          SIMPLIFY = FALSE)
 }
 
 do_drought <- function(){
   message('Processing drought')
+  # Do the jackknifes
   for (word in c('atted', 'local', 'combined_min', 'combined_sum')){
     in_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/drought/jackknifes", word)
     out_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/drought/r_output", word)
@@ -88,6 +91,7 @@ do_drought <- function(){
 
 do_heat <- function(){
   message('Processing heat')
+  # Do the jackknifes
   for (word in c('atted', 'local', 'combined_min', 'combined_sum')){
     in_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/heat/jackknifes", word)
     out_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/heat/r_output", word)
@@ -99,6 +103,15 @@ do_heat <- function(){
        "../data/experiments/18_robustness_with_wgcna_cutting/heat/r_output/full_datasets")
 }
 
-do_heat()
-do_drought()
+
+setwd('C:/Users/noord087/PycharmProjects/d3c2_project/data/experiments/25_everything_including_limma')
+
+main("drought/full_datasets", "drought/dyntreecut_output", 'drought/config.yaml')
+
+main("heat/full_datasets", "heat/dyntreecut_output", "heat/config.yaml")
+
+
+# 
+# do_heat()
+# do_drought()
 

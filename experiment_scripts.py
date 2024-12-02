@@ -35,30 +35,110 @@ from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 
 from exploring_questions import plot_module_size_distributions, \
     combine_local_distance_and_prior, similarity_matrices_local_and_atted
+from helpers import one_gene_list_file_per_cluster
 from petab_integration.petab_scripts import write_petab_files, \
     param_optimise_petab_problem
 
 
-def full_pipeline_prototype(experiment_path):
-    for treatment_name in ['drought', 'heat']:
+def full_pipeline_prototype(experiment_path: Path):
+    skip_slow_steps = False
+    for treatment_name in ['heat']:
+    # for treatment_name in ['drought']:
+    # for treatment_name in ['drought', 'heat']:
+        logging.info(f'\nDoing {treatment_name}\n')
         treatment_path = experiment_path / treatment_name
         data_params, hyper_params, experiment_params = config_preprocess(
             treatment_path)
-        expr_mat_time = expr_mat_time_factory(treatment_path,
-                                              data_params,
-                                              hyper_params)
-        expr_mat_time.save_for_limma(treatment_path / '01_input_for_limma.csv')
-        # Here: run limma
+        if not skip_slow_steps:
+            expr_mat_all_genes = expr_mat_time_factory(
+                treatment_path,
+                data_params['soft_path'],
+                hyper_params['agg_method'],
+                hyper_params['do_log2'],
+                gpl_path=data_params.get('gpl_path', None)
+            )
+            expr_mat_all_genes.save_for_limma(treatment_path / '01_input_for_limma.csv')
+
+        # ## Here: run limma script (limma_de_selection/de_selection.R) ##
+
+        # Select only the DE genes
+        de_file_path = list(treatment_path.glob('02[a_]*.csv'))
+        assert len(de_file_path) == 1
+        de_file_path = str(de_file_path[0])
+        expr_mat_time = expr_mat_time_factory(
+            treatment_path,
+            de_file_path,
+            hyper_params['agg_method'],
+            hyper_params['do_log2'],
+            gpl_path=None)
+        #
+        # # Read DE genes from limma output and get the ATTED/Merged/Local scores
+        if not skip_slow_steps:
+            save_files_for_wgcna_cutting(treatment_path, data_params, expr_mat_time)
+
+        ## Here: run wgcna cutting script (r_wgcna_dyntreecut/dyntreecut.R) ##
+
+        see_gene_module_sizes(expr_mat_time,
+                              cut_modules_path=treatment_path / 'dyntreecut_output',
+                              figure_path=treatment_path / 'figs')
+
+        skip_making_one_file_per_clust = True
+        if not skip_making_one_file_per_clust:
+            one_gene_list_file_per_cluster(
+                in_dir=treatment_path / 'dyntreecut_output',
+                out_dir=treatment_path / 'split_by_module',
+                use_for_analysis_func=lambda x: True
+            )
+
+        # Coherence
+        do_coherence_with_stat_tests(
+            in_dir=treatment_path / 'split_by_module',
+            expr_mat_time=expr_mat_time,
+            out_dir=treatment_path / 'figs'
+        )
+
+        # Also generate random clusters that have the same size as a representative of these clusters
+        if not skip_slow_steps:
+            expr_mat_time.save_random_modules_for_goa_find_enrichment(
+                wgcna_label_file=treatment_path
+                                 / 'dyntreecut_output'
+                                 / 'combined_sum_dists_wgcna_clustered_ds1.csv',
+                out_dir=treatment_path / 'split_by_module'
+            )
+
+        # Do GO enrichment
+        ### RUN SNAKEMAKE ###
+        # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
+
+        go_enrich_output_path = (
+                treatment_path
+                / 'go_outputs_exp_evidence_only_background_de_genes'
+        )
+
+        analyse_go_enrichments_find_enrichment(
+            go_enrich_output_path,
+            treatment_path / 'figs',
+            )
+
+        # ODE modelling steps
 
 
-    # Read DE genes from limma output and get the ATTED/Merged/Local coexpression
-
-    # Cut them using WGCNA for various DS cutoffs (1 and 2 probably)
-
-    # Also generate random clusters that have the same size as a representative of these clusters
-
-    # From the clusters -> Do GO enrichment, Coherence, ODE model
-
+def see_gene_module_sizes(expr_mat_time: ExpressionMatrixTimeSeries,
+                          cut_modules_path: Path,
+                          figure_path: Path):
+    out_records = []
+    for dyntreecut_file in cut_modules_path.iterdir():
+        expr_mat_time_copy = copy.deepcopy(expr_mat_time)
+        expr_mat_time_copy.assign_clusters_from_wgcna(dyntreecut_file)
+        sizes = expr_mat_time_copy.get_module_sizes()
+        method, ds_value = dyntreecut_file.name.split('_wgcna_clustered_')
+        ds_value = re.search('(?<=ds)\d+', ds_value).group()
+        for size in sizes:
+            out_records.append((size, method, ds_value))
+    df = pd.DataFrame.from_records(out_records,
+                                   columns=['module_size', 'method',
+                                            'deepsplit'])
+    plot_gene_modules_ds_size_distribution(df, figure_path)
 
 
 def figure_2_pipeline(experiment_path):
@@ -93,18 +173,22 @@ def figure_2_pipeline(experiment_path):
             tf2_out_name=None)
 
 
-def expr_mat_time_factory(folder, data_params, hyper_params):
+def expr_mat_time_factory(folder: Path,
+                          expression_path,
+                          agg_method,
+                          do_log2,
+                          gpl_path = None
+                          ) -> ExpressionMatrixTimeSeries:
     if folder.name.startswith('drought'):
         expr_mat_time = expr_mat_from_drought(
-            in_file_path=data_params['soft_path'],
-            agg_method=hyper_params['agg_method'],
-            do_log2=hyper_params['do_log2'])
+            in_file_path=expression_path,
+            agg_method=agg_method,
+            do_log2=do_log2)
     elif folder.name.startswith('heat'):
-        expr_mat_time = expr_mat_from_emexp(in_path=data_params['soft_path'],
-                                            agg_method=hyper_params[
-                                                'agg_method'],
-                                            do_log2=hyper_params['do_log2'],
-                                            gpl_path=data_params['gpl_path'])
+        expr_mat_time = expr_mat_from_emexp(in_path=expression_path,
+                                            agg_method=agg_method,
+                                            do_log2=do_log2,
+                                            gpl_path=gpl_path)
     else:
         raise NotImplementedError
     return expr_mat_time
@@ -185,8 +269,9 @@ def save_jackknife_files(experiment_path, expr_mat_time, condition_name):
 
     (atted_dist_df, atted_score,
      condition_base_path, local_dist,
-     min_dist_df, sum_dist_df) = save_files_for_wgcna_cutting(
-        condition_name, data_params, experiment_path, expr_mat_time)
+     min_dist_df, sum_dist_df) = save_files_for_wgcna_cutting(experiment_path,
+                                                              data_params,
+                                                              expr_mat_time)
 
     generate_jackknifes(atted_dist_df, atted_score, condition_base_path,
                         hyper_params, local_dist, min_dist_df, sum_dist_df)
@@ -289,15 +374,15 @@ def generate_jackknifes(atted_dist_df, atted_score, condition_base_path,
         plt.show()
 
 
-def save_files_for_wgcna_cutting(condition_name, data_params, experiment_path,
-                                 expr_mat_time):
-    condition_base_path = experiment_path / condition_name
-    for folder_name in ['figs', 'full_datasets', 'jackknifes']:
-        new_folder = condition_base_path / folder_name
+def save_files_for_wgcna_cutting(experiment_path: Path,
+                                 data_params: dict,
+                                 expr_mat_time: ExpressionMatrixTimeSeries):
+    for folder_name in ['figs', 'full_datasets']:
+        new_folder = experiment_path / folder_name
         new_folder.mkdir(parents=True, exist_ok=True)
-    # expr_mat_time = expr_mat_from_emexp(data_params['in_path'],
-    #                                       hyper_params['agg_method'],
-    #                                       hyper_params['do_log2'])
+
+    fig_folder = experiment_path / 'figs'
+
     atted_score = pd.read_parquet(data_params['atted_path'])
     atted_score = atted_score.set_index(atted_score.columns[0])
     # Make atted symmetric
@@ -312,34 +397,35 @@ def save_files_for_wgcna_cutting(condition_name, data_params, experiment_path,
     local_dist = local_dist.loc[selected_genes, selected_genes]
     atted_score = atted_score.loc[selected_genes, selected_genes]
     # Save full dists
-    local_dist.to_parquet(condition_base_path
+    local_dist.to_parquet(experiment_path
                           / 'full_datasets' / 'local_dists.parquet.gzip',
                           compression='gzip')
-    # And combined dists
-    min_dist_df = combine_local_distance_and_prior(
-        local_dist,
-        atted_score,
-        dists_out_path=(condition_base_path
-                        / 'full_datasets' / 'combined_min_dists.parquet.gzip'),
-        combo='min',
-        calculate_linkages=False,
-        plot_out_path=None,
-    )
+    # # And combined min dists -> not doing these
+    # min_dist_df = combine_local_distance_and_prior(
+    #     local_dist,
+    #     atted_score,
+    #     dists_out_path=(experiment_path
+    #                     / 'full_datasets' / 'combined_min_dists.parquet.gzip'),
+    #     combo='min',
+    #     calculate_linkages=False,
+    #     plot_out_path=fig_folder,
+    # )
     # And combined dists
     sum_dist_df = combine_local_distance_and_prior(
         local_dist,
         atted_score,
-        dists_out_path=(condition_base_path
+        dists_out_path=(experiment_path
                         / 'full_datasets' / 'combined_sum_dists.parquet.gzip'),
         combo='sum',
         calculate_linkages=False,
-        plot_out_path=None,
+        plot_out_path=fig_folder,
     )
+
     atted_dist_df = atted_score.max().max() - atted_score
-    atted_dist_df.to_parquet(condition_base_path
+    atted_dist_df.to_parquet(experiment_path
                              / 'full_datasets' / 'atted_dists.parquet.gzip',
                              compression='gzip')
-    return atted_dist_df, atted_score, condition_base_path, local_dist, min_dist_df, sum_dist_df
+    return atted_dist_df, atted_score, experiment_path, local_dist, sum_dist_df
 
 
 def wgcna_with_similarity_scores(experiment_path):
@@ -367,9 +453,9 @@ def drought_data_to_sbml(experiment_path):
 def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     # For DS and Method
     all_result_df = read_go_enrich_files_into_df(in_path)
-    plot_gene_modules_ds_size_distribution(all_result_df, out_path)
-    valid_rows = extract_only_selected_ds_row_from_df(all_result_df, in_path)
-
+    # plot_gene_modules_ds_size_distribution(all_result_df, out_path)
+    # valid_rows = extract_only_selected_ds_row_from_df(all_result_df, in_path)
+    valid_rows = all_result_df
     # Main figures
     # Fraction of modules with > 0 GO term
     at_least_one_go_term_barplot_keywords = dict(
@@ -388,7 +474,7 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     annotator = Annotator(
         ax, pairs, **at_least_one_go_term_barplot_keywords
     )
-    annotator.configure(hide_non_significant=False, test='Mann-Whitney',
+    annotator.configure(test='Mann-Whitney',
                         loc='outside')
     annotator.apply_and_annotate()
     # plt.tight_layout()
@@ -510,13 +596,13 @@ def plot_gene_modules_ds_size_distribution(all_result_df: pd.DataFrame, out_path
 
     # Remove the random clustering because not relevant for this (its size distribution is equal to the combined_sum_dists)
     all_result_df = all_result_df[all_result_df['method'] != 'random']
-    if 'drought' in out_path.parts:
-        size_pairs.extend(
-            (
-                (('2', 'local_dists'), ('1', 'combined_sum_dists')),
-                (('2', 'local_dists'), ('1', 'atted_dists')),
-            )
-        )
+    # if 'drought' in out_path.parts:
+    #     size_pairs.extend(
+    #         (
+    #             (('2', 'local_dists'), ('1', 'combined_sum_dists')),
+    #             (('2', 'local_dists'), ('1', 'atted_dists')),
+    #         )
+    #     )
     # Size distributions
     ax = sns.boxplot(
         data=all_result_df, x='module_size', hue='method',
@@ -526,10 +612,10 @@ def plot_gene_modules_ds_size_distribution(all_result_df: pd.DataFrame, out_path
         ax, size_pairs, data=all_result_df, x='module_size',
         hue='method', y='deepsplit', orient='h'
     )
-    annotator.configure(hide_non_significant=False, test='Mann-Whitney',
+    annotator.configure(test='Mann-Whitney',
                         loc='outside', text_format='star')
     annotator.apply_and_annotate()
-    plt.savefig(out_path / 'module_sizes_deepsplit_hue_is_method_boxplot.png',
+    plt.savefig(out_path / 'module_sizes_deepsplit_hue_is_method_boxplot.svg',
                 bbox_inches='tight')
     plt.close()
 
@@ -571,7 +657,7 @@ def read_go_enrich_files_into_df(in_path):
     return all_result_df
 
 
-def config_preprocess(experiment_path):
+def config_preprocess(experiment_path) -> tuple[dict, dict, dict]:
     config_path = experiment_path / 'config.yaml'
     with config_path.open('r') as f:
         config = yaml.safe_load(f)
@@ -870,9 +956,9 @@ def do_coherence_with_stat_tests(in_dir: Path,
     out_records = []
     for method in ['atted_dists', 'combined_sum_dists',
                    'local_dists', 'random']:
-        for ds_filename in ['ds1', 'ds2']:
-            if (method, ds_filename) == ('random', 'ds2'):
-                continue
+        for ds_filename in ['ds1']: #, 'ds2']:
+            # if (method, ds_filename) == ('random', 'ds2'):
+            #     continue
             expr_mat_time_copy = copy.deepcopy(expr_mat_time)
             pattern = f"{method}*{ds_filename}*"
             files = list(in_dir.glob(pattern))
@@ -886,8 +972,10 @@ def do_coherence_with_stat_tests(in_dir: Path,
                     for coherence in module_coherences]
             )
 
-    df = pd.DataFrame.from_records(out_records, columns=['method', 'deepsplit', 'coherence'])
-    df = extract_only_selected_ds_row_from_df(df, in_dir)
+    df = pd.DataFrame.from_records(out_records,
+                                   columns=['method', 'deepsplit', 'coherence']
+                                   )
+    # df = extract_only_selected_ds_row_from_df(df, in_dir)
 
     out_dir.mkdir(exist_ok=True)
     ax = sns.boxplot(data=df, y='coherence', x='method')
