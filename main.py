@@ -5,14 +5,12 @@ from pathlib import Path
 import yaml
 import mlflow
 
-from Expressions.ExpressionMatrix import ExpressionMatrix, \
-    ExpressionMatrixTimeSeries
+from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 from experiment_scripts import (module_size_pipeline, drought_data_to_sbml,
-                                figure_2_pipeline, heat_data_to_sbml, \
+                                heat_data_to_sbml, \
                                 config_preprocess, drought_from_wgcna, \
                                 wgcna_with_similarity_scores, \
-                                integrate_multiple_datasets,
                                 save_jackknife_files, \
                                 ground_truth_vs_jackknife, pypesto_from_sbml, \
                                 analyse_go_enrichments_find_enrichment,
@@ -57,16 +55,12 @@ def main():
         case '07_module_size_distribution':
             # FUll module size distributions
             module_size_pipeline(experiment_path)
-        case '08_making_fig_2_again':
-            figure_2_pipeline(experiment_path)
         case "14_drought_from_wgcna":
             _, hyper_params, _ = config_preprocess(
                 experiment_path)
             expr_mat_time, module_module = drought_from_wgcna(experiment_path)
         case "15_wgcna_with_similarity_scores":
             wgcna_with_similarity_scores(experiment_path)
-        case "17_from_multiple_experiments":
-            integrate_multiple_datasets(experiment_path)
         case "18_robustness_with_wgcna_cutting":
             data_params, hyper_params, experiment_params = config_preprocess(
                 experiment_path)

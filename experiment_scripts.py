@@ -29,8 +29,7 @@ from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import AggregationMethod, \
     ExpressionMatrixTimeSeries
 from GoEnrich.EnrichedGeneModuleGoTerms import EnrichedGeneModuleGoTerms
-from analysis_pipelines import compare_clusterings_for_ode_use, \
-    module_network_from_tf2_output
+from analysis_pipelines import module_network_from_tf2_output
 from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
 
 from exploring_questions import plot_module_size_distributions, \
@@ -140,39 +139,6 @@ def see_gene_module_sizes(expr_mat_time: ExpressionMatrixTimeSeries,
                                             'deepsplit'])
     plot_gene_modules_ds_size_distribution(df, figure_path)
 
-
-def figure_2_pipeline(experiment_path):
-    for folder in experiment_path.iterdir():
-        if not folder.name.endswith('_data') or folder.name.startswith('drought'):
-            continue
-        data_params, hyper_params, experiment_params = config_preprocess(folder)
-
-        robustness_csv_path = Path(data_params['robustness_csv'])
-        robustness_df = pd.read_csv(robustness_csv_path)
-        sns.violinplot(data=robustness_df, x='input_dists', y='robustness')
-        plt.ylim([0, 0.35])
-        dataset_name = robustness_csv_path.name.split('_')[0]
-        plt.title(dataset_name.capitalize())
-        plt.savefig(folder.parent / 'figures' / f'{dataset_name}_robustness_violinplot.svg')
-        plt.close()
-
-        expr_mat_time = expr_mat_time_factory(folder, data_params,
-                                              hyper_params)
-
-        compare_clusterings_for_ode_use(
-            expr_mat_time,
-            experiment_path=folder,
-            summed_linkage_matrix=data_params['linkage_path'],
-            atted_linkage_matrix=Path(data_params['atted_linkage_matrix']),
-            atted_path=Path(data_params['atted_path']),
-            summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
-            nr_clusters=hyper_params['nr_clusters'],
-            edge_cor_threshold=None,
-            top_nr_clusters=None,
-            tf2_in_name=None,
-            tf2_out_name=None)
-
-
 def expr_mat_time_factory(folder: Path,
                           expression_path,
                           agg_method,
@@ -239,27 +205,6 @@ def drought_from_wgcna(experiment_path):
     expr_mat_time.keep_only_modules_in_network(module_module)
 
     return expr_mat_time, module_module
-
-def integrate_multiple_datasets(experiment_path):
-    # Download some GEO here
-    expr_mat_time_supp = ExpressionMatrixTimeSeries.from_xlsx(
-        'data/raw_data/expression_datasets/GSE134945/GSE134945_readcount.xlsx')
-    expr_mat_time_supp.keep_n_most_deviating_genes(2000, plot=True)
-    # TODO THINK ABOUT TPKM NORMALISE OR SMTH?
-    # sns.clustermap(expr_mat_time_supp.get_correlation_matrix())
-    # plt.show()
-
-    # data_params, hyper_params, experiment_params = config_preprocess(
-    #     experiment_path)
-    expr_mat_time_og = expr_mat_from_drought(
-        'limma_de_selection/drought_expr_matrix_limma_filtered.csv', 'mean',
-        False)
-
-    linkage_matrices = combine_local_distance_and_prior(
-        expr_mat_time_og.get_distance_matrix(absolute_dist=False),
-        expr_mat_time_supp.get_distance_matrix(absolute_dist=False),
-        out_path=experiment_path,
-        combo='sum')
 
 
 
@@ -713,7 +658,7 @@ def from_expr_mat_time_to_ode(data_params, experiment_path, expr_mat_time,
     expr_mat_time.get_ci_per_cluster()
     # # TO get gene list
     # [print(i) for i in expr_mat_time.get_genes_per_cluster()[75]]
-    expr_mat_time.do_genewise_normalisation()
+    expr_mat_time.do_genewise_min_max_scaling()
     expr_mat_time.get_ci_per_cluster()
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
@@ -844,7 +789,7 @@ def pypesto_from_sbml(experiment_path, condition):
         expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
 
     if hyper_params['do_gene_normalisation']:
-        expr_mat_time.do_genewise_normalisation()
+        expr_mat_time.do_genewise_min_max_scaling()
 
     write_petab_files(
         expr_mat_time,
