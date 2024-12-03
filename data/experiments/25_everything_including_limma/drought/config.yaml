@@ -1,0 +1,12 @@
+experiment_data:
+  name: 'Drought model fit ODE with PyPesto'
+  description: ""
+  summary_of_result: ""
+data:
+  soft_path: 'data/raw_data/expression_datasets/gse65046/GSE65046_family.soft'
+  atted_path: "data/raw_data/atted_ii/all_cor_one_matrix_renamed.parquet.gzip"
+hyperparams:
+  agg_method: 'mean'
+  do_log2: False
+  r_min_module_size: 20
+  r_deep_split: [1, 2]

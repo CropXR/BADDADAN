@@ -4,7 +4,6 @@ from copy import deepcopy
 from itertools import combinations
 from pathlib import Path
 from random import sample
-from typing import Dict
 import re
 
 import dill as pickle
@@ -18,7 +17,6 @@ import amici.petab.simulator
 import yaml
 import seaborn as sns
 import matplotlib.pyplot as plt
-from matplotlib import pyplot as plt
 from scipy.spatial.distance import squareform
 from sklearn.metrics import adjusted_rand_score
 from scipy.cluster.hierarchy import linkage, fcluster
@@ -26,146 +24,147 @@ import amici
 from tqdm import tqdm
 from statannotations.Annotator import Annotator
 
-from DynamicModels.OdeFitterMultipleDatasets import OdeFitterMultipleDatasets
-from DynamicModels.OdeLocalParameters import OdeLocalParameters
 
 from DynamicModels.OdeModel import OdeModel
-from DynamicModels.helper_scripts_for_fitting import fit_multiple_fitters
 from Expressions.ExpressionMatrix import AggregationMethod, \
     ExpressionMatrixTimeSeries
 from GoEnrich.EnrichedGeneModuleGoTerms import EnrichedGeneModuleGoTerms
-from analysis_pipelines import explore_emtab_375, compare_clusterings_for_ode_use, \
-    module_network_from_tf2_output, infer_intermodular_network
-from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
+from analysis_pipelines import module_network_from_tf2_output
+from data_wrangling import expr_mat_from_heat, expr_mat_from_drought
 
 from exploring_questions import plot_module_size_distributions, \
     combine_local_distance_and_prior, similarity_matrices_local_and_atted
-from helpers import parse_string_input_data
+from helpers import one_gene_list_file_per_cluster
 from petab_integration.petab_scripts import write_petab_files, \
     param_optimise_petab_problem
 
 
-def prefilter_genes_experiment(experiment_path):
-
-    data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
-
-    expr_mat_time_drought = expr_mat_from_drought(
-        data_params['limma_drought_out_path'],
-        hyper_params['agg_method'],
-        hyper_params['do_log2_drought'])
-
-    expr_mat_time_heat = expr_mat_from_emexp(
-        data_params['limma_heat_out_path'],
-        hyper_params['agg_method'],
-        hyper_params['do_log2_heat'],
-        data_params['heat_gpl_path']
-    )
-
-    cv_list = []
-    df_list = []
-
-
-    expr_mat_time_heat
-    #
-    #
-    # for expr_mat_time, condition_name in zip(
-    #         [expr_mat_time_drought, expr_mat_time_heat],
-    #         ['drought', 'heat']
-    # ):
-    #     expr_mat_time.scatterplot_of_two_per_gene_stats(
-    #         'std', 'cond_rmsd',
-    #         plotting_func=sns.jointplot,
-    #         title = f'{condition_name} _std_rmsd_no cutoff ({len(expr_mat_time.df)} genes)',
-    #         out_path=experiment_path /  f'{condition_name}_no_cutoff.png')
-    #
-    #     # expr_mat_time.scatterplot_of_two_per_gene_stats(
-    #     #     'mean', 'std',
-    #     #     plotting_func=sns.jointplot,
-    #     #     title = f'{condition_name} no cutoff ({len(expr_mat_time.df)} genes)',
-    #     #     out_path=experiment_path /  f'{condition_name}_no_cutoff.png')
-    #
-    #     for cutoff in [0.25, 0.5, 0.75]:
-    #         temp_expr_mat = deepcopy(expr_mat_time)
-    #         # std_series = temp_expr_mat.plot_per_gene_std()
-    #         temp_expr_mat.keep_genes_above_percentile_score(
-    #             cutoff,
-    #             method='cond_rmsd')
-    #         # temp_expr_mat.scatterplot_of_two_per_gene_stats(
-    #         #     'mean', 'std',
-    #         #     plotting_func=sns.jointplot,
-    #         #     title=f'{condition_name} cutoff={cutoff} perc. ({len(temp_expr_mat.df)} genes)',
-    #         #     out_path=experiment_path / f'{condition_name}_{cutoff}_cutoff.png'
-    #         # )
-    #         # mad_series = expr_mat_time.plot_per_gene_mad()
-    #         # cv_serie = expr_mat_time._calculate_gene_variation('cv')
-    #         # cv_list.append(cv_serie)
-    #         #
-    #         # expr_mat_time.scatterplot_of_two_per_gene_stats('std', 'qcd')
-    #         # expr_mat_time.scatterplot_of_two_per_gene_stats('mean', 'qcd')
-    #         # expr_mat_time.scatterplot_of_two_per_gene_stats('std', 'mad')
-    #         # expr_mat_time.scatterplot_of_two_per_gene_stats('std', 'cv')
-    #         # expr_mat_time.scatterplot_of_two_per_gene_stats('std', 'qcd')
-    #         # Median should roughly be good cutoff?
-    #         # Or only remove lower 25th percentile?
-    #         # Look at distribution of MAD
-    #
-    #
-    # # cv_list[0].name = 'drought'
-    # # cv_list[1].name = 'heat'
-    # # merged_df = pd.concat(cv_list, axis=1, join='inner')
-    # # sns.histplot(merged_df)
-    # # print()
-
-
-
-
-
-
-def figure_2_pipeline(experiment_path):
-    for folder in experiment_path.iterdir():
-        if not folder.name.endswith('_data') or folder.name.startswith('drought'):
-            continue
-        data_params, hyper_params, experiment_params = config_preprocess(folder)
-
-        robustness_csv_path = Path(data_params['robustness_csv'])
-        robustness_df = pd.read_csv(robustness_csv_path)
-        sns.violinplot(data=robustness_df, x='input_dists', y='robustness')
-        plt.ylim([0, 0.35])
-        dataset_name = robustness_csv_path.name.split('_')[0]
-        plt.title(dataset_name.capitalize())
-        plt.savefig(folder.parent / 'figures' / f'{dataset_name}_robustness_violinplot.svg')
-        plt.close()
-
-        if folder.name.startswith('drought'):
-            expr_mat_time = expr_mat_from_drought(
-                in_file_path=data_params['soft_path'],
-                agg_method=hyper_params['agg_method'],
-                do_log2=hyper_params['do_log2']
+def full_pipeline_prototype(experiment_path: Path):
+    skip_slow_steps = False
+    # for treatment_name in ['heat']:
+    # for treatment_name in ['drought']:
+    for treatment_name in ['drought', 'heat']:
+        logging.info(f'Doing {treatment_name}')
+        treatment_path = experiment_path / treatment_name
+        data_params, hyper_params, experiment_params = config_preprocess(
+            treatment_path)
+        if not skip_slow_steps:
+            expr_mat_all_genes = expr_mat_time_factory(
+                treatment_path,
+                data_params['soft_path'],
+                hyper_params['agg_method'],
+                hyper_params['do_log2'],
+                gpl_path=data_params.get('gpl_path', None)
             )
-        elif folder.name.startswith('heat'):
-            expr_mat_time = expr_mat_from_emexp(
-                in_path=data_params['soft_path'],
-                agg_method=hyper_params['agg_method'],
-                do_log2=hyper_params['do_log2'],
-                gpl_path=data_params['gpl_path']
+            expr_mat_all_genes.save_for_limma(treatment_path / '01_input_for_limma.csv')
+
+        # ## Here: run limma script (limma_de_selection/de_selection.R) ##
+        # continue
+        # Select only the DE genes
+        de_file_path = list(treatment_path.glob('02[a_]*.csv'))
+        assert len(de_file_path) == 1
+        de_file_path = str(de_file_path[0])
+        expr_mat_time = expr_mat_time_factory(
+            treatment_path,
+            de_file_path,
+            hyper_params['agg_method'],
+            hyper_params['do_log2'],
+            gpl_path=None)
+        #
+        expr_mat_time.merge_biological_samples()
+        # # Read DE genes from limma output and get the ATTED/Merged/Local scores
+        if not skip_slow_steps:
+            save_files_for_wgcna_cutting(treatment_path, data_params, expr_mat_time)
+        ## Here: run wgcna cutting script (r_wgcna_dyntreecut/dyntreecut.R) ##
+        # continue
+        see_gene_module_sizes(expr_mat_time,
+                              cut_modules_path=treatment_path / 'dyntreecut_output',
+                              figure_path=treatment_path / 'figs')
+
+        skip_making_one_file_per_clust = False
+        if not skip_making_one_file_per_clust:
+            one_gene_list_file_per_cluster(
+                in_dir=treatment_path / 'dyntreecut_output',
+                out_dir=treatment_path / 'split_by_module',
+                use_for_analysis_func=lambda x: True
             )
-        else:
-            raise NotImplementedError
+        skip_making_random_modules = False
+        # Also generate random clusters that have the same size as a representative of these clusters
+        if not skip_making_random_modules:
+            expr_mat_time.save_random_modules_for_goa_find_enrichment(
+                wgcna_label_file=treatment_path
+                                 / 'dyntreecut_output'
+                                 / 'combined_sum_dists_wgcna_clustered_ds1.csv',
+                out_dir=treatment_path / 'split_by_module'
+            )
+        # Coherence
+        do_coherence_with_stat_tests(
+            in_dir=treatment_path / 'split_by_module',
+            expr_mat_time=expr_mat_time,
+            out_dir=treatment_path / 'figs'
+        )
 
-        compare_clusterings_for_ode_use(
-            expr_mat_time,
-            experiment_path=folder,
-            summed_linkage_matrix=data_params['linkage_path'],
-            atted_linkage_matrix=Path(data_params['atted_linkage_matrix']),
-            atted_path=Path(data_params['atted_path']),
-            summed_dist_matrix_path=Path(data_params['dist_matrix_path']),
-            nr_clusters=hyper_params['nr_clusters'],
-            edge_cor_threshold=None,
-            top_nr_clusters=None,
-            tf2_in_name=None,
-            tf2_out_name=None)
+        # continue
+        # Do GO enrichment
+        ### RUN SNAKEMAKE ###
+        # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
+
+        go_enrich_output_path = (
+                treatment_path
+                / 'go_outputs_exp_evidence_only_background_de_genes'
+        )
+
+        analyse_go_enrichments_find_enrichment(
+            go_enrich_output_path,
+            treatment_path / 'figs',
+            )
+
+        with mlflow.start_run(
+                description=experiment_params['description']):
+            mlflow.log_params(data_params)
+            mlflow.log_params(hyper_params)
+            mlflow.set_tags(experiment_params)
+            mlflow.log_artifact(
+                str(experiment_path / treatment_name / 'figs'))
+        # ODE modelling steps
 
 
+def see_gene_module_sizes(expr_mat_time: ExpressionMatrixTimeSeries,
+                          cut_modules_path: Path,
+                          figure_path: Path):
+    out_records = []
+    for dyntreecut_file in cut_modules_path.iterdir():
+        expr_mat_time_copy = copy.deepcopy(expr_mat_time)
+        expr_mat_time_copy.assign_clusters_from_wgcna(dyntreecut_file)
+        sizes = expr_mat_time_copy.get_module_sizes()
+        method, ds_value = dyntreecut_file.name.split('_wgcna_clustered_')
+        ds_value = re.search('(?<=ds)\d+', ds_value).group()
+        for size in sizes:
+            out_records.append((size, method, ds_value))
+    df = pd.DataFrame.from_records(out_records,
+                                   columns=['module_size', 'method',
+                                            'deepsplit'])
+    plot_gene_modules_ds_size_distribution(df, figure_path)
+
+def expr_mat_time_factory(folder: Path,
+                          expression_path: str,
+                          agg_method: AggregationMethod,
+                          do_log2: bool,
+                          gpl_path = None
+                          ) -> ExpressionMatrixTimeSeries:
+    if folder.name.startswith('drought'):
+        expr_mat_time = expr_mat_from_drought(
+            in_file_path=expression_path,
+            agg_method=agg_method,
+            do_log2=do_log2)
+    elif folder.name.startswith('heat'):
+        expr_mat_time = expr_mat_from_heat(in_path=expression_path,
+                                           agg_method=agg_method,
+                                           do_log2=do_log2,
+                                           gpl_path=gpl_path)
+    else:
+        raise NotImplementedError
+    return expr_mat_time
 
 
 def module_size_pipeline(experiment_path):
@@ -182,9 +181,9 @@ def drought_from_wgcna(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
     wgcna_module_assignment = data_params['wgcna_module_assignment_path']
-    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_drought(data_params['in_path'],
-                                          hyper_params['agg_method'],
-                                          hyper_params['do_log2'])
+    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_drought(
+        data_params['in_path'], hyper_params['agg_method'],
+        hyper_params['do_log2'])
     expr_mat_time.assign_clusters_from_wgcna(wgcna_module_assignment)
     expr_mat_time.plot_cluster_sizes()
 
@@ -214,96 +213,29 @@ def drought_from_wgcna(experiment_path):
 
     return expr_mat_time, module_module
 
-def integrate_multiple_datasets(experiment_path):
-    # Download some GEO here
-    expr_mat_time_supp = ExpressionMatrixTimeSeries.from_xlsx(
-        'data/raw_data/expression_datasets/GSE134945/GSE134945_readcount.xlsx')
-    expr_mat_time_supp.keep_n_most_deviating_genes(2000, plot=True)
-    # TODO THINK ABOUT TPKM NORMALISE OR SMTH?
-    # sns.clustermap(expr_mat_time_supp.get_correlation_matrix())
-    # plt.show()
-
-    # data_params, hyper_params, experiment_params = config_preprocess(
-    #     experiment_path)
-    expr_mat_time_og = expr_mat_from_drought(
-        'limma_de_selection/drought_expr_matrix_limma_filtered.csv',
-                      'mean',
-                      False)
-
-    linkage_matrices = combine_local_distance_and_prior(
-        expr_mat_time_og.get_distance_matrix(absolute_dist=False),
-        expr_mat_time_supp.get_distance_matrix(absolute_dist=False),
-        out_path=experiment_path,
-        combo='sum')
 
 
-
-def generate_dists_for_wgcna_cutting(experiment_path, expr_mat_time, condition_name):
+def save_jackknife_files(experiment_path, expr_mat_time, condition_name):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
 
-    condition_base_path = experiment_path / condition_name
+    (atted_dist_df, atted_score,
+     condition_base_path, local_dist,
+     min_dist_df, sum_dist_df) = save_files_for_wgcna_cutting(experiment_path,
+                                                              data_params,
+                                                              expr_mat_time)
 
-    for folder_name in ['figs', 'full_datasets', 'jackknifes']:
-        new_folder = condition_base_path / folder_name
-        new_folder.mkdir(parents=True, exist_ok=True)
-    # expr_mat_time = expr_mat_from_emexp(data_params['in_path'],
-    #                                       hyper_params['agg_method'],
-    #                                       hyper_params['do_log2'])
-    atted_score = pd.read_parquet(data_params['atted_path'])
-    atted_score = atted_score.set_index(atted_score.columns[0])
+    generate_jackknifes(atted_dist_df, atted_score, condition_base_path,
+                        hyper_params, local_dist, min_dist_df, sum_dist_df)
 
-    # Make atted symmetric
-    a = squareform(atted_score, checks=False)
-    a = squareform(a)
-    atted_score = pd.DataFrame(a,
-                               index=atted_score.index,
-                               columns=atted_score.columns)
 
-    local_dist = expr_mat_time.get_distance_matrix(absolute_dist=False)
-
-    # Merge them to be the same set
-    selected_genes = atted_score.index.intersection(local_dist.index)
-    local_dist = local_dist.loc[selected_genes, selected_genes]
-    atted_score = atted_score.loc[selected_genes, selected_genes]
-
-    # Save full dists
-    local_dist.to_parquet(condition_base_path
-                          / 'full_datasets' / 'local_dists.parquet.gzip',
-                               compression='gzip')
-
-    # And combined dists
-    min_dist_df = combine_local_distance_and_prior(
-        local_dist,
-        atted_score,
-        dists_out_path=(condition_base_path
-                        / 'full_datasets' / 'combined_min_dists.parquet.gzip'),
-        combo='min',
-        calculate_linkages=False,
-        plot_out_path=None,
-    )
-
-    # And combined dists
-    sum_dist_df = combine_local_distance_and_prior(
-        local_dist,
-        atted_score,
-        dists_out_path=(condition_base_path
-                        / 'full_datasets' / 'combined_sum_dists.parquet.gzip'),
-        combo='sum',
-        calculate_linkages=False,
-        plot_out_path=None,
-    )
-
-    atted_dist_df = atted_score.max().max() - atted_score
-    atted_dist_df.to_parquet(condition_base_path
-                             / 'full_datasets' / 'atted_dists.parquet.gzip',
-                                   compression='gzip')
-
+def generate_jackknifes(atted_dist_df, atted_score, condition_base_path,
+                        hyper_params, local_dist, min_dist_df, sum_dist_df):
     out_records = []
     do_debug_thing = False
     # Save jackknifed distance matrices
     for i in range(hyper_params['nr_jackknifes']):
-        logging.info(f'Iteration {i+1}')
+        logging.info(f'Iteration {i + 1}')
         rand_index = sample(
             local_dist.index.tolist(),
             round(hyper_params['subset_size'] * len(local_dist.index.tolist()))
@@ -315,15 +247,15 @@ def generate_dists_for_wgcna_cutting(experiment_path, expr_mat_time, condition_n
         local_jackknife_dir = condition_base_path / 'jackknifes' / 'local'
         local_jackknife_dir.mkdir(exist_ok=True)
         subset_local_df.to_parquet(local_jackknife_dir
-                               / f'jackknife_{i}.parquet.gzip',
+                                   / f'jackknife_{i}.parquet.gzip',
                                    compression='gzip')
 
         atted_jackknife_dir = condition_base_path / 'jackknifes' / 'atted'
         atted_jackknife_dir.mkdir(exist_ok=True)
         subset_atted_dist_df = subset_atted_df.max().max() - subset_atted_df
         subset_atted_dist_df.to_parquet(atted_jackknife_dir
-                               / f'jackknife_{i}.parquet.gzip',
-                               compression='gzip')
+                                        / f'jackknife_{i}.parquet.gzip',
+                                        compression='gzip')
 
         min_jackknife_dir = condition_base_path / 'jackknifes' / 'combined_min'
         min_jackknife_dir.mkdir(exist_ok=True)
@@ -370,8 +302,7 @@ def generate_dists_for_wgcna_cutting(experiment_path, expr_mat_time, condition_n
                 return pd.DataFrame(clustering, index=dist.index,
                                     columns=['colors'])
 
-
-            for nclust in range(1,500, 50):
+            for nclust in range(1, 500, 50):
                 out_records.append(
                     ('local', debug_func(
                         subset_local_df, local_dist, nclust=nclust),
@@ -388,12 +319,65 @@ def generate_dists_for_wgcna_cutting(experiment_path, expr_mat_time, condition_n
                     ('atted', debug_func(
                         subset_atted_dist_df, atted_dist_df, nclust=nclust),
                      nclust))
-
     if do_debug_thing:
         plot_df = pd.DataFrame.from_records(out_records,
                                             columns=['dist', 'ari', 'nclust'])
         sns.lineplot(data=plot_df, x='nclust', y='ari', hue='dist')
         plt.show()
+
+
+def save_files_for_wgcna_cutting(experiment_path: Path,
+                                 data_params: dict,
+                                 expr_mat_time: ExpressionMatrixTimeSeries):
+    for folder_name in ['figs', 'full_datasets']:
+        new_folder = experiment_path / folder_name
+        new_folder.mkdir(parents=True, exist_ok=True)
+
+    fig_folder = experiment_path / 'figs'
+
+    atted_score = pd.read_parquet(data_params['atted_path'])
+    atted_score = atted_score.set_index(atted_score.columns[0])
+    # Make atted symmetric
+    a = squareform(atted_score, checks=False)
+    a = squareform(a)
+    atted_score = pd.DataFrame(a,
+                               index=atted_score.index,
+                               columns=atted_score.columns)
+    local_dist = expr_mat_time.get_distance_matrix(absolute_dist=False)
+    # Merge them to be the same set
+    selected_genes = atted_score.index.intersection(local_dist.index)
+    local_dist = local_dist.loc[selected_genes, selected_genes]
+    atted_score = atted_score.loc[selected_genes, selected_genes]
+    # Save full dists
+    local_dist.to_parquet(experiment_path
+                          / 'full_datasets' / 'local_dists.parquet.gzip',
+                          compression='gzip')
+    # # And combined min dists -> not doing these
+    # min_dist_df = combine_local_distance_and_prior(
+    #     local_dist,
+    #     atted_score,
+    #     dists_out_path=(experiment_path
+    #                     / 'full_datasets' / 'combined_min_dists.parquet.gzip'),
+    #     combo='min',
+    #     calculate_linkages=False,
+    #     plot_out_path=fig_folder,
+    # )
+    # And combined dists
+    sum_dist_df = combine_local_distance_and_prior(
+        local_dist,
+        atted_score,
+        dists_out_path=(experiment_path
+                        / 'full_datasets' / 'combined_sum_dists.parquet.gzip'),
+        combo='sum',
+        calculate_linkages=False,
+        plot_out_path=fig_folder,
+    )
+
+    atted_dist_df = atted_score.max().max() - atted_score
+    atted_dist_df.to_parquet(experiment_path
+                             / 'full_datasets' / 'atted_dists.parquet.gzip',
+                             compression='gzip')
+    return atted_dist_df, atted_score, experiment_path, local_dist, sum_dist_df
 
 
 def wgcna_with_similarity_scores(experiment_path):
@@ -421,9 +405,9 @@ def drought_data_to_sbml(experiment_path):
 def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     # For DS and Method
     all_result_df = read_go_enrich_files_into_df(in_path)
-    plot_gene_modules_ds_size_distribution(all_result_df, out_path)
-    valid_rows = extract_only_selected_ds_row_from_df(all_result_df, in_path)
-
+    # plot_gene_modules_ds_size_distribution(all_result_df, out_path)
+    # valid_rows = extract_only_selected_ds_row_from_df(all_result_df, in_path)
+    valid_rows = all_result_df
     # Main figures
     # Fraction of modules with > 0 GO term
     at_least_one_go_term_barplot_keywords = dict(
@@ -442,11 +426,11 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     annotator = Annotator(
         ax, pairs, **at_least_one_go_term_barplot_keywords
     )
-    annotator.configure(hide_non_significant=False, test='Mann-Whitney',
+    annotator.configure(test='Mann-Whitney',
                         loc='outside')
     annotator.apply_and_annotate()
     # plt.tight_layout()
-    plt.savefig(out_path / 'fraction_at_least_one_go_term_selected_ds.png',
+    plt.savefig(out_path / 'fraction_at_least_one_go_term_selected_ds.svg',
                 bbox_inches='tight')
     plt.close()
 
@@ -454,7 +438,7 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     ax =  sns.boxplot(data=valid_rows, y='semantic_similarity', x='method')
     annotator.new_plot(ax, pairs, data=valid_rows, y='semantic_similarity', x='method')
     annotator.apply_and_annotate()
-    plt.savefig(out_path / 'semantic_similarity_boxplot.png', bbox_inches='tight')
+    plt.savefig(out_path / 'semantic_similarity_boxplot.svg', bbox_inches='tight')
     plt.close()
 
     # Other figures
@@ -462,18 +446,18 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     annotator.new_plot(ax, pairs, data=valid_rows, y='nr_enriched_go_terms',
                           x='method')
     annotator.apply_and_annotate()
-    plt.savefig(out_path / 'go_terms_per_module_boxplot_selected_ds.png', bbox_inches='tight')
+    plt.savefig(out_path / 'go_terms_per_module_boxplot_selected_ds.svg', bbox_inches='tight')
     plt.close()
 
     # Of these GO-terms, what is their semantic similarity?
     sns.scatterplot(data=valid_rows, x='nr_enriched_go_terms',
                     y='semantic_similarity', hue='method')
-    plt.savefig(out_path / 'scatterplot_enriched_go_terms_semantic_sim_selected_ds.png')
+    plt.savefig(out_path / 'scatterplot_enriched_go_terms_semantic_sim_selected_ds.svg')
     plt.close()
 
     sns.jointplot(data=valid_rows, x='nr_enriched_go_terms',
                     y='semantic_similarity', hue='method')
-    plt.savefig(out_path / 'jointplot_enriched_go_terms_semantic_sim_selected_ds.png')
+    plt.savefig(out_path / 'jointplot_enriched_go_terms_semantic_sim_selected_ds.svg')
     plt.close()
 
     # # Everything linked to module sizes just skipping now # #
@@ -564,13 +548,13 @@ def plot_gene_modules_ds_size_distribution(all_result_df: pd.DataFrame, out_path
 
     # Remove the random clustering because not relevant for this (its size distribution is equal to the combined_sum_dists)
     all_result_df = all_result_df[all_result_df['method'] != 'random']
-    if 'drought' in out_path.parts:
-        size_pairs.extend(
-            (
-                (('2', 'local_dists'), ('1', 'combined_sum_dists')),
-                (('2', 'local_dists'), ('1', 'atted_dists')),
-            )
-        )
+    # if 'drought' in out_path.parts:
+    #     size_pairs.extend(
+    #         (
+    #             (('2', 'local_dists'), ('1', 'combined_sum_dists')),
+    #             (('2', 'local_dists'), ('1', 'atted_dists')),
+    #         )
+    #     )
     # Size distributions
     ax = sns.boxplot(
         data=all_result_df, x='module_size', hue='method',
@@ -580,10 +564,10 @@ def plot_gene_modules_ds_size_distribution(all_result_df: pd.DataFrame, out_path
         ax, size_pairs, data=all_result_df, x='module_size',
         hue='method', y='deepsplit', orient='h'
     )
-    annotator.configure(hide_non_significant=False, test='Mann-Whitney',
+    annotator.configure(test='Mann-Whitney',
                         loc='outside', text_format='star')
     annotator.apply_and_annotate()
-    plt.savefig(out_path / 'module_sizes_deepsplit_hue_is_method_boxplot.png',
+    plt.savefig(out_path / 'module_sizes_deepsplit_hue_is_method_boxplot.svg',
                 bbox_inches='tight')
     plt.close()
 
@@ -625,38 +609,7 @@ def read_go_enrich_files_into_df(in_path):
     return all_result_df
 
 
-def fit_ode_drought_data(experiment_path, expr_mat_time, hyper_params,
-                         module_module):
-    my_ode = OdeModel.construct_from_regulatory_network(module_module,
-                                                        nonlinear=True)
-    # These are parameters that are different between the two datasets
-    # They are the initial values, and the drought treatment (i.e. u_t function)
-    custom_params = dict()
-    small_constant = 1
-    control_name = 'control'
-    drought_name = 'drought'
-    # custom_params[drought_name] = OdeLocalParameters(
-    #      u_t=(lambda t: small_constant*(100 - t * (100 - 20) / (13 * 24))))
-    #
-    # custom_params[control_name] = OdeLocalParameters(
-    #      u_t=(lambda t: small_constant*(90 - t * 0)))
-    custom_params[control_name] = OdeLocalParameters(
-        u_t=(lambda t: 0))
-    custom_params[drought_name] = OdeLocalParameters(
-        u_t=(lambda t: small_constant * t / (13 * 24)))
-    best_ode_fit = fit_ode_to_two_datasets(
-        my_ode,
-        expr_mat_time,
-        custom_params=custom_params,
-        nr_ode_iters=hyper_params['nr_ode_iters'],
-        experiment_path=experiment_path,
-        param_limit=hyper_params.get('param_limit')
-    )
-    with (experiment_path / 'pickled_ode_model.pkl').open('wb') as f:
-        pickle.dump(best_ode_fit, f)
-
-
-def config_preprocess(experiment_path):
+def config_preprocess(experiment_path) -> tuple[dict, dict, dict]:
     config_path = experiment_path / 'config.yaml'
     with config_path.open('r') as f:
         config = yaml.safe_load(f)
@@ -670,46 +623,12 @@ def config_preprocess(experiment_path):
     )
     return data_params, hyper_params, experiment_params
 
-def drought_with_string_db(experiment_path):
-    # Load the config file
-    data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
-    expr_mat_time = expr_mat_from_drought(data_params['in_path'],
-                                          hyper_params['agg_method'],
-                                          hyper_params['do_log2'])
-    abs_dists = False
-    skip_stuff = False
-    # expr_mat_time.do_genewise_normalisation()
-    expr_mat_time.keep_n_most_deviating_genes(2000)
-    if not skip_stuff:
-        prior_score = parse_string_input_data()
-        linkage_matrices = combine_local_distance_and_prior(
-            expr_mat_time.get_distance_matrix(absolute_dist=abs_dists),
-            prior_score,
-            out_path=experiment_path,
-            combo='sum')
-    print()
-
-
-def exploratory_heat_data_scripts(experiment_path):
-    data_params, hyper_params, experiment_params = config_preprocess(experiment_path)
-    explore_emtab_375(experiment_path=experiment_path,
-                      in_file_path=Path(data_params['soft_path']),
-                      summed_linkage_matrix=data_params['linkage_path'],
-                      summed_dist_matrix_path=Path(
-                          data_params['dist_matrix_path']),
-                      nr_clusters=hyper_params['nr_clusters'],
-                      do_log2=hyper_params['do_log2'],
-                      agg_method=hyper_params['agg_method'],
-                      gpl_path=data_params['gpl_path'])
-
-
 def heat_data_to_sbml(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
-    expr_mat_time = expr_mat_from_emexp(data_params['in_path'],
-                                        hyper_params['agg_method'],
-                                        hyper_params['do_log2'],
-                                        )
+    expr_mat_time = expr_mat_from_heat(data_params['in_path'],
+                                       hyper_params['agg_method'],
+                                       hyper_params['do_log2'])
 
     my_ode = from_expr_mat_time_to_ode(data_params, experiment_path,
                                        expr_mat_time, hyper_params)
@@ -743,9 +662,11 @@ def from_expr_mat_time_to_ode(data_params, experiment_path, expr_mat_time,
         tf2_output_path=tf2_out_path,
         plotting_path=experiment_path)
     # expr_mat_time.plot_clusters_over_time()
+    expr_mat_time.get_ci_per_cluster()
     # # TO get gene list
     # [print(i) for i in expr_mat_time.get_genes_per_cluster()[75]]
-    expr_mat_time.do_genewise_normalisation()
+    expr_mat_time.do_genewise_min_max_scaling()
+    expr_mat_time.get_ci_per_cluster()
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
         tf2_out_path,
@@ -763,65 +684,6 @@ def from_expr_mat_time_to_ode(data_params, experiment_path, expr_mat_time,
     my_ode = OdeModel.construct_from_regulatory_network(module_module,
                                                         nonlinear=True)
     return my_ode
-
-
-def fit_ode_to_two_datasets(
-        my_ode: OdeModel,
-        my_time_series_expressions: ExpressionMatrixTimeSeries,
-        nr_ode_iters: int,
-        custom_params: Dict,
-        nr_fitters: int = 5,
-        experiment_path: Path|None = None,
-        param_limit: float = .1,
-        gradient_matching: bool = False,
-        nr_time_points_interpolation = None
-        ):
-
-    # condition_names = list(custom_params.keys())
-    # # Step uno
-    # my_fitter = OdeFitterMultipleDatasets(my_ode,
-    #                                       my_time_series_expressions,
-    #                                       custom_params,
-    #                                       param_limit=param_limit)
-    # my_fitter.fit(max_iter=400)
-    # my_fitter.calculate_current_best_fits()
-
-    # # Make the =0 params where we think is appropriate
-    # new_params = Parameters()
-    # for param_name in my_fitter.master_params:
-    #     if 'k_' in param_name:
-    #         new_params.add(param_name, value=22)
-    #     # elif 'delta' in param_name:
-    #     #     new_params.add(param_name, value=0, vary=True)
-    #     elif param_name in ['gamma_1', 'gamma_2']:
-    #         new_params.add(param_name, value=0, vary=False)
-    #     elif param_name == 'gamma_0':
-    #         new_params.add(param_name, value=0.005, vary=False)
-    #
-    # my_fitter.master_params = new_params
-
-    # my_fitter.fit(max_iter=500)
-    # my_fitter.calculate_current_best_fits()
-    # my_fitter.all_fitters[0].plot_hill_equation_range()
-
-    raise DeprecationWarning('Not used anymore')
-    multiple_fitters = [
-        OdeFitterMultipleDatasets(
-            my_ode, my_time_series_expressions,
-            custom_params,
-            param_limit=param_limit,
-            do_spline_smooth=gradient_matching,
-            nr_time_points_interpolation=nr_time_points_interpolation
-        ) for _ in range(nr_fitters)]
-
-    best_fit = fit_multiple_fitters(multiple_fitters, nr_ode_iters)
-    best_fit.calculate_current_best_fits(data_point_overlay=True,
-                                         use_err_bars=True,
-                                         out_path=experiment_path / 'final_ode_fit.svg')
-    return best_fit
-    # multiple_fitter.fit(100)
-    # best_fits = multiple_fitter.calculate_current_best_fits()
-
 
 def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
     data_params, hyper_params, experiment_params = config_preprocess(
@@ -934,7 +796,7 @@ def pypesto_from_sbml(experiment_path, condition):
         expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
 
     if hyper_params['do_gene_normalisation']:
-        expr_mat_time.do_genewise_normalisation()
+        expr_mat_time.do_genewise_min_max_scaling()
 
     write_petab_files(
         expr_mat_time,
@@ -978,147 +840,6 @@ def pypesto_from_sbml(experiment_path, condition):
         mlflow.log_metric('fval', result_dict['fval'])
         # mlflow.log_artifact(
         #     str(experiment_path / 'figures'))
-
-    # # Everything below is amici-specific and not needed at the moment
-    #
-    # omit_sbml_converstion = False
-    # if not omit_sbml_converstion:
-    #     sbml_importer = amici.SbmlImporter(data_params['sbml_path'],
-    #                                        show_sbml_warnings=True)
-    #
-    #     observables = amici.assignmentRules2observables(
-    #         sbml_importer.sbml,  # the libsbml model object
-    #         filter_function=lambda variable: variable.getId().startswith(
-    #             "observable_")
-    #     )
-    #     # print(observables)
-    #
-    #     # Sometimes get AttributeError: 'PosixPath' object has no attribute 'startswith'?
-    #     sbml_importer.sbml2amici(model_name, model_dir,
-    #                              constant_parameters=constant_parameters,
-    #                              observables=observables,
-    #                              compute_conservation_laws=False)
-    #
-    # # load the generated module
-    # model_module = amici.import_model_module(model_name, model_dir)
-    # # Create Model instance
-    # model = model_module.getModel()
-    #
-    # print("Model parameters:", list(model.getParameterIds()))
-    # print("Model outputs:   ", list(model.getObservableIds()))
-    # print("Model states:    ", list(model.getStateIds()))
-    #
-    # # Now get data to do the fit
-    # print()
-    # # Get expr mat time
-    # # TODO later on put this all in a class again
-    # if expr_mat_time.aggregation_method == AggregationMethod.EIGENGENE:
-    #     expressions: pd.DataFrame = expr_mat_time.df.groupby('cluster_id').apply(
-    #         expr_mat_time._get_eigengene_over_time)
-    #     # Add constant value to eigengenes
-    #     expressions = abs(expressions.min().min()) + expressions
-    # elif expr_mat_time.aggregation_method == AggregationMethod.MEAN:
-    #     expressions: pd.DataFrame = expr_mat_time.df.groupby('cluster_id').apply(
-    #         expr_mat_time._get_mean_over_time)
-    #     # dataset.plot_clusters_over_time()
-    # else:
-    #     raise NotImplementedError
-    #
-    # for word in expr_mat_time.condition_names:
-    #     # Deepcopy first?
-    #     # dataset.keep_only_samples_with_string(word)
-    #     valid_index = expressions.columns.get_level_values(
-    #         'condition').isin(['zero', word])
-    #     data = expressions.loc[:, valid_index]
-    #     # Ensure that time is increasing
-    #     data = data.sort_index(axis=1, level='time')
-    #     # Convert time into hours
-    #     time = data.columns.get_level_values('time') / pd.to_timedelta(1,
-    #                                                                    unit='h')
-    #     assert len(data.columns) == len(time)
-    #     data = data.to_numpy()
-    #     time = time.to_numpy()
-    #
-    #     # set timepoints for which we want to simulate the model
-    #     model.setTimepoints(time)
-    #
-    #     # # Here: set u_t to correct value
-    #     # TODO handle this correctly perhaps -> now kinda works for temp
-    #     # TODO Check if different results for different temps
-    #     custom_param_dict = {'21': 0,
-    #                          '32': 1}
-    #     model.setFixedParameterById('temp', custom_param_dict[word])
-    #
-    #     # set parameters to optimal values found in the benchmark collection
-    #     # model.setParameterScale(amici.ParameterScaling.log10)
-    #     nr_params = len(model.getParameterIds())
-    #     # IF all zero, does not throw error
-    #     # model.setParameters(np.zeros(nr_params))
-    #
-    #     # model.setParameters(np.random.standard_normal(nr_params)/10)
-    #     some_params = np.random.rand(nr_params)/10
-    #     model.setParameters(some_params)
-    #
-    #     # TODO is this needed? \/
-    #     # model.setInitialStates()
-    #
-    #     # Create solver instance
-    #     solver = model.getSolver()
-    #     # Run simulation using model parameters from the benchmark collection and default solver options
-    #     rdata = amici.runAmiciSimulation(model, solver)
-    #
-    #     plot_observable_trajectories(rdata)
-    #     plt.show()
-    #
-    #     plt.plot(rdata.by_id('u_t'))
-    #     plt.show()
-    #
-    #
-    #     edata = amici.ExpData(
-    #         data.shape[0],  # number of observables
-    #         0,  # number of event outputs
-    #         0,  # maximum number of events
-    #         time,  # timepoints
-    #     )
-    #     # set observed data
-    #     for i in range(data.shape[0]):
-    #         edata.setObservedData(data[i,:], i)
-    #
-    #     rdata = amici.runAmiciSimulation(model, solver, edata)
-    #
-    #     print(f"chi2 value using AMICI: {rdata['chi2']}")
-    #
-    #     # we make some more adjustments to our model and the solver
-    #     model.requireSensitivitiesForAllParameters()
-    #
-    #     solver.setSensitivityMethod(amici.SensitivityMethod.forward)
-    #     solver.setSensitivityOrder(amici.SensitivityOrder.first)
-    #
-    #     objective = pypesto.AmiciObjective(
-    #         amici_model=model, amici_solver=solver, edatas=[edata],
-    #         max_sensi_order=1
-    #     )
-    #
-    #     # the generic objective call
-    #     print(f"Objective value: {objective(some_params)}")
-    #     # a call returning the AMICI data as well
-    #     obj_call_with_dict = objective(some_params, return_dict=True)
-    #     print(
-    #         f'Chi^2 value of the same parameters: {obj_call_with_dict["rdatas"][0]["chi2"]}'
-    #     )
-    #
-    #     # So we can get objective function now, just have to proceed with that
-    #     n_starts = 20  # usually a value >= 100 should be used
-    #     engine = pypesto.engine.MultiProcessEngine()
-    #     result = optimize.minimize(
-    #         problem=problem,
-    #         optimizer=optimizer,
-    #         n_starts=n_starts,
-    #         startpoint_method=startpoint_method,
-    #         engine=engine,
-    #         options=opt_options,
-    #     )
-
 
 def simulated_data_pypesto(petab_problem, model_folder):
     # Do simulated data
@@ -1187,9 +908,9 @@ def do_coherence_with_stat_tests(in_dir: Path,
     out_records = []
     for method in ['atted_dists', 'combined_sum_dists',
                    'local_dists', 'random']:
-        for ds_filename in ['ds1', 'ds2']:
-            if (method, ds_filename) == ('random', 'ds2'):
-                continue
+        for ds_filename in ['ds1']: #, 'ds2']:
+            # if (method, ds_filename) == ('random', 'ds2'):
+            #     continue
             expr_mat_time_copy = copy.deepcopy(expr_mat_time)
             pattern = f"{method}*{ds_filename}*"
             files = list(in_dir.glob(pattern))
@@ -1203,8 +924,10 @@ def do_coherence_with_stat_tests(in_dir: Path,
                     for coherence in module_coherences]
             )
 
-    df = pd.DataFrame.from_records(out_records, columns=['method', 'deepsplit', 'coherence'])
-    df = extract_only_selected_ds_row_from_df(df, in_dir)
+    df = pd.DataFrame.from_records(out_records,
+                                   columns=['method', 'deepsplit', 'coherence']
+                                   )
+    # df = extract_only_selected_ds_row_from_df(df, in_dir)
 
     out_dir.mkdir(exist_ok=True)
     ax = sns.boxplot(data=df, y='coherence', x='method')

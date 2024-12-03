@@ -16,12 +16,7 @@ library(ggplot2)
 # install.packages("VennDiagram")
 library(VennDiagram)
 
-# DROUGHT FIRST AND SCREW THE FUNCTIONS I'LL JUST COPY PASTE THE CODE :O
-do_drought <- function(){
-  drought_path = 'drought_expr_matrix.csv'
-  drought_out_path = 'drought_expr_matrix_limma_filtered.csv'
-  
-  
+do_drought <- function(drought_path, drought_out_path){
   df = read.csv(drought_path, header=TRUE, row.names=1)
   
   # Do some limma checks to see if samples are alright
@@ -80,8 +75,6 @@ do_drought <- function(){
   colnames(gene_series) <- 'Expression'
   gene_series <- cbind(gene_series, targets)
   
-  
-  
   # Create the plot
   p <- ggplot(gene_series, aes(x = Time, y = Expression, color = Condition)) +
     geom_point() +
@@ -103,11 +96,7 @@ do_drought <- function(){
   # Cols are samples, rows are genes, values are expression values in csv
 }
 
-do_drought_spline <- function(){
-  drought_path = 'drought_expr_matrix.csv'
-  drought_out_path = 'drought_expr_matrix_limma_spline_filtered.csv'
-  
-  
+do_drought_spline <- function(drought_path, drought_out_path){
   df = read.csv(drought_path, header=TRUE, row.names=1)
   
   # Do some limma checks to see if samples are alright
@@ -156,19 +145,43 @@ do_drought_spline <- function(){
   # Do some limma checks to see if samples are alright
   plotMA(out_df)
   plotMDS(out_df)
+  
+  
+  # Test plotting a gene
+  gene_series <- t(df['AT1G55760',])
+  gene_series <- as.data.frame(gene_series)
+  colnames(gene_series) <- 'Expression'
+  gene_series <- cbind(gene_series, targets)
+  
+  # Create the plot
+  p <- ggplot(gene_series, aes(x = Time, y = Expression, color = Condition)) +
+    geom_point() +
+    labs(title = "Expression Over Time", x = "Time", y = "Expression") +
+    theme_minimal()
+  print(p)
+  
+  
+  # Now plot the spline
+  investigate_series <- gene_series[targets$'Condition' == 'control',]
+  nat_spline <- ns(targets[targets$'Condition' == 'control',]$Time, df=5)
+  spline_model <- lm(Expression~nat_spline, data=investigate_series)
+  plot(Expression~Time, data=investigate_series)
+  points(investigate_series$Time, predict(spline_model), col='red')
+  
+  investigate_series <- gene_series[targets$'Condition' == 'drought',]
+  nat_spline <- ns(targets[targets$'Condition' == 'drought',]$Time, df=5)
+  spline_model <- lm(Expression~nat_spline, data=investigate_series)
+  plot(Expression~Time, data=investigate_series)
+  points(investigate_series$Time, predict(spline_model), col='red')
+  
+  
 }
 
 
-
-do_heat <- function(){
-  heat_path = 'heat_expr_matrix.csv'
-  heat_out_path = 'heat_expr_matrix_limma_filtered.csv'
-  heat_target_path = 'heat_sample_metadata.csv'
+do_heat <- function(heat_path, heat_out_path, heat_target_path){
   df = read.csv(heat_path, header=TRUE, row.names=1)
-  df = log2(df)
-  
+
   plotMDS(df, cex=.5)
-  
   
   # Read sample annotations
   heat_targets_df <- read.csv(heat_target_path)
@@ -282,12 +295,8 @@ do_heat <- function(){
   
 }
 
-compare_spline_vs_normal_de_drought <- function(){
-  drought_out_path = 'drought_expr_matrix_limma_filtered.csv'
-  drought_out_spline_path = 'drought_expr_matrix_limma_spline_filtered.csv'
-  
-
-  
+compare_spline_vs_normal_de_drought <- function(drought_out_path,
+                                                drought_out_spline_path){
   # Read the two CSV files
   df1 <- read.csv(drought_out_path, row.names = 1)
   df2 <- read.csv(drought_out_spline_path, row.names = 1)
@@ -316,15 +325,19 @@ compare_spline_vs_normal_de_drought <- function(){
   # Display the Venn Diagram
   grid.newpage()
   grid.draw(venn.plot)
-  
-  
 }
 
+setwd('C:/Users/noord087/PycharmProjects/d3c2_project/data/experiments/25_everything_including_limma')
 
-do_drought()
+do_drought('drought/01_input_for_limma.csv',
+           'drought/02a_drought_expr_matrix_limma_filtered.csv')
 
-do_heat()
+do_heat('heat/01_input_for_limma.csv', 
+        'heat/02_heat_expr_matrix_limma_filtered.csv',
+        '../../raw_data/expression_datasets/emtab375/heat_sample_metadata.csv')
 
-do_drought_spline()
+do_drought_spline('drought/01_input_for_limma.csv',
+                  'drought/02b_drought_expr_matrix_limma_spline_filtered.csv')
 
-compare_spline_vs_normal_de_drought()
+compare_spline_vs_normal_de_drought('drought/02a_drought_expr_matrix_limma_filtered.csv',
+                                    'drought/02b_drought_expr_matrix_limma_spline_filtered.csv')

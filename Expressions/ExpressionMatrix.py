@@ -34,9 +34,7 @@ from scipy.spatial.distance import pdist, squareform
 from sklearn.decomposition import PCA
 from sklearn.metrics import mean_squared_error, silhouette_score
 
-from Expressions.ExpressionArrayAnnotation import ExpressionArrayAnnotation
-from helpers import get_info_from_gse5628, standardize, \
-    calculate_coefficient_of_variation, calculate_qcd, do_pca, mean_bootstrap_error
+from helpers import calculate_coefficient_of_variation, calculate_qcd, mean_bootstrap_error
 
 class AggregationMethod(Enum):
     """Used to set the type of aggregation methot that is used
@@ -46,12 +44,13 @@ class AggregationMethod(Enum):
     EIGENGENE = 'eigengene'
     MEAN = 'mean'
 
-class ExpressionMatrix:
-    # Default prefixes to use when exporting to LPAN rscript files
+class ExpressionMatrixTimeSeries:
+    # Default prefixes to use when exporting to files
     tf_prefix = 'TF_'
     module_prefix = 'MODULE'
 
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame,
+                 aggregation_method: AggregationMethod = AggregationMethod.MEAN):
         """Create expression matrix directly from Pandas dataframe
 
         :param df: Dataframe which contains gene expressions for various
@@ -64,12 +63,11 @@ class ExpressionMatrix:
         self.has_been_clustered = False
         self.column_parser: Callable = None
         # TODO declare these from the start?
-        self.phenotype_dict = None
         # Before doing PCA for eigengene analysis, always do
         # mean centering + scaling
         self.scale_before_pca = True
         # Can be mean or eigengene
-        self.aggregation_method: AggregationMethod = AggregationMethod.MEAN
+        self.aggregation_method = aggregation_method
         self.condition_names = None
 
     def __repr__(self):
@@ -83,7 +81,7 @@ class ExpressionMatrix:
         return cls._from_df_to_object(df, gpl_path, log2_transform)
 
     @classmethod
-    def from_csv(cls, file_path: Path, log2_transform: bool = False,
+    def from_csv(cls, file_path: Path | str, log2_transform: bool = False,
                  sep: str = ',', gpl_path: str = None):
         """Create ExpressionMatrix from csv with genes in row and expression per sample in col
 
@@ -98,7 +96,7 @@ class ExpressionMatrix:
         return cls._from_df_to_object(df, gpl_path, log2_transform)
 
     @classmethod
-    def _from_df_to_object(cls, df, gpl_path, log2_transform):
+    def _from_df_to_object(cls, df: pd.DataFrame, gpl_path: str, log2_transform: bool):
         """From a dataframe, construct ExpressionMatrix object"""
         if log2_transform:
             df = np.log2(df)
@@ -109,11 +107,8 @@ class ExpressionMatrix:
         return cls(df)
 
     @classmethod
-    def from_geo_file(cls, file_path: Path,
-                      array_annotation: ExpressionArrayAnnotation = None,
-                      annotate_from_gpl: bool = False,
-                      log2_transform: bool = False,
-                      name_to_drop: str = None):
+    def from_geo_file(cls, file_path: str, annotate_from_gpl: bool = False,
+                      log2_transform: bool = False, name_to_drop: str = None):
         """From a file path, correctly parse GEO expression file and
         return ExpressionMatrix object.
 
@@ -130,7 +125,7 @@ class ExpressionMatrix:
                               provide AFFX as a name to drop,
                               because all control probes contain this name.
         """
-        gse = GEOparse.get_GEO(filepath=str(file_path), silent=True)
+        gse = GEOparse.get_GEO(filepath=file_path, silent=True)
         # Merge all samples into one dataframe
         df = gse.pivot_samples("VALUE")
         # Probe ID must be uppercase
@@ -138,8 +133,6 @@ class ExpressionMatrix:
         if name_to_drop:
             logging.info(f'Dropping all probes that contain {name_to_drop}')
             df = df.loc[df.index.map(lambda x: name_to_drop not in x), :]
-        assert not (annotate_from_gpl and array_annotation), \
-            "Only provide one way of converting from probe ID to gene names"
 
         if annotate_from_gpl:
             assert len(gse.gpls) == 1, "GSE contains more than one platform?"
@@ -147,23 +140,6 @@ class ExpressionMatrix:
             gpl_object = sorted(gse.gpls.values())[0]
             gpl_table = gpl_object.table
             df = cls._do_gpl_annotation(gpl_table, df)
-
-        elif array_annotation:
-            # Get gene names based on ExpressionAnnotation object
-            logging.info('Converting probe names to genes...')
-            new_indices = df.index.map(array_annotation.probe_to_agi)
-            # Count how many probe names were not mapped to a gene by the
-            # annotation file, i.e. their name did not change.
-            unmapped_probes = new_indices.intersection(df.index)
-
-            logging.info(
-                f'Could not find annotation of {len(unmapped_probes)} probes '
-                f'({len(unmapped_probes) / len(df.index):.2%}). '
-                f'Proceeding with their original names')
-            if len(unmapped_probes) < 10:
-                for probe in unmapped_probes:
-                    logging.info(probe)
-            df.index = new_indices
 
         if log2_transform:
             df = np.log2(df)
@@ -191,20 +167,6 @@ class ExpressionMatrix:
         # Remove old probe ID column
         df = df.drop('ID', axis=1)
         return df
-
-    def concat_to_expression_matrix(
-            self, new_expression_matrix: ExpressionMatrix,
-            keys: list[str]):
-        """Concatenates a second expression matrix to this expression matrix
-         to enable clustering on multiple experiments.
-
-        :param new_expression_matrix: The expression matrix to be concatenated.
-        :param keys: The names to be used for the columns in the
-            concatenated expression matrix. I.e. shorthand names for
-            the experiments.
-        """
-        both_dfs = pd.concat([self.df, new_expression_matrix.df], axis=1, keys=keys)
-        self.df = both_dfs
 
     def plot_corr_distribution(self, out_path: Path = None):
         """Plot the distribution of correlations between all genes,
@@ -253,30 +215,6 @@ class ExpressionMatrix:
             for pair in pairs:
                 f.write(f"{pair[0]}\t{pair[1]}\t{pair[2]}\n")
 
-    def remove_condition_from_expression_matrix(self, key: str):
-        """Removes a specified condition from the expression matrix.
-
-        :param key: The condition to be removed.
-        :raises AssertionError: If the expression matrix does not have
-                                multiple levels in the columns.
-        """
-        assert self.df.columns.nlevels > 1, """Seems there are not multiple 
-            levels in the columns. I.e. not multiple conditions"""
-
-        # Columns where top index matches
-        columns_to_drop = self.df.columns[self.df.columns.get_level_values(0) == key]
-        self.df = self.df.drop(columns=columns_to_drop, axis=1)
-
-        # Temporarily remove cluster_id
-        cluster_id = self.df.cluster_id
-        self.df = self.df.drop(columns='cluster_id', axis=1)
-
-        # If only one top level is left, just go to normal index again
-        if len(set(self.df.columns.get_level_values(0))) == 1:
-            self.df = self.df.droplevel(0, axis=1)
-        # Re-add cluster_id
-        self.df['cluster_id'] = cluster_id
-
     def get_sample_names(self) -> np.array:
         """Returns all names of samples"""
         return self.df.columns.to_numpy()
@@ -320,82 +258,8 @@ class ExpressionMatrix:
             plt.savefig(out_path)
         plt.close()
 
-    def quantile_normalize(self, ref_mappings: ExpressionMatrix | None = None):
-        if ref_mappings is None:
-            # Get rid of duplicates
-            self.df = self.df[~self.df.index.duplicated(keep='first')]
-            # For train dataset just do complete normalisation
-            self.df = qnorm.quantile_normalize(self.df)
-        else:
-            reference_df = ref_mappings.df.copy()
-            # remove duplicates
-            reference_df = reference_df[~reference_df.index.duplicated(keep='first')]
-
-            mutual_genes = set(self.df.index) & set(reference_df.index)
-            self.df = self.df[self.df.index.isin(mutual_genes)]
-            # Get mean values for overlapping genes, and use these to infer values
-            reference_df = reference_df[reference_df.index.isin(mutual_genes)]
-
-            my_mappings = reference_df.loc[self.df.index].mean(axis=1)
-            # For test dataset map onto mean values that were calculated from train dataset
-            self.df = qnorm.quantile_normalize(self.df, target=my_mappings)
-
-    def to_expressionmatrix_training(self):
-        assert type(self) != ExpressionMatrixTraining, 'Is already an ExpressionMatrixTraining object. Conversion is pointless.'
-        return ExpressionMatrixTraining(self.df)
-
     def save_for_limma(self, out_path: Path):
         self.df.to_csv(out_path)
-
-    def save_expression_to_txt(self, file_name: Path, do_standardize=True):
-        """Save the expression values to txt.
-
-        File is formatted so the expressions
-        can be analysed by FLAME (https://code.google.com/archive/p/flame-clustering/source/default/source).
-        I.e. the first row describes the number of rows and columns, and
-        items in every row are seperated by a space.
-
-        :parameter file_name: Path on which to save the txt output file
-        """
-        nr_rows, nr_cols = self.df.shape
-        first_line = f'{nr_rows} {nr_cols}\n'
-
-        with file_name.open('w+') as f:
-            f.write(first_line)
-
-        df = self.df.copy()
-        # Save all the gene names
-        gene_names_with_index = df.index.to_series(
-            index=[i for i in range(len(df))])
-
-        # Standardize (if needed) and save the dataframe
-        normalized_df = standardize(df, axis=1) if do_standardize else df
-        normalized_df.to_csv(file_name, sep=' ', header=False, index=False,
-                             mode='a')
-        return gene_names_with_index.to_dict()
-
-    def assign_clusters_based_on_already_clustered_expr_mat(
-            self, clustered_expressions: ExpressionMatrixTimeSeries) -> None:
-        """Assign clustering to this expression matrix from another
-        ExpressionMatrix where the genes have already been clustered.
-
-        Also drops all genes from this df that are not mentioned in
-        the clustering.
-
-        :param clustered_expressions: ExpressionMatrix which contains
-        clustering of genes.
-        """
-        assert (not self.has_been_clustered
-                and clustered_expressions.has_been_clustered)
-        assert 'cluster_id' not in self.df.columns
-        # TODO speedups here?
-        assigned_modules = self.df.index.map(
-            lambda x: clustered_expressions.get_cluster_per_gene().get(x))
-        inference_df = self.df.assign(cluster_id=assigned_modules)
-        self.df = inference_df.dropna(subset='cluster_id')
-        self.has_been_clustered = True
-        assert (self.get_gene_names().sort()
-                == clustered_expressions.get_gene_names().sort())
 
     def assign_clusters_from_tf2_input(self, tf2_input_path: Path,
                                        overwrite: bool):
@@ -409,109 +273,6 @@ class ExpressionMatrix:
         """
         mapping_df = pd.read_csv(tf2_input_path, sep=' ', names=['cluster_id','gene_name'], index_col='gene_name')
         self._apply_cluster_mapping_from_df(mapping_df, overwrite=overwrite)
-
-    def assign_clusters_from_jordi_input(self, input_file_jordi, drop_duplicates=False):
-        df = pd.read_csv(input_file_jordi)
-        sub_df_list = []
-        # Take every second column from the dataframe
-        for i in range(0, df.shape[1], 2):
-            series = df.iloc[:, i]
-            module_id = int(re.search(r'_\d_', series.name).group()[1])
-            sub_df = series.to_frame(name='gene_name')
-            # Make all gene names capitalized
-            sub_df['gene_name'] = sub_df['gene_name'].str.capitalize()
-            sub_df['cluster_id'] = module_id
-            sub_df_list.append(sub_df)
-
-        mapping_df = pd.concat(sub_df_list, axis=0)
-        mapping_df = mapping_df.set_index('gene_name')
-        if drop_duplicates:
-            mapping_df = mapping_df[~mapping_df.index.duplicated(keep='first')]
-        self._apply_cluster_mapping_from_df(mapping_df)
-
-    def assign_clusters_from_cignet_file(self, cignet_mapping: Path, remove_dupes=True):
-        df = pd.read_csv(cignet_mapping, sep='\t', names=['cluster_id','gene_name'], skiprows=1)
-        if remove_dupes:
-            # TODO handle double mappings properly
-            df = df.drop_duplicates(subset='gene_name')
-        df = df.set_index('gene_name')
-        self._apply_cluster_mapping_from_df(df)
-
-    def assign_clusters_from_linkage_matrix(self,
-                                            linkage_matrix_path: Path,
-                                            nr_clusters: int,
-                                            distance_matrix_path: Path):
-        """Used when you have a precalculated linkage matrix in a .npy file
-        and get clusters
-
-        :param linkage_matrix_path: Path to linkage matrix
-                                    output by scipy linkage
-        :param nr_clusters: Nr of clusters
-        :param distance_matrix_path: Path to matrix containing correlations. Matrix
-                           should contain gene names, and be the matrix from
-                           which the linkage matrix was calculated. It is used
-                           to link the linkage matrix back to the gene names
-        """
-        linkage_matrix = np.load(linkage_matrix_path)
-        # assert len(linkage_matrix) == len(self.df-1), f"""
-        #     Size of linkage matrix ({len(linkage_matrix) = }), is not equal to
-        #     size of expression matrix - 1 ({len(self.df) - 1 = })
-        # """
-        do_optimise = False
-        cluster_nrs = [i for i in range(2,10)] + [i for i in range(10, len(self.df), 10)]
-
-        if do_optimise:
-
-            out_list = []
-            dist_matrix = pd.read_parquet(distance_matrix_path)
-            for n_cluster in cluster_nrs:
-                logging.info(f'{n_cluster} clusters being evalueated')
-                clustering = fcluster(linkage_matrix,
-                                      n_cluster,
-                             'maxclust')
-                score = silhouette_score(dist_matrix, clustering, metric='precomputed')
-                out_list.append((n_cluster, score))
-            df = pd.DataFrame.from_records(out_list,
-                                           columns=['n_cluster', 'score'])
-            sns.lineplot(data=df, x='n_cluster', y='score')
-            plt.show()
-            nr_clusters = df.loc[df['score'].idxmax()]['n_cluster']
-        self._cluster_from_linkage_matrix(linkage_matrix, nr_clusters, distance_matrix_path)
-
-    def _cluster_from_linkage_matrix(self, linkage_matrix: np.ndarray,
-                                     n_cluster: int,
-                                     original_atted_matrix_path: Path):
-        """Internal use for going from linkage matrix to assigning clusters
-
-        :param linkage_matrix: Path to linkage matrix
-                                    output by scipy linkage
-        :param n_cluster: Max nr of clusters, real number of clusters could be
-                          slightly lower due to tree cutting
-        :param original_atted_matrix_path: Path to matrix containing atted correlations. Matrix
-                           should contain gene names, and be the matrix from
-                           which the linkage matrix was calculated. It is used
-                           to link the linkage matrix back to the gene names
-        """
-        clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
-        # Make clustering be 0-based instead of 1-based
-        clustering = clustering - 1
-        if original_atted_matrix_path.name.endswith('.csv'):
-            og_df = pd.read_csv(original_atted_matrix_path, usecols=[0],
-                                index_col=0)
-        elif original_atted_matrix_path.name.endswith('.parquet.gzip'):
-            og_df = pd.read_parquet(original_atted_matrix_path)
-            og_df = og_df.iloc[:,0:1]
-            # Check if all indices are gene names
-            if og_df.index.dtype == 'int64':
-                og_df = og_df.set_index(og_df.columns[0])
-            assert all(og_df.index.str.startswith("AT")), "Could not infer gene names?!"
-        else:
-            raise NotImplementedError
-        og_df = og_df.assign(cluster_id=clustering)
-        # Just making sure that we only keep the cluster ID column
-        og_df = og_df.iloc[:, og_df.columns == 'cluster_id']
-
-        self._apply_cluster_mapping_from_df(og_df)
 
 
     def _apply_cluster_mapping_from_df(self, mapping_df: pd.DataFrame,
@@ -542,19 +303,9 @@ class ExpressionMatrix:
         self.df = new_df
         self.has_been_clustered = True
 
-
-class ExpressionMatrixTraining(ExpressionMatrix):
-    """Can be created from ExpressionMatrix by command like:
-
-    my_expression_matrix = ExpressionMatrix.from_geo(some_path)
-    training_df = ExpressionMatrixTraining(my_expression_matrix.df)
-
-    """
     def extract_module_expressions(self, n_cluster: int,
-                                   for_static_predictions = False,
-                                   do_plotting: bool = False,
-                                   random_clustering: bool = False
-                                   ) -> pd.DataFrame:
+                                   for_static_predictions=False,
+                                   do_plotting: bool = False) -> pd.DataFrame:
         """Get mean expression per gene module based on
         clustering of expression correlation. And return as dataframe.
 
@@ -568,10 +319,7 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         # Make sure clustering has been performed
         if not self.has_been_clustered:
             logging.info('Not clustered yet, performing clustering now')
-            if random_clustering:
-                self._do_random_clustering(n_cluster)
-            else:
-                self.do_hierachical_clustering(n_cluster, do_plotting=do_plotting)
+            self.do_hierachical_clustering(n_cluster, do_plotting=do_plotting)
         else:
             logging.info('Already clustered, will not perform clustering again')
         match self.aggregation_method:
@@ -764,15 +512,6 @@ class ExpressionMatrixTraining(ExpressionMatrix):
         self.df = self.df.assign(cluster_id=clustering)
         self.has_been_clustered = True
 
-    def _do_random_clustering(self, n_cluster: int = 2) -> None:
-        """Assign genes to random clusters. Used for testing the null hypothesis"""
-        # n_cluster+1 because numpy upper limit excludes that integer
-        self.df['cluster_id'] = np.random.randint(1, n_cluster+1,
-                                                  len(self.df))
-        self.has_been_clustered = True
-
-
-class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
     @classmethod
     def from_simulated_data(cls, sim_data: OdeResult):
         """Create df where each gene is just representative of one module,
@@ -788,16 +527,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         created_object.has_been_clustered = True
 
         return created_object
-
-    def keep_only_shoot(self, ignore_cluster_id_col=True) -> None:
-        """Keep only columns that originate from shoot"""
-        if ignore_cluster_id_col:
-            col_mask = [col for col in self.df.columns
-                        if 'Shoot' in col or col == 'cluster_id']
-        else:
-            col_mask = [col for col in self.df.columns
-                        if 'Shoot' in col]
-        self.df = self.df[col_mask]
 
     def plot_clusters_over_time(self,
                                 plot_units: bool = False,
@@ -880,29 +609,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         #         sns.lineplot(self.phenotype_dict[key])
         #         plt.show()
 
-    def _corr_to_phenotypes(self, one_group_df: pd.DataFrame) -> float:
-        """Correlate eigengene of module to phenotype, to see if module can be
-         used to predict a phenotype abundance.
-
-        Only applied to one dataframe, so call in the form of a
-        df.groupby().apply() context
-
-        :param one_group_df: Dataframe that contains expressions of one module
-        :return: absolute correlation value
-        """
-        assert self.column_parser is not None, 'Explicitly provide a column_parser first'
-        expressions = self._aggregate_module_expressions_one_group(
-            one_group_df)
-        expressions = expressions.reset_index()
-        logging.warning("Can only correlate to one phenotype at the moment")
-        for phenotype, metabolite_values in self.phenotype_dict.items():
-            sub_df = metabolite_values.merge(expressions,
-                                             on=['time', 'condition'])
-            corr_matrix = sub_df.iloc[:, -2:].corr()
-            corr = corr_matrix.iloc[1,0]
-            # TODO handle multiple phenotypes
-            return abs(corr)
-
     def plot_per_gene_mad(self) -> pd.Series:
         """Plot per gene mean absolute deviation across samples"""
         mad_series = self._calculate_per_gene_statistic('mad')
@@ -941,61 +647,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         else:
             plt.show()
         return merged_df
-
-    def keep_genes_above_deviation_cutoff(
-            self, cutoff: float = None,
-            method: Literal['std', 'mad', 'qcd'] = 'std'
-    ) -> None:
-        """Remove non-differentially expressed (de) genes.
-
-        :param method: How to determine variation between samples:
-                        std: standard deviation
-                        mad: mean absolute deviation
-                        qcd: quantile coefficient of dispersion
-        :param cutoff: Minimum standard deviation between samples
-                           for a gene to be included. Default: 1.0
-        """
-        variation = self._calculate_per_gene_statistic(method)
-        # Only keep genes that are above the cutoff
-        self.df = self.df[variation > cutoff]
-
-    def keep_genes_above_percentile_score(
-            self, quantile: float = None,
-            method = 'std'
-    ) -> None:
-        """Remove non-differentially expressed (de) genes.
-
-        :param method: How to determine variation between samples:
-                        std: standard deviation
-                        mad: mean absolute deviation
-                        qcd: quantile coefficient of dispersion
-        :param quantile: Quantile cutoff to select (e.g. to remove lowest 25%
-                         use .25)
-        """
-        variation = self._calculate_per_gene_statistic(method)
-        # Only keep genes that are above the cutoff
-        cutoff = variation.quantile(quantile)
-        self.df = self.df[variation > cutoff]
-
-    def keep_n_most_deviating_genes(self, n_max: int = None,
-                                    method: Literal['std', 'mad', 'cv', 'qcd'] = 'std',
-                                    plot=False) -> None:
-        """Remove non-differentially expressed (de) genes.
-
-        :param method: How to determine variation between samples:
-                        std: standard deviation
-                        mad: mean absolute deviation
-                        cv: coefficient of variation
-        :param n_max: Number of genes to keep. E.g. 1000 will give you the
-            top 1000 genes with highest variation between samples.
-        """
-        variation = self._calculate_per_gene_statistic(method)
-        sorted_genes = variation.sort_values(ascending=False)
-        if plot:
-            sns.lineplot(sorted_genes.head(10000).to_list())
-            plt.show()
-        subset_genes = sorted_genes.head(n_max)
-        self.df = self.df.loc[subset_genes.index]
 
     def _calculate_per_gene_statistic(
             self,
@@ -1159,13 +810,11 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         temp_df = self.df.copy()
         temp_df.columns = pd.MultiIndex.from_tuples(
             column_tuples, names=['sample_name', 'time', 'condition', 'replicate'])
-        my_grouping = temp_df.groupby(['time', 'condition'], axis=1)
+        my_grouping = temp_df.T.groupby(['time', 'condition'])
         # Keep original sample names, even after grouping by time
-        # (needed for compatibility) TODO with what?
-        # TODO handle the 'ZERO' case for gse65046
         sample_names = [v[0][0] for (_, v)
                         in my_grouping.groups.items()]
-        merged_samples = my_grouping.mean()
+        merged_samples = my_grouping.mean().T
         merged_samples.columns = sample_names
         if self.has_been_clustered:
             self.df = pd.concat([merged_samples, clustering_list], axis=1)
@@ -1222,15 +871,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         with out_path.open('w+') as f:
             f.writelines(lines)
 
-    def add_phenotypes(self, in_dict: Dict[str, pd.Series]):
-        """Provide phenotypes for this expressionmatrix, to see if modules are
-        correlated to a phenotype
-
-        :param in_dict: dictionary that maps name of certain phenotype (key)
-                        to its measured value at each time point
-        """
-        self.phenotype_dict = in_dict
-
     def get_correlation(self, module_index: int, tf_name: str,
                         plot: bool = False, method: str = 'pearson') -> float:
         """Calculate the correlation between eigengene of a module and a
@@ -1270,32 +910,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             plt.show()
         corr =  tf_expressions.corr(module_expressions, method=method)
         return corr
-
-    def show_characteristics_of_clusters(self):
-        """Plot how the clusters behave in the dataset
-
-        Shows:
-            - the percentage of explained variance of the first PC to measure
-              expression coherence
-            - Size of the cluster
-            - How much its expression changes over time
-            - Median expression of genes in module to see if it is switched on
-        """
-        raise NotImplementedError
-        summary_df = self._get_characteristics_of_clusters()
-        sns.scatterplot(summary_df,
-                        x='explained_var',
-                        hue='size',
-                        y='mean_pairwise_abs_cor')
-        plt.show()
-        sns.scatterplot(summary_df, y='mean_pairwise_abs_cor',
-                        size='median_expression',
-                        x='size',
-                        hue='var_through_time',
-                        hue_norm=(0, 1))
-        # plt.xscale('log')
-        plt.show()
-        # plt.savefig('test_output.svg')
 
     def _get_characteristics_of_clusters(self, tf2_output: Path) -> pd.DataFrame:
         """Retrieve how the clusters behave in the dataset
@@ -1356,6 +970,12 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                              one column. (Typically from .grouppby() method)
         :return: mean squared error
         """
+        # TODO Normalise here?
+        logging.warning("Normalise here?")
+
+        cluster_id = one_group_df['cluster_id']
+        df_without_cluster_id = one_group_df.drop('cluster_id', axis=1)
+
         expressions = self._aggregate_module_expressions_one_group(
             one_group_df)
         expressions.name = 'expressions'
@@ -1549,22 +1169,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         self.df = self.df[self.df['cluster_id'].isin(best_clusters.index)]
         return best_clusters
 
-    def see_pairwise_cluster_correlations(self, title: str):
-        """See how strongly modules correlate in histogram.
-
-        Shows absolute correlations between modules.
-
-        :parameter title: Title to display in plot
-        """
-        correlations = self.get_pairwise_module_correlations()
-        correlations = correlations.to_numpy()
-        selection = correlations[np.triu_indices_from(correlations, k=1)]
-        sns.histplot(abs(selection))
-        logging.info(f'Max correlation between modules {max(abs(selection))}')
-        plt.xlabel('Absolute pearson correlation between modules')
-        plt.title(title)
-        plt.show()
-
     def get_pairwise_module_correlations(self) -> pd.DataFrame:
         """Get dataframe that shows pairwise module correlations"""
         match self.aggregation_method:
@@ -1577,53 +1181,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
                 raise NotImplementedError(f'{self.aggregation_method} not found as method')
         correlations = expressions.T.corr()
         return correlations
-
-    def merge_correlating_modules(self, cutoff: float,
-                                  criterion_type: Literal['distance', 'maxclust'],
-                                  criterion_start_value: float,
-                                  criterion_step: float):
-        """To prevent that modules have a high correlation, merge them together
-
-        :param criterion_step: What criterion to pass to fcluster.
-            'maxclust' for maximum number of clusters, 'distance' for maximum
-            distance between observations in a cluster.
-        :param criterion_start_value: At what value to start the criterion
-        :param criterion_type: How much to increase criterion at each
-            step (if negative, decrease it by this at each step)
-        :param cutoff: While max correlation is above this cutoff,
-            keep clustering.
-        """
-        correlations = self.get_pairwise_module_correlations()
-        correlation_array = correlations.to_numpy()
-        correlation_dists = 1 - correlation_array
-        self_copy = copy.deepcopy(self)
-
-        while np.max(correlation_array[np.triu_indices_from(correlation_array, k=1)]) > cutoff:
-            self_copy = copy.deepcopy(self)
-            criterion_start_value += criterion_step
-            dense_dist = squareform(correlation_dists)
-            linkage_matrix = linkage(dense_dist, method='complete')
-            clustering = fcluster(linkage_matrix,
-                                  criterion_start_value,
-                                  criterion_type)
-
-            new_module_names_dict = dict()
-            for old_index, new_module_id in enumerate(clustering):
-                old_id = correlations.index[old_index]
-                new_module_names_dict[old_id] = int(f'{new_module_id}')
-
-            self_copy.df['cluster_id'] = self_copy.df['cluster_id'].replace(
-                new_module_names_dict)
-            correlations = self_copy.get_pairwise_module_correlations()
-            correlation_array= correlations.to_numpy()
-            correlation_dists = 1 - correlation_array
-            logging.info(f"{criterion_start_value} clusters gives max cor: "
-                         f"{np.max(correlation_array[np.triu_indices_from(correlation_array,k=1)]):.2f}")
-        else:
-            logging.info(f"""Merged in the following way:
-             {dict(sorted(new_module_names_dict.items(), key=lambda item: item[1]))}
-             """)
-            self.df = self_copy.df
 
     def keep_only_modules_in_network(self, module_module):
         """Filters the expression matrix to keep only the modules present
@@ -1656,7 +1213,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         else:
             return stdevs
 
-
     def get_ci_per_cluster(self, confidence_level=.95):
         """Get confidence interval per cluster at each time point"""
         assert self.has_been_clustered
@@ -1667,13 +1223,6 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
         assert self.has_been_clustered
         grouped_df = self.df.groupby('cluster_id')
         return grouped_df.apply(self._get_eigengene_explained_var)
-
-    def check_enrichment_string_db(self):
-        raise NotImplementedError
-        # Sample 30 modules
-        random.choice(self.df['cluster_id'].unique())
-        self.df.groupby('cluster_id')
-        pass
 
     def post_to_tf2network(self, tf2_in_path: Path, tf2_out_path: Path):
         """Automatically post gene clustering to TF2Network"""
@@ -1743,7 +1292,7 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
 
         self._apply_cluster_mapping_from_df(assignment_df)
 
-    def do_genewise_normalisation(self):
+    def do_genewise_min_max_scaling(self):
         """Do min-max scaling for all genes"""
         # Correct axis
         if self.has_been_clustered:
@@ -1808,6 +1357,9 @@ class ExpressionMatrixTimeSeries(ExpressionMatrixTraining):
             file_path = out_dir / f'random_dists_ds1_module_{module_nr}.csv'
             df = pd.DataFrame.from_dict({'gene_id': genes})
             df.to_csv(file_path, index=False, header=False)
+        # Undo clustering
+        self.df = self.df.drop('cluster_id', axis=1)
+        self.has_been_clustered = False
 
     def assign_clusters_from_split_by_module_files(self, files: list):
         """From a list of files generated by split_by_module

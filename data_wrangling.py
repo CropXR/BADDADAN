@@ -7,7 +7,8 @@ import pandas as pd
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import squareform
 
-from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
+from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries, \
+    AggregationMethod
 from helpers import get_info_from_gse65046, get_info_from_emtab375
 
 
@@ -41,8 +42,6 @@ def merge_ath_annotation_for_goatools(in_path: Path,
     df_group = df.groupby('locus name')
     out_df = df_group['GO ID'].apply(lambda x: ';'.join(x))
     return out_df
-
-
 
 def parse_go_enrichment_output(in_file: Path, cutoff: float = 0.05) -> pd.DataFrame:
     """Take go enrichment output, and select only BP annotations with a fdr-corrected p-value of <0.05"""
@@ -126,38 +125,25 @@ def calculate_linkage_matrix_from_atted_ii(in_path: Path, out_dir: Path):
         out_path = out_dir / f'{in_path.stem}_{method}_linkage.npy'
         np.save(out_path, linkage_matrix)
 
-def expr_mat_from_emexp(in_path, agg_method, do_log2, gpl_path=None, out_path=None):
-    if in_path.endswith('csv'):
-        expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
-            in_path, log2_transform=do_log2)
-    else:
-        expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
+def expr_mat_from_heat(in_path: str, agg_method: AggregationMethod, do_log2: bool, gpl_path=None):
+    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
             in_path, log2_transform=do_log2, gpl_path=gpl_path)
     expr_mat_time.keep_only_samples_with_string('normal light')
-    expr_mat_time.summary_method = agg_method
+    expr_mat_time.aggregation_method = agg_method
     expr_mat_time.condition_names = ['21', '32']
     expr_mat_time.column_parser = get_info_from_emtab375
-    if out_path:
-        expr_mat_time.save_for_limma(out_path)
     return expr_mat_time
 
 
-def expr_mat_from_drought(in_file_path: str, agg_method, do_log2, out_path = None):
+def expr_mat_from_drought(in_file_path: str, agg_method: AggregationMethod, do_log2: bool):
     if in_file_path.endswith('csv'):
         expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
             in_file_path, log2_transform=do_log2)
     else:
         expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
-            in_file_path,
-            log2_transform=do_log2,
-            annotate_from_gpl=True
-        )
-    # TODO implement these properly at some point
+            in_file_path, annotate_from_gpl=True, log2_transform=do_log2)
     expr_mat_time.column_parser = get_info_from_gse65046
-    expr_mat_time.summary_method = agg_method
+    expr_mat_time.aggregation_method = agg_method
     expr_mat_time.condition_names = ['control', 'drought']
-    if out_path:
-        expr_mat_time.save_for_limma(out_path)
-
-    expr_mat_time.merge_biological_samples()
+    # expr_mat_time.merge_biological_samples()
     return expr_mat_time

@@ -1,0 +1,13 @@
+experiment_data:
+  name: 'Heat E2E'
+  description: ""
+  summary_of_result: ""
+data:
+  soft_path: 'data/raw_data/expression_datasets/emtab375/TP/processed_data_raw.csv'
+  gpl_path: 'data/resources/GPL198.txt'
+  atted_path: "data/raw_data/atted_ii/all_cor_one_matrix_renamed.parquet.gzip"
+hyperparams:
+  agg_method: 'mean'
+  do_log2: False
+  r_min_module_size: 20
+  r_deep_split: [ 1, 2 ]

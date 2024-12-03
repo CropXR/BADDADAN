@@ -35,25 +35,6 @@ def plot_module_size_distributions(pkl_path: Path):
     plt.show()
     df.groupby('method')['size'].sum()
 
-def save_local_distance_matrix(soft_file_path: Path, do_log_2: bool,
-                               atted_path: Path, out_path: Path):
-    """Calculate local pairwise distance matrix
-    
-    :param soft_file_path: Path to input gene expression file
-    :param do_log_2: If true, perform log2-transformation to gene expressions
-    :param out_path: Path to save distance matrix (should be .pkl file)
-    """
-    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
-        soft_file_path,
-        log2_transform=do_log_2,
-        annotate_from_gpl=True
-    )
-    expr_mat_time.column_parser = get_info_from_gse65046
-    expr_mat_time.merge_biological_samples()
-    expr_mat_time.save_distance_matrix(out_path)
-    dist_local = expr_mat_time.get_distance_matrix()
-    print()
-
 def similarity_matrices_local_and_atted(expr_mat: ExpressionMatrixTimeSeries,
                                         atted_path: Path,
                                         out_path: Path):
@@ -341,8 +322,8 @@ def compare_annotations(soft_path, csv_path):
 
 def see_expression_genes_of_interest(exp_mat_path: Path):
     exp_mat = ExpressionMatrixTimeSeries.from_geo_file(exp_mat_path,
-                                                        log2_transform=True,
-                                                             annotate_from_gpl=True)
+                                                       annotate_from_gpl=True,
+                                                       log2_transform=True)
     genes_of_interest = ["AT1G30100",
                         "AT1G31800",
                         "AT1G52340",
@@ -392,15 +373,6 @@ def analyse_all_go_enrichments(in_dir: Path):
     print(group_df.ngroups)
     print(group_df.ngroups / total_modules)
 
-def exploratory_module_selection(input_file, modules_file):
-    """Get an idea of the characteristics of the gene modules"""
-    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
-        input_file,
-        log2_transform=True,
-        annotate_from_gpl=True)
-    cignet_modules = Path('data/resources/cig_data/ModuleGenes_two_cols.txt')
-    expr_mat_time.assign_clusters_from_cignet_file(cignet_modules, remove_dupes=True)
-    expr_mat_time.show_characteristics_of_clusters()
 
 def get_coex_from_tf2_output(input_file):
     """From TF2Network output, see the coexpression scores"""
