@@ -145,8 +145,37 @@ do_drought_spline <- function(drought_path, drought_out_path){
   # Do some limma checks to see if samples are alright
   plotMA(out_df)
   plotMDS(out_df)
+  
+  
+  # Test plotting a gene
+  gene_series <- t(df['AT1G55760',])
+  gene_series <- as.data.frame(gene_series)
+  colnames(gene_series) <- 'Expression'
+  gene_series <- cbind(gene_series, targets)
+  
+  # Create the plot
+  p <- ggplot(gene_series, aes(x = Time, y = Expression, color = Condition)) +
+    geom_point() +
+    labs(title = "Expression Over Time", x = "Time", y = "Expression") +
+    theme_minimal()
+  print(p)
+  
+  
+  # Now plot the spline
+  investigate_series <- gene_series[targets$'Condition' == 'control',]
+  nat_spline <- ns(targets[targets$'Condition' == 'control',]$Time, df=5)
+  spline_model <- lm(Expression~nat_spline, data=investigate_series)
+  plot(Expression~Time, data=investigate_series)
+  points(investigate_series$Time, predict(spline_model), col='red')
+  
+  investigate_series <- gene_series[targets$'Condition' == 'drought',]
+  nat_spline <- ns(targets[targets$'Condition' == 'drought',]$Time, df=5)
+  spline_model <- lm(Expression~nat_spline, data=investigate_series)
+  plot(Expression~Time, data=investigate_series)
+  points(investigate_series$Time, predict(spline_model), col='red')
+  
+  
 }
-
 
 
 do_heat <- function(heat_path, heat_out_path, heat_target_path){

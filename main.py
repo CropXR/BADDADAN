@@ -6,7 +6,7 @@ import yaml
 import mlflow
 
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
-from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
+from data_wrangling import expr_mat_from_heat, expr_mat_from_drought
 from experiment_scripts import (module_size_pipeline, drought_data_to_sbml,
                                 heat_data_to_sbml, \
                                 config_preprocess, drought_from_wgcna, \
@@ -67,9 +67,9 @@ def main():
             if 'heat' in data_params['in_path']:
                 # Get heat expr_mat
                 condition_name = 'heat'
-                expr_mat_time = expr_mat_from_emexp(data_params['in_path'],
-                                                    hyper_params['agg_method'],
-                                                    hyper_params['do_log2'])
+                expr_mat_time = expr_mat_from_heat(data_params['in_path'],
+                                                   hyper_params['agg_method'],
+                                                   hyper_params['do_log2'])
             elif 'drought' in data_params['in_path']:
                 # Get drought expr_mat
                 condition_name = 'drought'
@@ -149,7 +149,7 @@ def main():
 
                 if 'heat' in data_params['in_path']:
                     condition_name = 'heat'
-                    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_emexp(
+                    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_heat(
                         data_params['in_path'], hyper_params['agg_method'],
                         hyper_params['do_log2'])
                 elif 'drought' in data_params['in_path']:
@@ -216,7 +216,7 @@ def main():
                     experiment_path / treatment_name)
 
                 if 'heat' in data_params['in_path_expr_mat']:
-                    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_emexp(
+                    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_heat(
                         data_params['in_path_expr_mat'],
                         hyper_params['agg_method'], hyper_params['do_log2'])
                 elif 'drought' in data_params['in_path_expr_mat']:

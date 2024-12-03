@@ -30,7 +30,7 @@ from Expressions.ExpressionMatrix import AggregationMethod, \
     ExpressionMatrixTimeSeries
 from GoEnrich.EnrichedGeneModuleGoTerms import EnrichedGeneModuleGoTerms
 from analysis_pipelines import module_network_from_tf2_output
-from data_wrangling import expr_mat_from_emexp, expr_mat_from_drought
+from data_wrangling import expr_mat_from_heat, expr_mat_from_drought
 
 from exploring_questions import plot_module_size_distributions, \
     combine_local_distance_and_prior, similarity_matrices_local_and_atted
@@ -41,10 +41,10 @@ from petab_integration.petab_scripts import write_petab_files, \
 
 def full_pipeline_prototype(experiment_path: Path):
     skip_slow_steps = False
-    for treatment_name in ['heat']:
+    # for treatment_name in ['heat']:
     # for treatment_name in ['drought']:
-    # for treatment_name in ['drought', 'heat']:
-        logging.info(f'\nDoing {treatment_name}\n')
+    for treatment_name in ['drought', 'heat']:
+        logging.info(f'Doing {treatment_name}')
         treatment_path = experiment_path / treatment_name
         data_params, hyper_params, experiment_params = config_preprocess(
             treatment_path)
@@ -59,7 +59,7 @@ def full_pipeline_prototype(experiment_path: Path):
             expr_mat_all_genes.save_for_limma(treatment_path / '01_input_for_limma.csv')
 
         # ## Here: run limma script (limma_de_selection/de_selection.R) ##
-
+        # continue
         # Select only the DE genes
         de_file_path = list(treatment_path.glob('02[a_]*.csv'))
         assert len(de_file_path) == 1
@@ -71,24 +71,32 @@ def full_pipeline_prototype(experiment_path: Path):
             hyper_params['do_log2'],
             gpl_path=None)
         #
+        expr_mat_time.merge_biological_samples()
         # # Read DE genes from limma output and get the ATTED/Merged/Local scores
         if not skip_slow_steps:
             save_files_for_wgcna_cutting(treatment_path, data_params, expr_mat_time)
-
         ## Here: run wgcna cutting script (r_wgcna_dyntreecut/dyntreecut.R) ##
-
+        # continue
         see_gene_module_sizes(expr_mat_time,
                               cut_modules_path=treatment_path / 'dyntreecut_output',
                               figure_path=treatment_path / 'figs')
 
-        skip_making_one_file_per_clust = True
+        skip_making_one_file_per_clust = False
         if not skip_making_one_file_per_clust:
             one_gene_list_file_per_cluster(
                 in_dir=treatment_path / 'dyntreecut_output',
                 out_dir=treatment_path / 'split_by_module',
                 use_for_analysis_func=lambda x: True
             )
-
+        skip_making_random_modules = False
+        # Also generate random clusters that have the same size as a representative of these clusters
+        if not skip_making_random_modules:
+            expr_mat_time.save_random_modules_for_goa_find_enrichment(
+                wgcna_label_file=treatment_path
+                                 / 'dyntreecut_output'
+                                 / 'combined_sum_dists_wgcna_clustered_ds1.csv',
+                out_dir=treatment_path / 'split_by_module'
+            )
         # Coherence
         do_coherence_with_stat_tests(
             in_dir=treatment_path / 'split_by_module',
@@ -96,15 +104,7 @@ def full_pipeline_prototype(experiment_path: Path):
             out_dir=treatment_path / 'figs'
         )
 
-        # Also generate random clusters that have the same size as a representative of these clusters
-        if not skip_slow_steps:
-            expr_mat_time.save_random_modules_for_goa_find_enrichment(
-                wgcna_label_file=treatment_path
-                                 / 'dyntreecut_output'
-                                 / 'combined_sum_dists_wgcna_clustered_ds1.csv',
-                out_dir=treatment_path / 'split_by_module'
-            )
-
+        # continue
         # Do GO enrichment
         ### RUN SNAKEMAKE ###
         # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
@@ -119,6 +119,13 @@ def full_pipeline_prototype(experiment_path: Path):
             treatment_path / 'figs',
             )
 
+        with mlflow.start_run(
+                description=experiment_params['description']):
+            mlflow.log_params(data_params)
+            mlflow.log_params(hyper_params)
+            mlflow.set_tags(experiment_params)
+            mlflow.log_artifact(
+                str(experiment_path / treatment_name / 'figs'))
         # ODE modelling steps
 
 
@@ -140,9 +147,9 @@ def see_gene_module_sizes(expr_mat_time: ExpressionMatrixTimeSeries,
     plot_gene_modules_ds_size_distribution(df, figure_path)
 
 def expr_mat_time_factory(folder: Path,
-                          expression_path,
-                          agg_method,
-                          do_log2,
+                          expression_path: str,
+                          agg_method: AggregationMethod,
+                          do_log2: bool,
                           gpl_path = None
                           ) -> ExpressionMatrixTimeSeries:
     if folder.name.startswith('drought'):
@@ -151,10 +158,10 @@ def expr_mat_time_factory(folder: Path,
             agg_method=agg_method,
             do_log2=do_log2)
     elif folder.name.startswith('heat'):
-        expr_mat_time = expr_mat_from_emexp(in_path=expression_path,
-                                            agg_method=agg_method,
-                                            do_log2=do_log2,
-                                            gpl_path=gpl_path)
+        expr_mat_time = expr_mat_from_heat(in_path=expression_path,
+                                           agg_method=agg_method,
+                                           do_log2=do_log2,
+                                           gpl_path=gpl_path)
     else:
         raise NotImplementedError
     return expr_mat_time
@@ -423,7 +430,7 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
                         loc='outside')
     annotator.apply_and_annotate()
     # plt.tight_layout()
-    plt.savefig(out_path / 'fraction_at_least_one_go_term_selected_ds.png',
+    plt.savefig(out_path / 'fraction_at_least_one_go_term_selected_ds.svg',
                 bbox_inches='tight')
     plt.close()
 
@@ -431,7 +438,7 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     ax =  sns.boxplot(data=valid_rows, y='semantic_similarity', x='method')
     annotator.new_plot(ax, pairs, data=valid_rows, y='semantic_similarity', x='method')
     annotator.apply_and_annotate()
-    plt.savefig(out_path / 'semantic_similarity_boxplot.png', bbox_inches='tight')
+    plt.savefig(out_path / 'semantic_similarity_boxplot.svg', bbox_inches='tight')
     plt.close()
 
     # Other figures
@@ -439,18 +446,18 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     annotator.new_plot(ax, pairs, data=valid_rows, y='nr_enriched_go_terms',
                           x='method')
     annotator.apply_and_annotate()
-    plt.savefig(out_path / 'go_terms_per_module_boxplot_selected_ds.png', bbox_inches='tight')
+    plt.savefig(out_path / 'go_terms_per_module_boxplot_selected_ds.svg', bbox_inches='tight')
     plt.close()
 
     # Of these GO-terms, what is their semantic similarity?
     sns.scatterplot(data=valid_rows, x='nr_enriched_go_terms',
                     y='semantic_similarity', hue='method')
-    plt.savefig(out_path / 'scatterplot_enriched_go_terms_semantic_sim_selected_ds.png')
+    plt.savefig(out_path / 'scatterplot_enriched_go_terms_semantic_sim_selected_ds.svg')
     plt.close()
 
     sns.jointplot(data=valid_rows, x='nr_enriched_go_terms',
                     y='semantic_similarity', hue='method')
-    plt.savefig(out_path / 'jointplot_enriched_go_terms_semantic_sim_selected_ds.png')
+    plt.savefig(out_path / 'jointplot_enriched_go_terms_semantic_sim_selected_ds.svg')
     plt.close()
 
     # # Everything linked to module sizes just skipping now # #
@@ -619,9 +626,9 @@ def config_preprocess(experiment_path) -> tuple[dict, dict, dict]:
 def heat_data_to_sbml(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
-    expr_mat_time = expr_mat_from_emexp(data_params['in_path'],
-                                        hyper_params['agg_method'],
-                                        hyper_params['do_log2'])
+    expr_mat_time = expr_mat_from_heat(data_params['in_path'],
+                                       hyper_params['agg_method'],
+                                       hyper_params['do_log2'])
 
     my_ode = from_expr_mat_time_to_ode(data_params, experiment_path,
                                        expr_mat_time, hyper_params)
