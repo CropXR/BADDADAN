@@ -6,8 +6,11 @@ data:
   soft_path: 'data/raw_data/expression_datasets/emtab375/TP/processed_data_raw.csv'
   gpl_path: 'data/resources/GPL198.txt'
   atted_path: "data/raw_data/atted_ii/all_cor_one_matrix_renamed.parquet.gzip"
+  wgcna_module_assignment_path: 'data/experiments/25_everything_including_limma/heat/dyntreecut_output/combined_sum_dists_wgcna_clustered_ds1.csv'
 hyperparams:
   agg_method: 'mean'
   do_log2: False
   r_min_module_size: 20
   r_deep_split: [ 1, 2 ]
+  edge_corr_threshold: .75
+  top_nr_clusters: 25

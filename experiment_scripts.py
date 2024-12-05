@@ -97,12 +97,15 @@ def full_pipeline_prototype(experiment_path: Path):
                                  / 'combined_sum_dists_wgcna_clustered_ds1.csv',
                 out_dir=treatment_path / 'split_by_module'
             )
+
         # Coherence
-        do_coherence_with_stat_tests(
-            in_dir=treatment_path / 'split_by_module',
-            expr_mat_time=expr_mat_time,
-            out_dir=treatment_path / 'figs'
-        )
+        skip_coherence = True
+        if not skip_coherence:
+            do_coherence_with_stat_tests(
+                in_dir=treatment_path / 'split_by_module',
+                expr_mat_time=expr_mat_time,
+                out_dir=treatment_path / 'figs'
+            )
 
         # continue
         # Do GO enrichment
@@ -113,11 +116,22 @@ def full_pipeline_prototype(experiment_path: Path):
                 treatment_path
                 / 'go_outputs_exp_evidence_only_background_de_genes'
         )
+        skip_go_enrich_analysis = True
+        if not skip_go_enrich_analysis:
+            analyse_go_enrichments_find_enrichment(
+                go_enrich_output_path,
+                treatment_path / 'figs',
+                )
 
-        analyse_go_enrichments_find_enrichment(
-            go_enrich_output_path,
-            treatment_path / 'figs',
-            )
+        # ODE modelling steps
+        my_ode = from_expr_mat_time_to_ode(data_params, treatment_path,
+                                           expr_mat_time, hyper_params)
+
+        # These are parameters that are different between the two datasets
+        u_t_function = 'temp'
+        my_ode.save_to_sbml(treatment_path / 'module_network.xml',
+                            u_t_function)
+        pypesto_from_sbml(treatment_path, 'drought')
 
         with mlflow.start_run(
                 description=experiment_params['description']):
@@ -125,8 +139,8 @@ def full_pipeline_prototype(experiment_path: Path):
             mlflow.log_params(hyper_params)
             mlflow.set_tags(experiment_params)
             mlflow.log_artifact(
-                str(experiment_path / treatment_name / 'figs'))
-        # ODE modelling steps
+                str(treatment_path / 'figs'))
+
 
 
 def see_gene_module_sizes(expr_mat_time: ExpressionMatrixTimeSeries,
@@ -638,35 +652,29 @@ def heat_data_to_sbml(experiment_path):
     my_ode.save_to_sbml(experiment_path / 'module_network.xml', u_t_function)
 
 
-def from_expr_mat_time_to_ode(data_params, experiment_path, expr_mat_time,
+def from_expr_mat_time_to_ode(data_params,
+                              experiment_path: Path,
+                              expr_mat_time: ExpressionMatrixTimeSeries,
                               hyper_params):
     wgcna_module_assignment = data_params['wgcna_module_assignment_path']
     expr_mat_time.assign_clusters_from_wgcna(wgcna_module_assignment)
-    skip_stuff = True
-    if not skip_stuff:
-        atted_score = pd.read_parquet(data_params['atted_path'])
-        atted_score = atted_score.set_index(atted_score.columns[0])
-        linkage_matrices = combine_local_distance_and_prior(
-            expr_mat_time.get_distance_matrix(),
-            atted_score,
-            out_path=experiment_path)
     # logging.warning('New clusters so new TF2Network analysis?')
-    tf2_in_path = experiment_path / data_params['tf2_in_name']
-    tf2_out_path = experiment_path / data_params['tf2_out_name']
+    tf2_in_path = experiment_path / '03_tf2_input.txt'
+    tf2_out_path = experiment_path / '04_tf2network_output.tsv'
     # Post to tf2network
     expr_mat_time.write_tf2_input_file(
         out_path=tf2_in_path)
-    # expr_mat_time.do_genewise_normalisation()
+
     expr_mat_time.keep_highest_z_clusters(
         hyper_params['top_nr_clusters'],
         tf2_output_path=tf2_out_path,
-        plotting_path=experiment_path)
+        plotting_path=experiment_path / 'figs')
+    expr_mat_time.plot_clusters_over_time()
+    # expr_mat_time.aggregation_method = AggregationMethod.EIGENGENE
     # expr_mat_time.plot_clusters_over_time()
-    expr_mat_time.get_ci_per_cluster()
-    # # TO get gene list
+    # # # TO get gene list
     # [print(i) for i in expr_mat_time.get_genes_per_cluster()[75]]
-    expr_mat_time.do_genewise_min_max_scaling()
-    expr_mat_time.get_ci_per_cluster()
+
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
         tf2_out_path,
@@ -796,7 +804,7 @@ def pypesto_from_sbml(experiment_path, condition):
         expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
 
     if hyper_params['do_gene_normalisation']:
-        expr_mat_time.do_genewise_min_max_scaling()
+        assert expr_mat_time.has_been_scaled
 
     write_petab_files(
         expr_mat_time,

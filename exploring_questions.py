@@ -352,12 +352,12 @@ def see_expression_genes_of_interest(exp_mat_path: Path):
 
     expr_mat_drought = copy.deepcopy(exp_mat)
     expr_mat_drought.keep_only_samples_with_string('drought')
-    expr_mat_drought.plot_clusters_over_time(title='Drought')
+    expr_mat_drought.plot_clusters_over_time()
     # expr_mat_drought.plot_clusters_over_time(title='Drought', plot_units=True)
 
     expr_mat_control = copy.deepcopy(exp_mat)
     expr_mat_control.keep_only_samples_with_string('control')
-    expr_mat_control.plot_clusters_over_time(title='Control')
+    expr_mat_control.plot_clusters_over_time()
     # expr_mat_control.plot_clusters_over_time(title='Control', plot_units=True)
     print()
 
