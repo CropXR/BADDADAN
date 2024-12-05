@@ -123,15 +123,22 @@ def full_pipeline_prototype(experiment_path: Path):
                 treatment_path / 'figs',
                 )
 
-        # ODE modelling steps
-        my_ode = from_expr_mat_time_to_ode(data_params, treatment_path,
-                                           expr_mat_time, hyper_params)
+        skip_ode_steps = False
+        sbml_path = treatment_path / 'module_network.xml'
+        if not skip_ode_steps:
+            # ODE modelling steps
+            my_ode = from_expr_mat_time_to_ode(data_params, treatment_path,
+                                               expr_mat_time, hyper_params)
 
-        # These are parameters that are different between the two datasets
-        u_t_function = 'temp'
-        my_ode.save_to_sbml(treatment_path / 'module_network.xml',
-                            u_t_function)
-        pypesto_from_sbml(treatment_path, 'drought')
+            # These are parameters that are different between the two datasets
+            u_t_function = 'temp' if treatment_name == 'heat' \
+                else 'drought * time / 13'
+            my_ode.save_to_sbml(sbml_path,
+                                u_t_function)
+        pypesto_from_sbml(treatment_path,
+                          treatment_name,
+                          treatment_path / 'expr_mat_time.pkl',
+                          sbml_path)
 
         with mlflow.start_run(
                 description=experiment_params['description']):
@@ -669,7 +676,7 @@ def from_expr_mat_time_to_ode(data_params,
         hyper_params['top_nr_clusters'],
         tf2_output_path=tf2_out_path,
         plotting_path=experiment_path / 'figs')
-    expr_mat_time.plot_clusters_over_time()
+    # expr_mat_time.plot_clusters_over_time()
     # expr_mat_time.aggregation_method = AggregationMethod.EIGENGENE
     # expr_mat_time.plot_clusters_over_time()
     # # # TO get gene list
@@ -796,19 +803,19 @@ def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
     # plt.close()
 
 
-def pypesto_from_sbml(experiment_path, condition):
+def pypesto_from_sbml(experiment_path, condition, expr_mat_time_pkl_path : Path,
+                      sbml_path: Path):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path
     )
-    with open(data_params['expr_mat_time_path'], 'rb') as f:
+    with expr_mat_time_pkl_path.open('rb') as f:
         expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
 
-    if hyper_params['do_gene_normalisation']:
-        assert expr_mat_time.has_been_scaled
-
+    # Add constant value
+    expr_mat_time.add_constant(3, do_all_pos_check=False)
     write_petab_files(
         expr_mat_time,
-        data_params['sbml_path'],
+        sbml_path,
         experiment_path / 'petab_files',
         experimental_setup=condition
     )
@@ -822,7 +829,10 @@ def pypesto_from_sbml(experiment_path, condition):
             petab_problem,
             experiment_path /  'amici_models' / 'baddadan_sim'
         )
-
+    # sns.relplot(data=petab_problem.measurement_df, y='measurement', x='time',
+    #             col='observableId', hue='simulationConditionId', col_wrap=4,
+    #             kind='line');
+    # plt.show()
     # DO experiment on real data
     result = param_optimise_petab_problem(
         petab_problem, experiment_path, n_starts=hyper_params['n_starts']

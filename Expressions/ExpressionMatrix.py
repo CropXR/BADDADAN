@@ -317,11 +317,16 @@ class ExpressionMatrixTimeSeries:
         #             f'{self.aggregation_method=} is not implemented')
         expressions = self.df.groupby('cluster_id').apply(
             self._aggregate_module_expressions_one_group)
-        # Convert to long form
-        expressions = expressions.T.reset_index().melt(
-            id_vars=['time', 'condition'], value_name='expression')
+
+        transpose_expression = expressions.T
+
+        if 'light' in transpose_expression.index.names:
+            transpose_expression.index = transpose_expression.index.droplevel('light')
 
         # Get time point info from sample names
+        # Convert to long form
+        expressions = transpose_expression.reset_index().melt(
+            id_vars=['time', 'condition'], value_name='expression')
         # Parse time info based on columns
         if 'time' not in expressions.columns:
             new_cols = self.column_parser(expressions['sample'].to_list())
@@ -959,7 +964,9 @@ class ExpressionMatrixTimeSeries:
                 series_of_condition = expressions[expressions.index.get_level_values(
                     'condition').isin(['zero', condition_name])].reset_index()
             else:
-                series_of_condition = expressions[expressions['condition'].isin(['zero', condition_name])]
+                series_of_condition = expressions[
+                    (expressions['condition'].isin([condition_name]))
+                    | (expressions['time'].dt.total_seconds() == 0)]
                 series_of_condition.loc[:, 'condition'] = condition_name
             out_list.append(series_of_condition)
         return out_list
@@ -1332,4 +1339,18 @@ class ExpressionMatrixTimeSeries:
         if self.has_been_clustered:
             self.df['cluster_id'] = clusters
         self.has_been_scaled = True
+
+    def add_constant(self, constant: float, do_all_pos_check: bool = False):
+        if self.has_been_clustered:
+            clusters = self.df['cluster_id']
+            self.df = self.df.drop('cluster_id', axis=1)
+
+        self.df = self.df + constant
+        if do_all_pos_check:
+            assert (self.df > 0).all(axis=None), \
+                ("Some values are still negative even after adding "
+                 "a constant value to the dataframe")
+
+        if self.has_been_clustered:
+            self.df['cluster_id'] = clusters
 

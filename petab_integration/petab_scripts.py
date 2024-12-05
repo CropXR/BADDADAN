@@ -56,23 +56,24 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
     cond_df, expr_mat_cond_name_to_simul_cond_name, noise_level \
         = get_condition_info(experimental_setup)
 
-    create_conditions_tsv(
-        out_path / yaml_dict['problems'][0]['condition_files'][0],
-        expr_mat_time,
-        cond_df
-    )
-
     observables = {f'observable_{species.getId()}':
                        {'formula': species.getId()}
                    for species in sbml_importer.sbml.getListOfSpecies()
                    }
-
+    measurement_file_path = out_path / yaml_dict['problems'][0]['measurement_files'][0]
     create_measurements_tsv_heat(
         expr_mat_time,
-        out_path / yaml_dict['problems'][0]['measurement_files'][0],
+        measurement_file_path,
         list(observables.keys()),
         expr_mat_cond_name_to_simul_cond_name
     )
+
+    create_conditions_tsv(
+        out_path / yaml_dict['problems'][0]['condition_files'][0],
+        measurement_file_path,
+        cond_df
+    )
+
     create_observables_tsv(
         observables,
         out_path / yaml_dict['problems'][0]['observable_files'][0],
@@ -186,33 +187,34 @@ def create_measurements_tsv_heat(
     is not provided, just use the simulation names that are returned
     by the ExpressionMatrixTime.
     """
-    df_list = []
-    for condition_name in expr_mat.condition_names:
-        expr_mat_copy = copy.deepcopy(expr_mat)
-        expr_mat_copy.keep_only_samples_with_string(condition_name)
-        time, df = expr_mat_copy.get_clusters_expressions_with_time(0)
-        # df = pd.DataFrame(data)
-        df.columns = time
-        df.index = df.index.map(lambda x: f'observable_y_{x}')
-        assert all(df.index.isin(observable_names))
-        df = df.melt(
-            ignore_index=False,
-            var_name='time',
-            value_name='measurement').reset_index(names='observableId')
-        if condition_name_to_simulation_condition_id is not None:
-            df['simulationConditionId'] = (
-                condition_name_to_simulation_condition_id)[condition_name]
-        else:
-            df['simulationConditionId'] = condition_name
-            # Convert time to days to prevent ODE from exploding?
-            df['time'] = df['time'] / 24
-        correct_order = ['observableId', 'simulationConditionId',
-                         'measurement', 'time']
-        df = df[correct_order]
-        df_list.append(df)
+    expressions = expr_mat.extract_module_expressions_long_form()
+    expression_list = expr_mat.split_series_into_different_conditions(
+        expressions)
+    df = pd.concat(expression_list)
 
-    full_df = pd.concat(df_list)
-    full_df.to_csv(out_path, index=False, sep='\t')
+    df = df.rename(columns={'cluster_id': 'observableId',
+                            'expression': 'measurement',
+                            'condition': 'simulationConditionId'})
+    df = df.drop('elapsed_mins', axis=1)
+    df['observableId'] = df['observableId'].map(lambda x: f'observable_y_{x}')
+    assert all(df['observableId'].isin(observable_names))
+
+    if condition_name_to_simulation_condition_id is not None:
+        # This is the heat data
+        # Convert time to hours
+        df['time'] = df['time'].dt.total_seconds() / (60 * 60)
+        df['simulationConditionId'] = df['simulationConditionId'].map(
+            condition_name_to_simulation_condition_id)
+    else:
+        # This is the drought data
+        assert df['simulationConditionId'].isin(['drought']).any()
+        # Convert time to days to prevent ODE from exploding?
+        df['time'] = df['time'].dt.days
+    correct_order = ['observableId', 'simulationConditionId',
+                     'measurement', 'time']
+    df = df[correct_order]
+
+    df.to_csv(out_path, index=False, sep='\t')
 
 
 def create_observables_tsv(observables: dict, out_path: str | Path, noise_level: float):
@@ -227,13 +229,16 @@ def create_observables_tsv(observables: dict, out_path: str | Path, noise_level:
 
 
 def create_conditions_tsv(out_path: str | Path,
-                          expr_mat_time: ExpressionMatrixTimeSeries,
+                          measurement_file_path: Path,
                           cond_df: pd.DataFrame):
     """Create conditions TSV for petab"""
-    _, data = expr_mat_time.get_clusters_expressions_with_time(0)
-    initial_values = data.iloc[:, 0]
-    for i, initial_value in initial_values.items():
-        species_name = f'y_{i}'
+    df = pd.read_csv(measurement_file_path, sep='\t')
+    initial_values = df[df['time'] == 0]
+    initial_values = initial_values.groupby(
+        ['observableId', 'time'])['measurement']
+    assert all(initial_values.std() < 1e-9)
+    for index, initial_value in initial_values.mean().items():
+        species_name = re.findall('y_\d+', index[0])[0]
         cond_df[species_name] = initial_value
     # Add them to all this
     cond_df.to_csv(out_path, sep='\t', index=False)
@@ -252,13 +257,13 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
     )
     logging.info(result.summary(show_hess=False))
 
-    fig_folder = out_folder / 'figures'
+    fig_folder = out_folder / 'figs'
     fig_folder.mkdir(exist_ok=True)
     pypesto.visualize.waterfall(result)
-    plt.savefig(fig_folder / 'waterfall_plot.png')
+    plt.savefig(fig_folder / 'waterfall_plot.svg')
     plt.close()
     pypesto.visualize.parameters(result)
-    plt.savefig(fig_folder / 'param_visualise.png')
+    plt.savefig(fig_folder / 'param_visualise.svg')
     plt.close()
 
     plot_pypesto_module_fit(petab_problem, result, problem)

@@ -14,3 +14,5 @@ hyperparams:
   r_deep_split: [ 1, 2 ]
   edge_corr_threshold: .75
   top_nr_clusters: 25
+  do_sim_data: False
+  n_starts: 100
