@@ -40,7 +40,7 @@ from petab_integration.petab_scripts import write_petab_files, \
 
 
 def full_pipeline_prototype(experiment_path: Path):
-    skip_slow_steps = False
+    skip_slow_steps = True
     # for treatment_name in ['heat']:
     # for treatment_name in ['drought']:
     for treatment_name in ['drought', 'heat']:
@@ -81,14 +81,14 @@ def full_pipeline_prototype(experiment_path: Path):
                               cut_modules_path=treatment_path / 'dyntreecut_output',
                               figure_path=treatment_path / 'figs')
 
-        skip_making_one_file_per_clust = False
+        skip_making_one_file_per_clust = True
         if not skip_making_one_file_per_clust:
             one_gene_list_file_per_cluster(
                 in_dir=treatment_path / 'dyntreecut_output',
                 out_dir=treatment_path / 'split_by_module',
                 use_for_analysis_func=lambda x: True
             )
-        skip_making_random_modules = False
+        skip_making_random_modules = True
         # Also generate random clusters that have the same size as a representative of these clusters
         if not skip_making_random_modules:
             expr_mat_time.save_random_modules_for_goa_find_enrichment(
@@ -135,6 +135,7 @@ def full_pipeline_prototype(experiment_path: Path):
                 else 'drought * time / 13'
             my_ode.save_to_sbml(sbml_path,
                                 u_t_function)
+        continue
         pypesto_from_sbml(treatment_path,
                           treatment_name,
                           treatment_path / 'expr_mat_time.pkl',
@@ -803,7 +804,7 @@ def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
     # plt.close()
 
 
-def pypesto_from_sbml(experiment_path, condition, expr_mat_time_pkl_path : Path,
+def pypesto_from_sbml(experiment_path, condition, expr_mat_time_pkl_path: Path,
                       sbml_path: Path):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path

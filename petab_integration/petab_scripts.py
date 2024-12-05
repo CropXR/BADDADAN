@@ -151,7 +151,7 @@ def create_parameters_tsv(out_path: str | Path,
             lb, ub = 0.1, 10
         elif name.startswith('beta_'):
             parameter_scale = 'log10'
-            lb, ub = 0.000001, 5
+            lb, ub = 0.000001, 10
         else:
             raise NotImplementedError('Does not know what param limits to set')
         estimate = 1

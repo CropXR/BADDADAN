@@ -13,6 +13,6 @@ hyperparams:
   r_min_module_size: 20
   r_deep_split: [ 1, 2 ]
   edge_corr_threshold: .75
-  top_nr_clusters: 25
+  top_nr_clusters: 27
   do_sim_data: False
   n_starts: 100
