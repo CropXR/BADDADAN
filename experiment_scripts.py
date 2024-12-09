@@ -428,8 +428,8 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     # For DS and Method
     all_result_df = read_go_enrich_files_into_df(in_path)
     # plot_gene_modules_ds_size_distribution(all_result_df, out_path)
-    # valid_rows = extract_only_selected_ds_row_from_df(all_result_df, in_path)
-    valid_rows = all_result_df
+    valid_rows = extract_only_selected_ds_row_from_df(all_result_df, in_path)
+    # valid_rows = all_result_df
     # Main figures
     # Fraction of modules with > 0 GO term
     at_least_one_go_term_barplot_keywords = dict(
@@ -631,7 +631,7 @@ def read_go_enrich_files_into_df(in_path):
     return all_result_df
 
 
-def config_preprocess(experiment_path) -> tuple[dict, dict, dict]:
+def config_preprocess(experiment_path: Path) -> tuple[dict, dict, dict]:
     config_path = experiment_path / 'config.yaml'
     with config_path.open('r') as f:
         config = yaml.safe_load(f)
@@ -804,7 +804,9 @@ def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
     # plt.close()
 
 
-def pypesto_from_sbml(experiment_path, condition, expr_mat_time_pkl_path: Path,
+def pypesto_from_sbml(experiment_path: Path,
+                      condition: str,
+                      expr_mat_time_pkl_path: Path,
                       sbml_path: Path):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path
@@ -930,11 +932,14 @@ def do_coherence_with_stat_tests(in_dir: Path,
         for ds_filename in ['ds1']: #, 'ds2']:
             # if (method, ds_filename) == ('random', 'ds2'):
             #     continue
+            if 'drought' in in_dir.parts and method == 'local_dists':
+                ds_filename = 'ds2'
             expr_mat_time_copy = copy.deepcopy(expr_mat_time)
             pattern = f"{method}*{ds_filename}*"
             files = list(in_dir.glob(pattern))
             assert len(files) > 0, f'No files found for {method} & {ds_filename}'
             expr_mat_time_copy.assign_clusters_from_split_by_module_files(files)
+            expr_mat_time_copy.do_z_scaling()
             module_coherences = expr_mat_time_copy.get_all_explained_vars()
             ds_value = ds_filename.split('ds')[1]
             out_records.extend(

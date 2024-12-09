@@ -343,16 +343,14 @@ def prepare_petab_files_for_fitting(
 
 
 def plot_nicely_from_artifact(out_folder_of_experiment: str,
-                              mlflow_result_uri: str,
+                              artifact,
                               petab_yaml_path: str):
     """
-
     :param out_folder_of_experiment: Should contain subdirectory called
     amici_models/baddadan where the amici model lives
-    :param mlflow_result_uri: uri to hdf5 result file saved by previous run
+    :param artifact: hdf5 result file saved by previous run
     :param petab_yaml_path: path to petab yaml config file
     """
-    artifact = mlflow.artifacts.download_artifacts(mlflow_result_uri)
     loaded_result = pypesto.store.read_result(artifact)
 
     petab_problem = petab.v1.Problem.from_yaml(petab_yaml_path)

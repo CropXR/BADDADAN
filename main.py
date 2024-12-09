@@ -242,13 +242,26 @@ def main():
             with config_path.open('r') as f:
                 config_dict = yaml.safe_load(f)
             for name, condition_dict in config_dict.items():
+                artifact = mlflow.artifacts.download_artifacts(
+                    condition_dict['mlflow_result_uri'])
                 plot_nicely_from_artifact(
                     condition_dict['out_folder_experiment'],
-                    condition_dict['mlflow_result_uri'],
+                    artifact,
                     condition_dict['petab_yaml']
                     )
         case '25_everything_including_limma':
             full_pipeline_prototype(experiment_path)
+        case "26_server_output_visualisation":
+            config_path = experiment_path / 'config.yaml'
+            with config_path.open('r') as f:
+                config_dict = yaml.safe_load(f)
+            for name, condition_dict in config_dict.items():
+                plot_nicely_from_artifact(
+                    condition_dict['out_folder_experiment'],
+                    condition_dict['artifact_path'],
+                    condition_dict['petab_yaml']
+                )
+
         case _:
             raise NotImplementedError(f'{name} not found')
 

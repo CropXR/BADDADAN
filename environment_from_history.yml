@@ -27,6 +27,9 @@ dependencies:
   - swig
   - cmake
   - openblas
+  - fastcluster
+  - gcc
+  - libgcc-ng
   - pip
   - pip:
       - pypesto

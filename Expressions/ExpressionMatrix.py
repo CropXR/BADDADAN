@@ -871,7 +871,6 @@ class ExpressionMatrixTimeSeries:
             all_dfs.append(charac_series)
         summary_df = pd.concat(all_dfs, axis=1)
 
-
         summary_df = summary_df.assign(mean_expression=mean_expression)
 
         if tf2_output.exists():
