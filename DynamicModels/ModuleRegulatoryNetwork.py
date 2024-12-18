@@ -12,6 +12,7 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
+from exceptions import RegulatoryDisagreementError
 
 
 class EdgeRelation(Enum):
@@ -37,7 +38,8 @@ class ModuleRegulatoryNetwork:
         self.graph = graph
 
     def plot_network(self, draw_func: Callable = nx.draw,
-                     out_path: Path|None = None, with_labels=True):
+                     out_path: Path|None = None, with_labels=True,
+                     title: str|None = None):
         """Plot network using matplotlib."""
 
         node_color_map = ['blue' if (node in self.get_tfs()) else 'orange'
@@ -57,6 +59,8 @@ class ModuleRegulatoryNetwork:
                   edge_color=edge_color_map, with_labels=with_labels, arrowsize=30)
         if out_path:
             plt.savefig(out_path)
+        if title is not None:
+            plt.title(title)
         plt.show()
 
     @classmethod
@@ -204,7 +208,7 @@ class ModuleRegulatoryNetwork:
                         candidate_edges[(original_module, target_module)]['tf_name'].append(tf)
                         continue
                     else:
-                        raise ValueError('Disagreement between regulatory directions'
+                        raise RegulatoryDisagreementError('Disagreement between regulatory directions'
                                          f' of {original_module} -> {target_module}')
 
         edge_list = []
@@ -295,8 +299,6 @@ class ModuleRegulatoryNetwork:
             else:
                 continue
         if remove_low_corr and tfs_to_remove:
-            logging.warning('REMOVING LOW CORRELATION TFS BECAUSE IT '
-                            'WAS SPECIFIED IN THE FUNCTION CALL')
             logging.info(
                 f'Removing {tfs_to_remove} because correlation between their '
                 f'expression and the module that produces them is too low'

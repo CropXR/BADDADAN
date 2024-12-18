@@ -27,13 +27,15 @@ def module_network_from_tf2_output(expr_mat_time,
     my_grn.clean_up_network()
     my_grn.check_if_tfs_created_by_module(expr_mat_time,
                                           do_plotting=False,
-                                          remove_low_corr=False,
-                                          assert_correlated=False)
+                                          remove_low_corr=True,
+                                          assert_correlated=False,
+                                          corr_cutoff=.3)
     my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=False,
                                     threshold=threshold)
     # my_grn.plot_network(nx.d  raw_kamada_kawai, with_labels=False)
     module_module = my_grn.get_module_module_network()
     # # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
-    module_module.plot_network(nx.draw_kamada_kawai , with_labels=True, out_path=module_plot_path)
+    if module_plot_path is not None:
+        module_module.plot_network(nx.draw_kamada_kawai , with_labels=True, out_path=module_plot_path)
     logging.info(list(module_module.graph.edges(data=True)))
     return module_module

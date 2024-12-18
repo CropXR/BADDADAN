@@ -1,0 +1,2 @@
+class RegulatoryDisagreementError(Exception):
+    pass

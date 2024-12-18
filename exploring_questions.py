@@ -3,11 +3,13 @@ import logging
 from pathlib import Path
 
 import dill as pickle
+import networkx as nx
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from GEOparse import get_GEO
 from matplotlib import pyplot as plt
+from matplotlib.ticker import MaxNLocator, AutoMinorLocator
 from scipy.spatial.distance import squareform
 # from scipy.cluster.hierarchy import linkage
 from fastcluster import linkage
@@ -15,7 +17,9 @@ from sklearn.metrics import adjusted_rand_score
 
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
+from analysis_pipelines import module_network_from_tf2_output
 from data_wrangling import parse_go_enrichment_output
+from exceptions import RegulatoryDisagreementError
 from helpers import get_info_from_gse65046, keep_common_genes_in_dfs
 
 
@@ -493,3 +497,63 @@ def get_robustness_random_modules(jackknife_paths, full_dataset_path, figure_out
     plt.savefig(figure_out_dir / 'swarmplot_robustness_with_random_modules.png')
     plt.close()
     return out_list
+
+
+def check_correlation_cutoffs_for_intermodular_network(expr_mat_time,
+                                                       tf2_in_path,
+                                                       tf2_out_path,
+                                                       plotting_path):
+    out_records = []
+    cutoff_values = np.arange(0, 1, 0.05)
+    for cutoff_value in cutoff_values:
+        # get rid of floating point stuff
+        cutoff_value = round(cutoff_value, 2)
+        try:
+            module_module = module_network_from_tf2_output(
+                expr_mat_time, tf2_in_path,
+                tf2_out_path,
+                threshold=cutoff_value,
+                module_plot_path=None
+            )
+            nr_nodes = module_module.graph.number_of_nodes()
+            nr_edges = module_module.graph.number_of_edges()
+            nr_interconnected_components = len(
+                list(nx.weakly_connected_components(module_module.graph))
+            )
+            # if .7 < cutoff_value < .85:
+            #     # plt.title()
+            #     module_module.plot_network(title=str(cutoff_value))
+            #     plt.show()
+        except RegulatoryDisagreementError as e:
+            nr_nodes, nr_edges, nr_interconnected_components = (
+                np.nan, np.nan, np.nan)
+        out_records.append(
+            (cutoff_value, nr_nodes, nr_edges, nr_interconnected_components)
+        )
+    sparsity_df = pd.DataFrame.from_records(
+        out_records, columns=['cutoff', 'nr_nodes', 'nr_edges',
+                              'one_interconnected_graph']
+    )
+    plt.plot(sparsity_df['cutoff'], sparsity_df['nr_nodes'],
+             label='nr of nodes')
+    plt.plot(sparsity_df['cutoff'], sparsity_df['nr_edges'],
+             label='nr of edges')
+    has_one_interconnected = sparsity_df[
+        sparsity_df['one_interconnected_graph'] == 1]
+    disjoint_graphs = sparsity_df[sparsity_df['one_interconnected_graph'] > 1]
+    plt.plot(has_one_interconnected['cutoff'],
+             has_one_interconnected['nr_nodes'],
+             'o', label='Graph with a single weakly connected component')
+    plt.plot(disjoint_graphs['cutoff'], disjoint_graphs['nr_nodes'],
+             'x', label='Graph with multiple disjoint components')
+    plt.xlim((0, 1))
+    plt.gca().xaxis.set_major_locator(
+        MaxNLocator(integer=False, nbins=10))
+    plt.gca().xaxis.set_minor_locator(
+        AutoMinorLocator(2))
+    plt.legend()
+    # plt.title('Heat')
+    plt.xlabel('Correlation cutoff')
+    plt.tight_layout()
+    plt.savefig(plotting_path / 'correlation_cutoff_intermodular_network_stats.svg')
+    plt.close()

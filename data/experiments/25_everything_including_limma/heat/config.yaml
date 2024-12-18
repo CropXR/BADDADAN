@@ -15,4 +15,5 @@ hyperparams:
   edge_corr_threshold: .75
   top_nr_clusters: 27
   do_sim_data: False
-  n_starts: 100
+  do_interpolate: False
+  n_starts: 500

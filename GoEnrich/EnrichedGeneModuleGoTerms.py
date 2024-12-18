@@ -5,9 +5,6 @@ from goatools.semsim.termwise.wang import SsWang
 from itertools import combinations
 
 
-
-
-
 class EnrichedGeneModuleGoTerms:
     GODAG = get_godag("data/resources/go_annotations/go-basic.obo",
                       optional_attrs={'relationship'})

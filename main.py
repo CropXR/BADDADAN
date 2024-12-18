@@ -18,6 +18,7 @@ from experiment_scripts import (module_size_pipeline, drought_data_to_sbml,
                                 full_pipeline_prototype)
 from exploring_questions import get_coherence_random_modules, \
     get_robustness_random_modules
+from figure_pipelines import fig2_from_generated_data
 from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
     one_gene_list_file_per_cluster
 from petab_integration.petab_scripts import plot_nicely_from_artifact
@@ -29,9 +30,6 @@ from petab_integration.petab_scripts import plot_nicely_from_artifact
 
 mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
 
-
-
-
 def main():
     # ONLY EDIT THESE LINES
     # name = '09_heat_data_end_to_end'
@@ -40,6 +38,8 @@ def main():
     # name = '23_coherence_with_stat_tests'
     # name = '24_visualise_fit_result_nicely'
     name = '25_everything_including_limma'
+    # name = '26_server_output_visualisation'
+    # name = '27_fig2'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -261,6 +261,8 @@ def main():
                     condition_dict['artifact_path'],
                     condition_dict['petab_yaml']
                 )
+        case '27_fig2':
+            fig2_from_generated_data(experiment_path.parent / '25_everything_including_limma')
 
         case _:
             raise NotImplementedError(f'{name} not found')

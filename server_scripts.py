@@ -1,3 +1,5 @@
+import logging
+
 import click
 from pathlib import Path
 from experiment_scripts import pypesto_from_sbml
@@ -15,11 +17,17 @@ def main(treatment_path, treatment_name, expr_mat_pkl_path, sbml_path):
     TREATMENT_NAME: Name of the treatment.
     SBML_PATH: Path to the SBML file.
     """
+    (treatment_path / "log.log").unlink(missing_ok=True)
+    logging.basicConfig(level=logging.INFO,
+                        handlers=[logging.FileHandler(treatment_path / "log.log"),
+                                  logging.StreamHandler()])
+
     pypesto_from_sbml(
         treatment_path,
         treatment_name,
         expr_mat_pkl_path,
-        sbml_path
+        sbml_path,
+        do_ml_flow_logging=False
     )
 
 

@@ -24,7 +24,6 @@ import amici
 from tqdm import tqdm
 from statannotations.Annotator import Annotator
 
-
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import AggregationMethod, \
     ExpressionMatrixTimeSeries
@@ -33,7 +32,8 @@ from analysis_pipelines import module_network_from_tf2_output
 from data_wrangling import expr_mat_from_heat, expr_mat_from_drought
 
 from exploring_questions import plot_module_size_distributions, \
-    combine_local_distance_and_prior, similarity_matrices_local_and_atted
+    combine_local_distance_and_prior, similarity_matrices_local_and_atted, \
+    check_correlation_cutoffs_for_intermodular_network
 from helpers import one_gene_list_file_per_cluster
 from petab_integration.petab_scripts import write_petab_files, \
     param_optimise_petab_problem
@@ -148,7 +148,6 @@ def full_pipeline_prototype(experiment_path: Path):
             mlflow.set_tags(experiment_params)
             mlflow.log_artifact(
                 str(treatment_path / 'figs'))
-
 
 
 def see_gene_module_sizes(expr_mat_time: ExpressionMatrixTimeSeries,
@@ -424,20 +423,27 @@ def drought_data_to_sbml(experiment_path):
     logging.info(my_ode)
     my_ode.save_to_sbml(experiment_path / 'module_network.xml', u_t_function)
 
-def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
+def analyse_go_enrichments_find_enrichment(
+        in_path: Path,
+        out_path: Path,
+        ax_to_plot_on: bool | plt.Axes = False):
     # For DS and Method
     all_result_df = read_go_enrich_files_into_df(in_path)
     # plot_gene_modules_ds_size_distribution(all_result_df, out_path)
     valid_rows = extract_only_selected_ds_row_from_df(all_result_df, in_path)
     # valid_rows = all_result_df
+
     # Main figures
     # Fraction of modules with > 0 GO term
     at_least_one_go_term_barplot_keywords = dict(
         data=valid_rows, y='nr_enriched_go_terms', x='method',
         estimator=lambda y: (y > 0).sum() / len(y)
     )
-    plt.close()
-    ax = sns.barplot(**at_least_one_go_term_barplot_keywords)
+    # plt.close()
+    if ax_to_plot_on:
+        ax = sns.barplot(ax=ax_to_plot_on, **at_least_one_go_term_barplot_keywords)
+    else:
+        ax = sns.barplot(**at_least_one_go_term_barplot_keywords)
     ax.set_ylabel('Fraction of modules with > 0 enriched GO term')
 
     pairs = list(combinations(
@@ -451,6 +457,8 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     annotator.configure(test='Mann-Whitney',
                         loc='outside')
     annotator.apply_and_annotate()
+    if ax_to_plot_on:
+        return
     # plt.tight_layout()
     plt.savefig(out_path / 'fraction_at_least_one_go_term_selected_ds.svg',
                 bbox_inches='tight')
@@ -458,9 +466,11 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
 
     # GO semantic similarity scores
     ax =  sns.boxplot(data=valid_rows, y='semantic_similarity', x='method')
-    annotator.new_plot(ax, pairs, data=valid_rows, y='semantic_similarity', x='method')
+    annotator.new_plot(ax, pairs, data=valid_rows, y='semantic_similarity',
+                       x='method')
     annotator.apply_and_annotate()
-    plt.savefig(out_path / 'semantic_similarity_boxplot.svg', bbox_inches='tight')
+    plt.savefig(out_path / 'semantic_similarity_boxplot.svg',
+                bbox_inches='tight')
     plt.close()
 
     # Other figures
@@ -468,7 +478,8 @@ def analyse_go_enrichments_find_enrichment(in_path: Path, out_path: Path):
     annotator.new_plot(ax, pairs, data=valid_rows, y='nr_enriched_go_terms',
                           x='method')
     annotator.apply_and_annotate()
-    plt.savefig(out_path / 'go_terms_per_module_boxplot_selected_ds.svg', bbox_inches='tight')
+    plt.savefig(out_path /
+                'go_terms_per_module_boxplot_selected_ds.svg', bbox_inches='tight')
     plt.close()
 
     # Of these GO-terms, what is their semantic similarity?
@@ -678,10 +689,17 @@ def from_expr_mat_time_to_ode(data_params,
         tf2_output_path=tf2_out_path,
         plotting_path=experiment_path / 'figs')
     # expr_mat_time.plot_clusters_over_time()
-    # expr_mat_time.aggregation_method = AggregationMethod.EIGENGENE
-    # expr_mat_time.plot_clusters_over_time()
-    # # # TO get gene list
-    # [print(i) for i in expr_mat_time.get_genes_per_cluster()[75]]
+
+    check_cutoffs = False
+    if check_cutoffs:
+        # Test what intermodular network looks like for various
+        # correlation cutoffs
+        check_correlation_cutoffs_for_intermodular_network(
+            expr_mat_time,
+            tf2_in_path,
+            tf2_out_path,
+            plotting_path=experiment_path / 'figs'
+        )
 
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
@@ -700,6 +718,7 @@ def from_expr_mat_time_to_ode(data_params,
     my_ode = OdeModel.construct_from_regulatory_network(module_module,
                                                         nonlinear=True)
     return my_ode
+
 
 def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
     data_params, hyper_params, experiment_params = config_preprocess(
@@ -807,7 +826,8 @@ def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
 def pypesto_from_sbml(experiment_path: Path,
                       condition: str,
                       expr_mat_time_pkl_path: Path,
-                      sbml_path: Path):
+                      sbml_path: Path,
+                      do_ml_flow_logging: bool = True):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path
     )
@@ -816,11 +836,13 @@ def pypesto_from_sbml(experiment_path: Path,
 
     # Add constant value
     expr_mat_time.add_constant(3, do_all_pos_check=False)
+    # expr_mat_time.get_ci_per_cluster()
     write_petab_files(
         expr_mat_time,
         sbml_path,
         experiment_path / 'petab_files',
-        experimental_setup=condition
+        experimental_setup=condition,
+        do_interpolate=hyper_params['do_interpolate']
     )
     # Experimental data
     petab_problem = petab.v1.Problem.from_yaml(
@@ -849,18 +871,18 @@ def pypesto_from_sbml(experiment_path: Path,
 
     param_values = {param_name: param_value for param_name, param_value
                     in zip(result.problem.x_names, result_dict['x'])}
-
-    with mlflow.start_run(
-            description=experiment_params['description']):
-        mlflow.log_params(data_params)
-        mlflow.log_params(hyper_params)
-        mlflow.set_tags(experiment_params)
-        mlflow.log_artifact(str(experiment_path))
-        mlflow.log_params(param_values)
-        # Log fval as metric
-        mlflow.log_metric('fval', result_dict['fval'])
-        # mlflow.log_artifact(
-        #     str(experiment_path / 'figures'))
+    if do_ml_flow_logging:
+        with mlflow.start_run(
+                description=experiment_params['description']):
+            mlflow.log_params(data_params)
+            mlflow.log_params(hyper_params)
+            mlflow.set_tags(experiment_params)
+            mlflow.log_artifact(str(experiment_path))
+            mlflow.log_params(param_values)
+            # Log fval as metric
+            mlflow.log_metric('fval', result_dict['fval'])
+            # mlflow.log_artifact(
+            #     str(experiment_path / 'figures'))
 
 def simulated_data_pypesto(petab_problem, model_folder):
     # Do simulated data
@@ -924,7 +946,8 @@ def simulated_data_pypesto(petab_problem, model_folder):
 
 def do_coherence_with_stat_tests(in_dir: Path,
                                  expr_mat_time: ExpressionMatrixTimeSeries,
-                                 out_dir: Path):
+                                 out_dir: Path,
+                                 ax_to_plot_on: bool | plt.Axes = False):
     """Measure coherence between different clusterings and do statistical test"""
     out_records = []
     for method in ['atted_dists', 'combined_sum_dists',
@@ -952,9 +975,10 @@ def do_coherence_with_stat_tests(in_dir: Path,
                                    columns=['method', 'deepsplit', 'coherence']
                                    )
     # df = extract_only_selected_ds_row_from_df(df, in_dir)
-
-    out_dir.mkdir(exist_ok=True)
-    ax = sns.boxplot(data=df, y='coherence', x='method')
+    if ax_to_plot_on:
+        ax = sns.boxplot(data=df, y='coherence', x='method', ax=ax_to_plot_on)
+    else:
+        ax = sns.boxplot(data=df, y='coherence', x='method')
 
     pairs = list(combinations(
         # ['atted_dists', 'combined_sum_dists', 'local_dists'],
@@ -967,8 +991,11 @@ def do_coherence_with_stat_tests(in_dir: Path,
     annotator.configure(test='Mann-Whitney',
                         loc='outside')
     annotator.apply_and_annotate()
+    if ax_to_plot_on:
+        return
     plt.ylim((0, .9))
 
+    out_dir.mkdir(exist_ok=True)
     plt.savefig(out_dir / 'boxplot_coherence_with_stat_test.svg',
                 bbox_inches='tight')
     plt.close()

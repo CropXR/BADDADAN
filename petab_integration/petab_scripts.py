@@ -5,6 +5,7 @@ import re
 
 import mlflow
 import matplotlib
+import numpy as np
 import seaborn as sns
 import pandas as pd
 import pypesto
@@ -15,6 +16,7 @@ from matplotlib import pyplot as plt
 from pypesto import optimize as optimize, profile as profile
 from pypesto.visualize.model_fit import visualize_optimized_model_fit
 import pypesto.petab
+from scipy.interpolate import CubicSpline, UnivariateSpline
 
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 
@@ -22,7 +24,8 @@ from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
                       sbml_path: Path | str,
                       out_path: Path,
-                      experimental_setup: str
+                      experimental_setup: str,
+                      do_interpolate: bool = False
                       ):
     """Write necessary petab files for either heat or drought experiment.
 
@@ -34,6 +37,7 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
     :param out_path: path to save all PETAB files
     :param experimental_setup: describe experimental setup
         (either 'drought' or 'heat')
+    :param do_interpolate: If true, interpolate the data using a spline
     """
 
     assert experimental_setup in ['heat', 'drought'], \
@@ -47,14 +51,14 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
     #     filter_function=lambda variable: variable.getId().startswith(
     #         "observable_")
     # )
+    cond_df, expr_mat_cond_name_to_simul_cond_name, noise_level \
+        = get_condition_info(experimental_setup)
 
-    yaml_dict = write_petab_yaml(experimental_setup, out_path, sbml_path)
+    yaml_dict = write_petab_yaml(experimental_setup, out_path, sbml_path,
+                                 do_interpolate)
 
     create_parameters_tsv(
         out_path / yaml_dict['parameter_file'], sbml_importer)
-
-    cond_df, expr_mat_cond_name_to_simul_cond_name, noise_level \
-        = get_condition_info(experimental_setup)
 
     observables = {f'observable_{species.getId()}':
                        {'formula': species.getId()}
@@ -65,13 +69,17 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
         expr_mat_time,
         measurement_file_path,
         list(observables.keys()),
-        expr_mat_cond_name_to_simul_cond_name
+        expr_mat_cond_name_to_simul_cond_name,
+        do_interpolate=do_interpolate
     )
 
+    # When interpolated, the initial values are not necessarily the same,
+    # so no need to check that
     create_conditions_tsv(
         out_path / yaml_dict['problems'][0]['condition_files'][0],
         measurement_file_path,
-        cond_df
+        cond_df,
+        assert_same_initial_values = not do_interpolate
     )
 
     create_observables_tsv(
@@ -81,14 +89,18 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
     )
 
 
-def write_petab_yaml(experimental_setup, out_path, sbml_path):
+def write_petab_yaml(experimental_setup, out_path, sbml_path,
+                     do_interpolate: bool = False):
+    measurement_file_name = 'measurements.tsv' if not do_interpolate \
+        else 'interpolated_measurements.tsv'
+
     yaml_dict = {
         'format_version': 1,
         'parameter_file': 'parameters.tsv',
         'problems': [
             {
                 'condition_files': ['conditions.tsv'],
-                'measurement_files': ['measurements.tsv'],
+                'measurement_files': [measurement_file_name],
                 'observable_files': ['observable.tsv'],
                 'sbml_files': ['../' + Path(sbml_path).name]
             }
@@ -145,13 +157,13 @@ def create_parameters_tsv(out_path: str | Path,
             lb, ub = -5, 0
         elif name.startswith('gamma_'):
             parameter_scale = 'lin'
-            lb, ub = -0.5, 0.5
+            lb, ub = -1, 1
         elif name.startswith('k_'):
             parameter_scale = 'log10'
             lb, ub = 0.1, 10
         elif name.startswith('beta_'):
             parameter_scale = 'log10'
-            lb, ub = 0.000001, 10
+            lb, ub = 0.000001, 100
         else:
             raise NotImplementedError('Does not know what param limits to set')
         estimate = 1
@@ -169,7 +181,8 @@ def create_measurements_tsv_heat(
         expr_mat: ExpressionMatrixTimeSeries,
         out_path: str | Path,
         observable_names: list[str],
-        condition_name_to_simulation_condition_id: dict = None):
+        condition_name_to_simulation_condition_id: dict = None,
+        do_interpolate: bool = False):
     """Create measurements tsv for PETAB.
 
     Observable names are the quantities that describe module expressions;
@@ -186,10 +199,12 @@ def create_measurements_tsv_heat(
     temperatures (21, 32) to a name such as (temp21, temp32). If dict
     is not provided, just use the simulation names that are returned
     by the ExpressionMatrixTime.
+    :param do_interpolate: Interpolate the data
     """
     expressions = expr_mat.extract_module_expressions_long_form()
     expression_list = expr_mat.split_series_into_different_conditions(
         expressions)
+
     df = pd.concat(expression_list)
 
     df = df.rename(columns={'cluster_id': 'observableId',
@@ -214,11 +229,46 @@ def create_measurements_tsv_heat(
                      'measurement', 'time']
     df = df[correct_order]
 
+    if do_interpolate:
+        groups = df.groupby(['observableId', 'simulationConditionId'])
+        record_list = []
+        for (obs_id, sim_cond), group in groups:
+            time = group['time'].values
+            measurement = group['measurement'].values
+            # 5 degrees of freedom
+            spline = UnivariateSpline(time, measurement,
+                                      s=5)
+            # interpolate for each time points
+            time_fine = np.linspace(time.min(), time.max(), 23)
+            measurement_fine = spline(time_fine)
+            record_list.extend(
+                [[obs_id, sim_cond, y, t]
+                 for (y, t) in zip(measurement_fine, time_fine)]
+            )
+            # # Plot the data and the fitted spline
+            # plt.figure(figsize=(6, 4))
+            # plt.plot(time, measurement, 'o',
+            #          label=f'{obs_id} - {sim_cond} (data)')
+            # plt.plot(time_fine, measurement_fine, 'x',
+            #          label=f'{obs_id} - {sim_cond} (spline)')
+            # plt.legend()
+            # plt.xlabel('Time')
+            # plt.ylabel('Measurement')
+            # plt.title(f'Spline Fit for {obs_id} - {sim_cond}')
+            # plt.show()
+
+        df_interpolation = pd.DataFrame.from_records(record_list)  # -> save this to measurements as well
+        df_interpolation.columns = df.columns
+        df = df_interpolation
+        # df_interpolation.to_csv(
+        #     out_path.with_name('interpolation_measurement.tsv'),
+        #     index=False, sep='\t')
+
     df.to_csv(out_path, index=False, sep='\t')
 
 
 def create_observables_tsv(observables: dict, out_path: str | Path, noise_level: float):
-    """Create observable TSV for PETAB. Defaults to setting noise to .1 now"""
+    """Create observable TSV for PETAB."""
     col_names_obs = ['observableId', 'observableFormula', 'noiseFormula']
     obs_record = []
     for obs_name, obs_dict in observables.items():
@@ -230,18 +280,25 @@ def create_observables_tsv(observables: dict, out_path: str | Path, noise_level:
 
 def create_conditions_tsv(out_path: str | Path,
                           measurement_file_path: Path,
-                          cond_df: pd.DataFrame):
+                          cond_df: pd.DataFrame,
+                          assert_same_initial_values = False):
     """Create conditions TSV for petab"""
     df = pd.read_csv(measurement_file_path, sep='\t')
-    initial_values = df[df['time'] == 0]
-    initial_values = initial_values.groupby(
-        ['observableId', 'time'])['measurement']
-    assert all(initial_values.std() < 1e-9)
-    for index, initial_value in initial_values.mean().items():
+    initial_values_per_cluster = df[df['time'] == 0]
+    initial_values_per_cluster = initial_values_per_cluster.groupby(
+        ['observableId', 'time'])
+    cond_df = cond_df.set_index('conditionId')
+    if assert_same_initial_values:
+        assert all(initial_values_per_cluster['measurement'].std() < 1e-9)
+    for index, init_val_one_cluster_df in initial_values_per_cluster:
         species_name = re.findall('y_\d+', index[0])[0]
-        cond_df[species_name] = initial_value
-    # Add them to all this
-    cond_df.to_csv(out_path, sep='\t', index=False)
+        init_val_one_cluster_df = init_val_one_cluster_df[
+            ['simulationConditionId', 'measurement']]
+        for _, one_row in init_val_one_cluster_df.iterrows():
+            cond_id = one_row['simulationConditionId']
+            measurement = one_row['measurement']
+            cond_df.loc[cond_id, species_name] = measurement
+    cond_df.to_csv(out_path, sep='\t')
 
 
 def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
@@ -252,6 +309,8 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
                                                          petab_problem)
 
     engine = pypesto.engine.MultiProcessEngine()
+    # engine = pypesto.engine.SingleCoreEngine()
+
     result = optimize.minimize(
         problem=problem, optimizer=optimizer, n_starts=n_starts, engine=engine,
     )
@@ -267,6 +326,11 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
     plt.close()
 
     plot_pypesto_module_fit(petab_problem, result, problem)
+
+    petab_problem_og = petab.v1.Problem.from_yaml(
+        'data/experiments/25_everything_including_limma/heat/petab_files/baddadan_heat_petab.yaml'
+    )
+
     # logging.info(return_dict)
     # plt.savefig(fig_folder / 'model_fit.png')
     plt.savefig(fig_folder / 'model_fit.svg')
