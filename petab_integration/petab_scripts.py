@@ -25,7 +25,9 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
                       sbml_path: Path | str,
                       out_path: Path,
                       experimental_setup: str,
-                      do_interpolate: bool = False
+                      do_interpolate: bool = False,
+                      param_guess_dict: dict | None = None,
+                      do_extra_datapoints: bool = False
                       ):
     """Write necessary petab files for either heat or drought experiment.
 
@@ -58,7 +60,9 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
                                  do_interpolate)
 
     create_parameters_tsv(
-        out_path / yaml_dict['parameter_file'], sbml_importer)
+        out_path / yaml_dict['parameter_file'], sbml_importer,
+        parameter_guess_dict=param_guess_dict
+    )
 
     observables = {f'observable_{species.getId()}':
                        {'formula': species.getId()}
@@ -70,7 +74,8 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
         measurement_file_path,
         list(observables.keys()),
         expr_mat_cond_name_to_simul_cond_name,
-        do_interpolate=do_interpolate
+        do_interpolate=do_interpolate,
+        do_extra_datapoints=do_extra_datapoints
     )
 
     # When interpolated, the initial values are not necessarily the same,
@@ -145,7 +150,8 @@ def get_condition_info(experiment_name: str):
 
 
 def create_parameters_tsv(out_path: str | Path,
-                          sbml_importer: amici.SbmlImporter):
+                          sbml_importer: amici.SbmlImporter,
+                          parameter_guess_dict: dict[str:float] = None):
     """Create parameters CSV for petab"""
     records = []
     for parameter in sbml_importer.sbml.parameters:
@@ -154,26 +160,35 @@ def create_parameters_tsv(out_path: str | Path,
             continue
         if name.startswith('delta_'):
             parameter_scale = 'lin'
-            lb, ub = -5, 0
+            lb, ub = -50, 0
         elif name.startswith('gamma_'):
             parameter_scale = 'lin'
-            lb, ub = -1, 1
+            lb, ub = -10, 10
         elif name.startswith('k_'):
             parameter_scale = 'log10'
             lb, ub = 0.1, 10
         elif name.startswith('beta_'):
             parameter_scale = 'log10'
-            lb, ub = 0.000001, 100
+            lb, ub = 0.000001, 1000
         else:
             raise NotImplementedError('Does not know what param limits to set')
-        estimate = 1
-        records.append([name, parameter_scale, lb, ub, estimate])
+        do_estimate = 1
+        records.append([name, parameter_scale, lb, ub, do_estimate])
     df = pd.DataFrame.from_records(records,
                                    columns=['parameterId',
                                             'parameterScale',
                                             'lowerBound',
                                             'upperBound',
                                             'estimate'])
+    if parameter_guess_dict:
+        df['initializationPriorType'] = 'parameterScaleNormal'
+        def mapping_func(param_id):
+            param_guess = parameter_guess_dict[param_id]
+            standard_dev = .5
+            # standard_dev = .1 if in_row['parameterScale'] == 'lin' else -1
+            return f"{param_guess};{standard_dev}"
+        df['initializationPriorParameters'] = df['parameterId'].map(
+            mapping_func)
     df.to_csv(out_path, index=False, sep='\t')
 
 
@@ -182,7 +197,8 @@ def create_measurements_tsv_heat(
         out_path: str | Path,
         observable_names: list[str],
         condition_name_to_simulation_condition_id: dict = None,
-        do_interpolate: bool = False):
+        do_interpolate: bool = False,
+        do_extra_datapoints: bool = False):
     """Create measurements tsv for PETAB.
 
     Observable names are the quantities that describe module expressions;
@@ -229,7 +245,10 @@ def create_measurements_tsv_heat(
                      'measurement', 'time']
     df = df[correct_order]
 
-    if do_interpolate:
+    if do_interpolate and do_extra_datapoints:
+        raise ValueError("Can't have both do_interpolate "
+                         "and do_extra_datapoints set to true")
+    elif do_interpolate:
         groups = df.groupby(['observableId', 'simulationConditionId'])
         record_list = []
         for (obs_id, sim_cond), group in groups:
@@ -257,12 +276,27 @@ def create_measurements_tsv_heat(
             # plt.title(f'Spline Fit for {obs_id} - {sim_cond}')
             # plt.show()
 
+
         df_interpolation = pd.DataFrame.from_records(record_list)  # -> save this to measurements as well
         df_interpolation.columns = df.columns
         df = df_interpolation
         # df_interpolation.to_csv(
         #     out_path.with_name('interpolation_measurement.tsv'),
         #     index=False, sep='\t')
+    elif do_extra_datapoints:
+        # Get two latest datapoints
+        timepoints = df['time'].unique()
+        timepoints.sort()
+        new_row_list = []
+        for late_timepoint in timepoints[-2:]:
+            #Add two points right before and two points right after
+            for _, row in df[df['time'] == late_timepoint].iterrows():
+                for offset in np.array([-2, -1, 1, 2]) * 1e-10:
+                    new_row = row.copy()
+                    new_row['time'] += offset
+                    assert new_row['time'] != row['time']
+                    new_row_list.append(new_row)
+        df = pd.concat([df, pd.DataFrame(new_row_list)], ignore_index=True)
 
     df.to_csv(out_path, index=False, sep='\t')
 
@@ -308,7 +342,7 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
     optimizer, problem = prepare_petab_files_for_fitting(out_folder,
                                                          petab_problem)
 
-    engine = pypesto.engine.MultiProcessEngine()
+    engine = pypesto.engine.MultiProcessEngine(16)
     # engine = pypesto.engine.SingleCoreEngine()
 
     result = optimize.minimize(
@@ -322,7 +356,7 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
     plt.savefig(fig_folder / 'waterfall_plot.svg')
     plt.close()
     pypesto.visualize.parameters(result)
-    plt.savefig(fig_folder / 'param_visualise.svg')
+    plt.savefig(fig_folder / 'param_visualise.png')
     plt.close()
 
     plot_pypesto_module_fit(petab_problem, result, problem)

@@ -14,8 +14,8 @@ from experiment_scripts import (module_size_pipeline, drought_data_to_sbml,
                                 save_jackknife_files, \
                                 ground_truth_vs_jackknife, pypesto_from_sbml, \
                                 analyse_go_enrichments_find_enrichment,
-                                do_coherence_with_stat_tests,
-                                full_pipeline_prototype)
+                                do_coherence_with_stat_tests)
+from end_to_end_pipeline import full_pipeline_prototype
 from exploring_questions import get_coherence_random_modules, \
     get_robustness_random_modules
 from figure_pipelines import fig2_from_generated_data

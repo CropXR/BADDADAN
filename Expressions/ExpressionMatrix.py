@@ -1353,3 +1353,34 @@ class ExpressionMatrixTimeSeries:
         if self.has_been_clustered:
             self.df['cluster_id'] = clusters
 
+    def save_go_enrich_supp_table(self, go_enrich_output_path: Path,
+                                  out_path: Path):
+        """Save all enriched GO terms of all modules in this expression matrix
+
+        :param go_enrich_output_path: Path where all the output files of the go enrichment are
+        :param out_path: path to store the csv with all go terms of all modules for in the paper's supplementary materials
+
+        :return:
+        """
+        df_list = []
+        for module_idx in self.get_genes_per_cluster().keys():
+            ""
+            in_file = go_enrich_output_path / f'combined_sum_dists_wgcna_clustered_ds1_module_{module_idx}.tsv'
+            if in_file.exists():
+                one_module_df = pd.read_csv(in_file, sep='\t')
+                one_module_df['Module name'] = module_idx
+                df_list.append(one_module_df)
+            else:
+                continue
+
+
+        full_df = pd.concat(df_list)
+        # fix_order for display purposes
+        full_df = full_df[
+            ['Module name', '# GO', 'NS', 'enrichment', 'name',
+             'ratio_in_study', 'ratio_in_pop', 'p_uncorrected',
+             'depth', 'study_count', 'p_fdr_bh', 'study_items']
+        ]
+        full_df.to_csv(out_path, index=False)
+
+

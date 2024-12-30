@@ -15,4 +15,5 @@ hyperparams:
   top_nr_clusters: 13
   do_sim_data: False
   do_interpolate: False
-  n_starts: 500
+  n_starts: 1000
+  do_extra_datapoints: False

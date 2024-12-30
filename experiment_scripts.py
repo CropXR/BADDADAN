@@ -34,120 +34,18 @@ from data_wrangling import expr_mat_from_heat, expr_mat_from_drought
 from exploring_questions import plot_module_size_distributions, \
     combine_local_distance_and_prior, similarity_matrices_local_and_atted, \
     check_correlation_cutoffs_for_intermodular_network
-from helpers import one_gene_list_file_per_cluster
 from petab_integration.petab_scripts import write_petab_files, \
     param_optimise_petab_problem
 
 
-def full_pipeline_prototype(experiment_path: Path):
-    skip_slow_steps = True
-    # for treatment_name in ['heat']:
-    # for treatment_name in ['drought']:
-    for treatment_name in ['drought', 'heat']:
-        logging.info(f'Doing {treatment_name}')
-        treatment_path = experiment_path / treatment_name
-        data_params, hyper_params, experiment_params = config_preprocess(
-            treatment_path)
-        if not skip_slow_steps:
-            expr_mat_all_genes = expr_mat_time_factory(
-                treatment_path,
-                data_params['soft_path'],
-                hyper_params['agg_method'],
-                hyper_params['do_log2'],
-                gpl_path=data_params.get('gpl_path', None)
-            )
-            expr_mat_all_genes.save_for_limma(treatment_path / '01_input_for_limma.csv')
-
-        # ## Here: run limma script (limma_de_selection/de_selection.R) ##
-        # continue
-        # Select only the DE genes
-        de_file_path = list(treatment_path.glob('02[a_]*.csv'))
-        assert len(de_file_path) == 1
-        de_file_path = str(de_file_path[0])
-        expr_mat_time = expr_mat_time_factory(
-            treatment_path,
-            de_file_path,
-            hyper_params['agg_method'],
-            hyper_params['do_log2'],
-            gpl_path=None)
-        #
-        expr_mat_time.merge_biological_samples()
-        # # Read DE genes from limma output and get the ATTED/Merged/Local scores
-        if not skip_slow_steps:
-            save_files_for_wgcna_cutting(treatment_path, data_params, expr_mat_time)
-        ## Here: run wgcna cutting script (r_wgcna_dyntreecut/dyntreecut.R) ##
-        # continue
-        see_gene_module_sizes(expr_mat_time,
-                              cut_modules_path=treatment_path / 'dyntreecut_output',
-                              figure_path=treatment_path / 'figs')
-
-        skip_making_one_file_per_clust = True
-        if not skip_making_one_file_per_clust:
-            one_gene_list_file_per_cluster(
-                in_dir=treatment_path / 'dyntreecut_output',
-                out_dir=treatment_path / 'split_by_module',
-                use_for_analysis_func=lambda x: True
-            )
-        skip_making_random_modules = True
-        # Also generate random clusters that have the same size as a representative of these clusters
-        if not skip_making_random_modules:
-            expr_mat_time.save_random_modules_for_goa_find_enrichment(
-                wgcna_label_file=treatment_path
-                                 / 'dyntreecut_output'
-                                 / 'combined_sum_dists_wgcna_clustered_ds1.csv',
-                out_dir=treatment_path / 'split_by_module'
-            )
-
-        # Coherence
-        skip_coherence = True
-        if not skip_coherence:
-            do_coherence_with_stat_tests(
-                in_dir=treatment_path / 'split_by_module',
-                expr_mat_time=expr_mat_time,
-                out_dir=treatment_path / 'figs'
-            )
-
-        # continue
-        # Do GO enrichment
-        ### RUN SNAKEMAKE ###
-        # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
-
-        go_enrich_output_path = (
-                treatment_path
-                / 'go_outputs_exp_evidence_only_background_de_genes'
-        )
-        skip_go_enrich_analysis = True
-        if not skip_go_enrich_analysis:
-            analyse_go_enrichments_find_enrichment(
-                go_enrich_output_path,
-                treatment_path / 'figs',
-                )
-
-        skip_ode_steps = False
-        sbml_path = treatment_path / 'module_network.xml'
-        if not skip_ode_steps:
-            # ODE modelling steps
-            my_ode = from_expr_mat_time_to_ode(data_params, treatment_path,
-                                               expr_mat_time, hyper_params)
-
-            # These are parameters that are different between the two datasets
-            u_t_function = 'temp' if treatment_name == 'heat' \
-                else 'drought * time / 13'
-            my_ode.save_to_sbml(sbml_path,
-                                u_t_function)
-        continue
-        pypesto_from_sbml(treatment_path,
-                          treatment_name,
-                          treatment_path / 'expr_mat_time.pkl',
-                          sbml_path)
-
-        with mlflow.start_run(
-                description=experiment_params['description']):
-            mlflow.log_params(data_params)
-            mlflow.log_params(hyper_params)
-            mlflow.set_tags(experiment_params)
-            mlflow.log_artifact(
-                str(treatment_path / 'figs'))
+def save_supp_table_go_enrichments(expr_mat_pickl_path, go_enrich_output_path,
+                                   treatment_path):
+    with expr_mat_pickl_path.open('rb') as f:
+        expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
+    expr_mat_time.save_go_enrich_supp_table(
+        go_enrich_output_path,
+        out_path=treatment_path / 'go_terms_supp_table.csv'
+    )
 
 
 def see_gene_module_sizes(expr_mat_time: ExpressionMatrixTimeSeries,
@@ -712,6 +610,11 @@ def from_expr_mat_time_to_ode(data_params,
         pickle.dump(expr_mat_time, f)
     with (experiment_path / 'module_network.pkl').open('wb') as f:
         pickle.dump(module_module, f)
+    module_module.save_for_cytoscape(experiment_path / 'module_network.cyjs')
+    # Mean number of TFs for each edge:
+    pd.Series([len(i)
+               for (_,_,i) in module_module.graph.edges(data='tf_name')]
+              ).value_counts(normalize=True)
     # Assure that data has already been clustered
     assert expr_mat_time.has_been_clustered
     # expr_mat_time.get_genes_per_cluster()[328]
@@ -827,7 +730,8 @@ def pypesto_from_sbml(experiment_path: Path,
                       condition: str,
                       expr_mat_time_pkl_path: Path,
                       sbml_path: Path,
-                      do_ml_flow_logging: bool = True):
+                      do_ml_flow_logging: bool = True,
+                      use_best_params_as_init: Path | None = None):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path
     )
@@ -837,12 +741,23 @@ def pypesto_from_sbml(experiment_path: Path,
     # Add constant value
     expr_mat_time.add_constant(3, do_all_pos_check=False)
     # expr_mat_time.get_ci_per_cluster()
+    param_guess_dict = None
+    if use_best_params_as_init:
+        logging.info('Using previously found parameters')
+        # Read result from hdf5
+        loaded_result = pypesto.store.read_result(use_best_params_as_init)
+        # Match param names to param values
+        param_guess_dict = dict(zip(loaded_result.problem.x_names,
+                                    loaded_result.optimize_result[0].x))
+
     write_petab_files(
         expr_mat_time,
         sbml_path,
         experiment_path / 'petab_files',
         experimental_setup=condition,
-        do_interpolate=hyper_params['do_interpolate']
+        do_interpolate=hyper_params['do_interpolate'],
+        do_extra_datapoints=hyper_params['do_extra_datapoints'],
+        param_guess_dict=param_guess_dict
     )
     # Experimental data
     petab_problem = petab.v1.Problem.from_yaml(

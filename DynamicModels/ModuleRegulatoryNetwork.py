@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from enum import Enum
 from pathlib import Path
@@ -372,17 +373,19 @@ class ModuleRegulatoryNetwork:
         nx.set_node_attributes(self.graph, module_name_as_key, name='gene_names')
 
     def save_for_cytoscape(self, out_path: Path):
-        """Save edge list for opening network in Cytoscape
+        """Save CYJS for cytoscape
 
-        :param out_path: tsv file to save file to
+        :param out_path: cyjs file to save file to
         """
-        # TODO correctly add edge attributes to this output
-        # nx.write_edgelist(self.graph, out_path)
-        # Save gene pairs to a file
-        with out_path.open('w+') as f:
-            f.write("Gene1\tGene2\tCorr_strength\n")
-            for pair in self.graph.edges(data=True):
-                f.write(f"{pair[0]}\t{pair[1]}\t{pair[2]}\n")
+        out_json = nx.cytoscape_data(self.graph)
+
+        def enum_json_encoder(obj):
+            if isinstance(obj, Enum):
+                return obj.value  # Serialize Enum as its value
+            raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
+        with out_path.open('w') as file:
+            json.dump(out_json, file, indent=4, default=enum_json_encoder)
 
     def keep_only_modules_of_interest(self,
                                       expr_mat: ExpressionMatrixTimeSeries):
