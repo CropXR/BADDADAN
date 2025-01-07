@@ -557,3 +557,66 @@ def check_correlation_cutoffs_for_intermodular_network(expr_mat_time,
     plt.tight_layout()
     plt.savefig(plotting_path / 'correlation_cutoff_intermodular_network_stats.svg')
     plt.close()
+
+
+def sa_drought_over_time():
+    in_file = Path('data/raw_data/sa_drought_levels.xlsx')
+    metab_df = pd.read_excel(in_file)
+
+    # sns.lineplot(data=df, x='Time (days)', y='Salicylic acid (SA) glycoside ', hue='Treatment')
+    # plt.show()
+    expr_mat_pickl_path = Path('data/experiments/25_everything_including_limma/drought/expr_mat_time.pkl')
+    with expr_mat_pickl_path.open('rb') as f:
+        expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
+    expr_mat_time.add_constant(3, do_all_pos_check=False)
+    expressions = expr_mat_time.extract_module_expressions_long_form()
+    # expression_list = expr_mat_time.split_series_into_different_conditions(
+    #     expressions)
+
+    for selected_cluster_id in [4, 15]:
+        subset = expressions[expressions['cluster_id'] == selected_cluster_id]
+        subset = subset[subset['condition'] != 'zero']
+        subset = subset[['time', 'condition', 'expression']]
+        # Assuming the first dataset is in `subset` and the second is in `metab_df`
+        # Convert time from timedelta to days
+        subset['time_days'] = subset['time'].dt.days
+        subset.rename(columns={'condition': 'Treatment'}, inplace=True)
+        subset['Treatment'] = subset[
+            'Treatment'].str.capitalize()
+
+        subset['Treatment'] = subset['Treatment'].replace(
+            {'Control': 'Watered'})
+
+        metab_df.rename(columns={
+            'Time (days)': 'time_days',
+            'Salicylic acid (SA) ': 'SA_level'
+        }, inplace=True)
+        merged_df = pd.merge(subset, metab_df,
+                             left_on=['Treatment', 'time_days'],
+                             right_on=['Treatment', 'time_days'], how='inner')
+
+        correlation = merged_df[['expression', 'SA_level']].corr().iloc[0, 1]
+        logging.info(
+            f"Correlation between expression of module {selected_cluster_id}"
+            f" and SA Levels (r = {correlation:.2f})")
+        # Plot the correlation
+        plt.figure(figsize=(8, 6))
+        sns.scatterplot(data=merged_df, x='expression', y='SA_level',
+                        hue='Treatment')
+
+        plt.xlabel(f"Gene Module {selected_cluster_id} Mean Expression")
+        plt.ylabel("Salicylic Acid Level (SA)")
+        plt.ylim((0,35))
+        plt.legend(title="Condition")
+        plt.tight_layout()
+        plt.show()
+
+
+    for metabolite in ['Salicylic acid (SA) ', 'Abscisic acid (ABA) ']:
+        sns.lineplot(data=metab_df, x='Time (days)',
+                     y=metabolite,
+                     hue='Treatment',
+                     hue_order=['Watered', 'Drought'],
+                     )
+        plt.ylabel(f'{metabolite[:-1]}, area under peak LC-ESI-QToF MS')
+        plt.show()
