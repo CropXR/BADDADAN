@@ -13,9 +13,9 @@ from helpers import one_gene_list_file_per_cluster
 
 def full_pipeline_prototype(experiment_path: Path):
     skip_slow_steps = True
-    for treatment_name in ['heat']:
+    # for treatment_name in ['heat']:
     # for treatment_name in ['drought']:
-    # for treatment_name in ['drought', 'heat']:
+    for treatment_name in ['drought', 'heat']:
         logging.info(f'Doing {treatment_name}')
         treatment_path = experiment_path / treatment_name
         data_params, hyper_params, experiment_params = config_preprocess(
@@ -28,12 +28,14 @@ def full_pipeline_prototype(experiment_path: Path):
         #     mlflow.set_tags(experiment_params)
         #     mlflow.log_artifact(
         #         str(treatment_path / 'figs'))
-        #     mlflow.log_artifact(
-        #         str(treatment_path / 'petab_files'))
+        #     # mlflow.log_artifact(
+        #     #     str(treatment_path / 'petab_files'))
         #     mlflow.log_artifact(
         #         str(treatment_path / 'pypesto_results.hdf5'))
         #     mlflow.log_artifact(
         #         str(treatment_path / 'log.log'))
+        #     mlflow.log_artifact(
+        #         str(treatment_path / 'go_terms_supp_table.csv'))
         # continue
 
         if not skip_slow_steps:

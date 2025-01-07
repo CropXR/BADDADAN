@@ -17,3 +17,4 @@ hyperparams:
   do_interpolate: False
   n_starts: 1000
   do_extra_datapoints: False
+  add_circadian_clock: False

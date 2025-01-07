@@ -4,9 +4,8 @@ from pathlib import Path
 
 import networkx as nx
 
-
-
 from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
+
 @dataclass
 class ClusteringArgs:
     """Arguments to use for clustering with different linkage matrices"""

@@ -6,6 +6,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable, Generator, Literal
 
+import matplotlib
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -307,10 +308,13 @@ class ModuleRegulatoryNetwork:
             self.graph.remove_nodes_from(tfs_to_remove)
 
         if do_plotting:
-            sns.set_style()
+            matplotlib.rc_file_defaults()
             sns.boxplot(debug_corrs)
-            sns.swarmplot(debug_corrs, color=sns.color_palette()[1])
-            plt.ylim((-.5, 1))
+            # sns.swarmplot(debug_corrs, color=sns.color_palette()[1])
+            plt.xlim((-.2, 1))
+            plt.xlabel(
+                'Pearson correlation between TF and mean expression \n of module from which it originates')
+            plt.tight_layout()
             plt.show()
         return debug_corrs
 

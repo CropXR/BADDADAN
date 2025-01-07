@@ -47,7 +47,7 @@ def write_petab_files(expr_mat_time: ExpressionMatrixTimeSeries,
          f' Not {experimental_setup=}')
 
     sbml_importer = amici.SbmlImporter(sbml_path,
-                                       show_sbml_warnings=True)
+                                       show_sbml_warnings=False)
     # observables = amici.assignmentRules2observables(
     #     sbml_importer.sbml,
     #     filter_function=lambda variable: variable.getId().startswith(
@@ -170,6 +170,15 @@ def create_parameters_tsv(out_path: str | Path,
         elif name.startswith('beta_'):
             parameter_scale = 'log10'
             lb, ub = 0.000001, 1000
+        elif name.startswith('a_'):
+            parameter_scale = 'log10'
+            lb, ub = 0.000001, 100
+        elif name.startswith('phi_'):
+            parameter_scale = 'lin'
+            lb, ub = -12, 12
+        elif name.startswith('b_'):
+            parameter_scale = 'lin'
+            lb, ub = -10, 10
         else:
             raise NotImplementedError('Does not know what param limits to set')
         do_estimate = 1
@@ -183,8 +192,12 @@ def create_parameters_tsv(out_path: str | Path,
     if parameter_guess_dict:
         df['initializationPriorType'] = 'parameterScaleNormal'
         def mapping_func(param_id):
-            param_guess = parameter_guess_dict[param_id]
-            standard_dev = .5
+            if param_id in parameter_guess_dict:
+                param_guess = parameter_guess_dict[param_id]
+                standard_dev = .5
+            else:
+                param_guess = 1
+                standard_dev = 5
             # standard_dev = .1 if in_row['parameterScale'] == 'lin' else -1
             return f"{param_guess};{standard_dev}"
         df['initializationPriorParameters'] = df['parameterId'].map(
@@ -289,14 +302,13 @@ def create_measurements_tsv_heat(
         timepoints.sort()
         new_row_list = []
         for late_timepoint in timepoints[-2:]:
-            #Add two points right before and two points right after
+            #Add copies of time point (ie more weight) to last two time points
+            # to balance out uneven sampling
             for _, row in df[df['time'] == late_timepoint].iterrows():
-                for offset in np.array([-2, -1, 1, 2]) * 1e-10:
-                    new_row = row.copy()
-                    new_row['time'] += offset
-                    assert new_row['time'] != row['time']
-                    new_row_list.append(new_row)
-        df = pd.concat([df, pd.DataFrame(new_row_list)], ignore_index=True)
+                for _ in range(4):
+                    new_row_list.append(row)
+        df = pd.concat([df, pd.DataFrame(new_row_list)],
+                       ignore_index=True)
 
     df.to_csv(out_path, index=False, sep='\t')
 
@@ -342,7 +354,7 @@ def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
     optimizer, problem = prepare_petab_files_for_fitting(out_folder,
                                                          petab_problem)
 
-    engine = pypesto.engine.MultiProcessEngine(16)
+    engine = pypesto.engine.MultiProcessEngine()
     # engine = pypesto.engine.SingleCoreEngine()
 
     result = optimize.minimize(

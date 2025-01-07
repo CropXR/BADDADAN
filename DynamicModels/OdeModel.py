@@ -37,7 +37,9 @@ class OdeModel:
 
     @classmethod
     def construct_from_regulatory_network(
-            cls, gene_network: ModuleRegulatoryNetwork, nonlinear: bool = False
+            cls, gene_network: ModuleRegulatoryNetwork,
+            nonlinear: bool = False,
+            add_circadian_clock: bool = False
     ) -> OdeModel:
         """Create ODE network from ModuleRegulatoryNetwork.
 
@@ -65,6 +67,9 @@ class OdeModel:
                 regulators = list(graph.predecessors(module))
                 formula = LinearFormula(module, regulators)
             formulas.append(formula)
+        if add_circadian_clock:
+            for formula in formulas:
+                formula.add_circadian_clock_term()
         return cls(formulas, nonlinear)
 
     def compute_one_step(self, t: float, y: list[float],
@@ -205,7 +210,8 @@ class OdeModel:
         out = np.array(out)
         return out
 
-    def save_to_sbml(self, out_path, u_t_function: str):
+    def save_to_sbml(self, out_path,
+                     u_t_function: str):
         """Save model to sbml format
 
         :param out_path: Path to save SBML in

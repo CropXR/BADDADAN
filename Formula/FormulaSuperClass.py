@@ -49,11 +49,6 @@ class FormulaSuperClass:
         # out_string = out_string.replace('u_t', 'u')
         return out_string
 
-    def specify_u_t(self, u_t: Callable):
-        """Give the U_t function, which implements external stresses"""
-        # TODO perhaps move to __init__ later
-        self.u_t = u_t
-
     def compile_formula(self):
         # Compile string to speed up evaluation
         self.compiled_formula_string = compile(self.formula_string.lstrip(),
@@ -123,3 +118,18 @@ class FormulaSuperClass:
     def nr_params(self):
         """Get the number of parameters"""
         return len(self.params)
+
+    def add_circadian_clock_term(self):
+        # Add factor for amplitude of oscilation
+        a_param_name = f'a_{self.module_index}'
+        self.params.append(a_param_name)
+        # Phase of oscillation
+        phi_param_name = f'phi_{self.module_index}'
+        self.params.append(phi_param_name)
+        # Offset of oscillation
+        b_param_name = f'b_{self.module_index}'
+        self.params.append(b_param_name)
+
+        self.formula_parts.append(
+            f' + {a_param_name} * sin({(2 * np.pi) / 24} * time + {phi_param_name})'
+            f' + {b_param_name}')

@@ -605,21 +605,23 @@ def from_expr_mat_time_to_ode(data_params,
         threshold=hyper_params['edge_corr_threshold'],
         module_plot_path=experiment_path / 'global_cluster_module_network.svg')
     expr_mat_time.keep_only_modules_in_network(module_module)
-    expr_mat_time.plot_clusters_over_time()
+    # expr_mat_time.plot_clusters_over_time()
     with (experiment_path / 'expr_mat_time.pkl').open('wb') as f:
         pickle.dump(expr_mat_time, f)
     with (experiment_path / 'module_network.pkl').open('wb') as f:
         pickle.dump(module_module, f)
     module_module.save_for_cytoscape(experiment_path / 'module_network.cyjs')
-    # Mean number of TFs for each edge:
-    pd.Series([len(i)
-               for (_,_,i) in module_module.graph.edges(data='tf_name')]
-              ).value_counts(normalize=True)
-    # Assure that data has already been clustered
+    # # Mean number of TFs for each edge:
+    # pd.Series([len(i)
+    #            for (_,_,i) in module_module.graph.edges(data='tf_name')]
+    #           ).value_counts(normalize=True)
+
     assert expr_mat_time.has_been_clustered
     # expr_mat_time.get_genes_per_cluster()[328]
-    my_ode = OdeModel.construct_from_regulatory_network(module_module,
-                                                        nonlinear=True)
+    my_ode = OdeModel.construct_from_regulatory_network(
+        module_module,
+        nonlinear=True,
+        add_circadian_clock=hyper_params['add_circadian_clock'])
     return my_ode
 
 
