@@ -10,7 +10,7 @@ from glob import glob
 # IDS, = glob_wildcards("random_split_by_module/{id}.csv")
 IDS, = glob_wildcards("split_by_module/{id}.csv")
 # IDS = [id for id in IDS if "ds1" in id]
-IDS = [id for id in IDS if "local_dists_wgcna_clustered_ds2" in id]
+# IDS = [id for id in IDS if "local_dists_wgcna_clustered_ds2" in id]
 
 rule target:
     # Uncomment correct line to do
