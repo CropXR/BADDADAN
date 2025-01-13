@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 import re
 
+import dill as pickle
 import mlflow
 import matplotlib
 import numpy as np
@@ -175,7 +176,7 @@ def create_parameters_tsv(out_path: str | Path,
             lb, ub = 0.000001, 100
         elif name.startswith('phi_'):
             parameter_scale = 'lin'
-            lb, ub = -12, 12
+            lb, ub = -np.pi, np.pi
         elif name.startswith('b_'):
             parameter_scale = 'lin'
             lb, ub = -10, 10
@@ -454,7 +455,8 @@ def prepare_petab_files_for_fitting(
 
 def plot_nicely_from_artifact(out_folder_of_experiment: str,
                               artifact,
-                              petab_yaml_path: str):
+                              petab_yaml_path: str,
+                              expr_mat_time_path = None):
     """
     :param out_folder_of_experiment: Should contain subdirectory called
     amici_models/baddadan where the amici model lives
@@ -470,11 +472,20 @@ def plot_nicely_from_artifact(out_folder_of_experiment: str,
     # To improve:
     # Standard deviations (?) -> quite hard maybe? ->
     # build upon existing functionality I built earlier maybe?
+    if expr_mat_time_path:
+        with expr_mat_time_path.open('rb') as f:
+            expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
+        expr_mat_time.add_constant(3, do_all_pos_check=False)
+        # get_std_per_cluster
+        ci_per_cluster = expr_mat_time.get_ci_per_cluster(confidence_level=.99, for_error_bars=True)
+        split_ci_list = expr_mat_time.split_series_into_different_conditions(ci_per_cluster.T)
+        # std_per_cluster = expr_mat_time.get_std_per_cluster()
+        # split_std_list = expr_mat_time.split_series_into_different_conditions(std_per_cluster.T)
+    plot_pypesto_module_fit(
+        petab_problem, loaded_result, problem, error_bar_size_list=split_ci_list)
 
-    plot_pypesto_module_fit(petab_problem, loaded_result, problem)
 
-
-def plot_pypesto_module_fit(petab_problem, optimise_result, problem):
+def plot_pypesto_module_fit(petab_problem, optimise_result, problem, error_bar_size_list = None):
     # Ensure no fancy sns things remain because they break it for some reason
     matplotlib.rc_file_defaults()
     r_dict = visualize_optimized_model_fit(
@@ -483,6 +494,12 @@ def plot_pypesto_module_fit(petab_problem, optimise_result, problem):
         pypesto_problem=problem,
         return_dict=True
     )
+    if 'drought' in petab_problem.condition_df.index:
+        condition_name_dict = {'control_keyword': 'control',
+         'treatment_keyword': 'drought'}
+    else:
+        condition_name_dict = {'control_keyword': '21',
+         'treatment_keyword': '32'}
     # Map plot names to observable names
     for i, (ax_name, ax) in enumerate(r_dict['axes'].items()):
         legend = ax.get_legend()
@@ -490,7 +507,42 @@ def plot_pypesto_module_fit(petab_problem, optimise_result, problem):
         match = re.search('y_\d+', legend.get_texts()[0].get_text())
         match_text = match.group(0)
         match_text = match_text.replace('y_', 'Module ')
-        ax.set_title(match_text)
+        ax.set_title(match_text, fontsize=32)
+        module_id = match_text.split(' ')[1]
+        ax.set_ylabel('')
+        ax.set_xlabel('')
+        ax.tick_params(axis='x', labelsize=16)  # X-axis ticks
+        ax.tick_params(axis='y', labelsize=16)
+
+        # Error bars
+        if error_bar_size_list is not None:
+            for line in ax.get_lines():
+                if line.get_marker() == 'x':
+                    # Experimental data
+                    line_color = line.get_color()
+                    errors_for_condition = None
+                    for error_bars in error_bar_size_list:
+                        if any(error_bars['condition'] == condition_name_dict['control_keyword']) and line_color == '#1f77b4': # Blue is control condition
+                            errors_for_condition = error_bars
+                            break
+                        elif any(error_bars['condition'] == condition_name_dict['treatment_keyword']) and line_color == '#ff7f0e': # Orange is heat condition
+                            errors_for_condition = error_bars
+                            break
+                        # else:
+                        #     raise NotImplementedError("Could not find which errorbars to use")
+                    x, y = line.get_xdata(), line.get_ydata()
+                    assert errors_for_condition is not None, 'Could not find which errorbars to use'
+                    errors = errors_for_condition[int(module_id)]
+                    if len(errors) == len(y) - 1:
+                        # Missing first time point (only in control)
+                        y = y[1:]
+                        x = x[1:]
+                    if errors.shape[1] == 2:
+                        # Upper and lower limits
+                        errors = errors.T
+                    ax.errorbar(x, y,
+                                yerr=errors,
+                                color=line_color, fmt=' ')
         if i < len(r_dict['axes'].items()) - 1:
             legend.remove()
         else:

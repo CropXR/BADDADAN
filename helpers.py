@@ -197,14 +197,43 @@ def check_all_identical_lists(lists: List[List]) -> bool:
     return True
 
 
-def mean_bootstrap_error(in_df: pd.DataFrame, confidence_level: float = .95) -> pd.Series:
-    """From a dataframe, calculate the per-column mean bootstrap error"""
+def mean_bootstrap_error(in_df: pd.DataFrame, confidence_level: float) -> pd.DataFrame:
+    """From a dataframe, calculate the per-column 95% mean bootstrap error"""
     in_df = in_df.drop('cluster_id', axis=1)
     x = in_df.to_numpy()
+
     all_bs = bootstrap((x,), np.mean,
                        confidence_level=confidence_level).confidence_interval
-    bs_error = (all_bs.high - all_bs.low) / 2
-    return pd.Series(bs_error)
+    out_df = pd.DataFrame([all_bs.low, all_bs.high], columns=in_df.columns, index=['lower', 'upper'])
+
+    return out_df
+
+    # # Some old crap that can be ignored
+
+    # Only
+    # bs_error = (all_bs.high - all_bs.low) / 2
+    # out_df = out_df - x.mean(axis=0)
+    # assert all(out_df.loc[:, 'lower'] < 0) and all(out_df.loc[:, 'lower'] > 0)
+    # out_df.loc[:, 'lower'] = out_df.loc[:, 'lower'].abs()
+
+    # Plot genes
+    # # Only control or drought
+    # test_df = in_df.loc[:,in_df.columns.str.contains('control')]
+    # test_df = in_df.loc[:,in_df.columns.str.contains('drought')]
+    # for index, row in test_df.iterrows():
+    #     plt.plot(row, alpha=.1)
+    # plt.plot()
+    # plt.plot(test_df.mean())
+    #
+    # plt.xlabel('Condition')
+    # plt.xticks()
+    # plt.ylabel('Expression Value')
+    # plt.title('Gene Expression Across Conditions')
+    # plt.legend(loc='upper right')
+    # plt.show()
+
+    # Luckily looks good :)
+
 
 def one_gene_list_file_per_cluster(in_dir: Path,
                                    out_dir: Path,

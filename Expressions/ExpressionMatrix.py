@@ -955,7 +955,10 @@ class ExpressionMatrixTimeSeries:
                                  merged['expressions_condition'])
         return mse
 
-    def split_series_into_different_conditions(self, expressions):
+    def split_series_into_different_conditions(self, expressions: pd.DataFrame):
+        """Take expressions dataframe as input and split into list
+        with dataframe per different conditions
+        """
         out_list = []
         for condition_name in self.condition_names:
             if expressions.index.nlevels > 1:
@@ -981,7 +984,7 @@ class ExpressionMatrixTimeSeries:
         return expressions
 
     @staticmethod
-    def _mean_pairwise_abs_cor(one_group_df: pd.Dataframe) -> float | np.floating:
+    def _mean_pairwise_abs_cor(one_group_df: pd.DataFrame) -> float | np.floating:
         """Get the mean pairwise absolute correlation between all variable.
 
         Method typically called in a grouped_df.apply()
@@ -1146,17 +1149,24 @@ class ExpressionMatrixTimeSeries:
         assert self.has_been_clustered
         # Standard deviations for each module for each sample
         stdevs = self.df.groupby('cluster_id').std()
+        stdevs.columns = pd.MultiIndex.from_frame(pd.DataFrame(self.column_parser(stdevs.columns)))
         if mean_over_all_samples:
             # Average the mean over all samples
             return stdevs.mean(axis=1)
         else:
             return stdevs
 
-    def get_ci_per_cluster(self, confidence_level=.95):
+    def get_ci_per_cluster(self, confidence_level=.99, for_error_bars: bool = False):
         """Get confidence interval per cluster at each time point"""
         assert self.has_been_clustered
-        logging.warning(f'Setting {confidence_level=} currently not passed to underlying method')
-        return self.df.groupby('cluster_id').apply(mean_bootstrap_error)
+        bs_df = self.df.groupby('cluster_id').apply(mean_bootstrap_error, confidence_level=confidence_level)
+        if for_error_bars:
+            mean_df = self.df.groupby('cluster_id').mean()
+            bs_df = abs(bs_df - mean_df)
+            # assert all(out_df.loc[:, 'lower'] < 0) and all(out_df.loc[:, 'lower'] > 0)
+            # out_df.loc[:, 'lower'] = out_df.loc[:, 'lower'].abs()
+        bs_df.columns = pd.MultiIndex.from_frame(pd.DataFrame(self.column_parser(bs_df.columns)))
+        return bs_df
 
     def get_all_explained_vars(self):
         assert self.has_been_clustered

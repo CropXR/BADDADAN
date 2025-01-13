@@ -562,7 +562,8 @@ def check_correlation_cutoffs_for_intermodular_network(expr_mat_time,
 def sa_drought_over_time():
     in_file = Path('data/raw_data/sa_drought_levels.xlsx')
     metab_df = pd.read_excel(in_file)
-
+    # Take mean over 4 biological samples
+    metab_df = metab_df.groupby(['Treatment', 'Time (days)'])['Salicylic acid (SA) '].mean().reset_index()
     # sns.lineplot(data=df, x='Time (days)', y='Salicylic acid (SA) glycoside ', hue='Treatment')
     # plt.show()
     expr_mat_pickl_path = Path('data/experiments/25_everything_including_limma/drought/expr_mat_time.pkl')
@@ -605,7 +606,7 @@ def sa_drought_over_time():
                         hue='Treatment')
 
         plt.xlabel(f"Gene Module {selected_cluster_id} Mean Expression")
-        plt.ylabel("Salicylic Acid Level (SA)")
+        plt.ylabel("Salicylic Acid Level")
         plt.ylim((0,35))
         plt.legend(title="Condition")
         plt.tight_layout()

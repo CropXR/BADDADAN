@@ -20,7 +20,7 @@ def full_pipeline_prototype(experiment_path: Path):
         treatment_path = experiment_path / treatment_name
         data_params, hyper_params, experiment_params = config_preprocess(
             treatment_path)
-        # # Uncomment to only save files
+        # Uncomment to only save files
         # with mlflow.start_run(
         #         description=experiment_params['description']):
         #     mlflow.log_params(data_params)
@@ -28,14 +28,14 @@ def full_pipeline_prototype(experiment_path: Path):
         #     mlflow.set_tags(experiment_params)
         #     mlflow.log_artifact(
         #         str(treatment_path / 'figs'))
-        #     # mlflow.log_artifact(
-        #     #     str(treatment_path / 'petab_files'))
+        #     mlflow.log_artifact(
+        #         str(treatment_path / 'petab_files'))
         #     mlflow.log_artifact(
         #         str(treatment_path / 'pypesto_results.hdf5'))
         #     mlflow.log_artifact(
         #         str(treatment_path / 'log.log'))
-        #     mlflow.log_artifact(
-        #         str(treatment_path / 'go_terms_supp_table.csv'))
+        #     # mlflow.log_artifact(
+        #     #     str(treatment_path / 'go_terms_supp_table.csv'))
         # continue
 
         if not skip_slow_steps:
@@ -113,7 +113,7 @@ def full_pipeline_prototype(experiment_path: Path):
                 treatment_path / 'figs',
                 )
 
-        skip_ode_steps = True
+        skip_ode_steps = False
         sbml_path = treatment_path / 'module_network.xml'
         if not skip_ode_steps:
             # ODE modelling steps

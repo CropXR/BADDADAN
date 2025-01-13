@@ -4,6 +4,7 @@ from pathlib import Path
 
 import yaml
 import mlflow
+from matplotlib import pyplot as plt
 
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 from data_wrangling import expr_mat_from_heat, expr_mat_from_drought
@@ -36,8 +37,8 @@ def main():
     # name = '19_heat_pypesto'
     # name = '22_drought_pypesto'
     # name = '23_coherence_with_stat_tests'
-    # name = '24_visualise_fit_result_nicely'
-    name = '25_everything_including_limma'
+    name = '24_visualise_fit_result_nicely'
+    # name = '25_everything_including_limma'
     # name = '26_server_output_visualisation'
     # name = '28_sa_in_drought'
     experiment_path = Path(f'data/experiments') / name
@@ -247,8 +248,10 @@ def main():
                 plot_nicely_from_artifact(
                     condition_dict['out_folder_experiment'],
                     artifact,
-                    condition_dict['petab_yaml']
+                    condition_dict['petab_yaml'],
+                    Path(condition_dict['expr_mat_pkl'])
                     )
+                plt.savefig(condition_dict['fig_out_path'])
         case '25_everything_including_limma':
             full_pipeline_prototype(experiment_path)
         case "26_server_output_visualisation":

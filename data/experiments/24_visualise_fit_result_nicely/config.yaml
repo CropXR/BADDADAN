@@ -1,8 +1,12 @@
 drought:
-  out_folder_experiment: 'data/experiments/22_drought_pypesto'
-  mlflow_result_uri: 'mlflow-artifacts:/368072077109492479/6e4a11164eb34deeb75a16dcab453ba0/artifacts/22_drought_pypesto/pypesto_results.hdf5'
-  petab_yaml: 'data/experiments/22_drought_pypesto/petab_files/baddadan_drought_petab.yaml'
+  out_folder_experiment: 'data/experiments/25_everything_including_limma/drought'
+  mlflow_result_uri: 'mlflow-artifacts:/775403509373558894/cbdfebc52bf74af8b0d1bca27477192f/artifacts/pypesto_results.hdf5'
+  petab_yaml: 'data/experiments/25_everything_including_limma/drought/petab_files/baddadan_drought_petab.yaml'
+  expr_mat_pkl: 'data/experiments/25_everything_including_limma/drought/expr_mat_time.pkl'
+  fig_out_path: 'data/experiments/25_everything_including_limma/drought/figs/model_fit_nice.svg'
 heat:
-  out_folder_experiment: 'data/experiments/19_heat_pypesto'
-  mlflow_result_uri: 'mlflow-artifacts:/677502380258345964/25d8b8f04d0347129ff9c526d01dcba2/artifacts/19_heat_pypesto/pypesto_results.hdf5'
-  petab_yaml: 'data/experiments/19_heat_pypesto/petab_files/baddadan_heat_petab.yaml'
+  out_folder_experiment: 'data/experiments/25_everything_including_limma/heat'
+  mlflow_result_uri: 'mlflow-artifacts:/775403509373558894/15b244216e23432e83a2d3bca6696fb3/artifacts/pypesto_results.hdf5'
+  petab_yaml: 'data/experiments/25_everything_including_limma/heat/petab_files/baddadan_heat_petab.yaml'
+  expr_mat_pkl: 'data/experiments/25_everything_including_limma/heat/expr_mat_time.pkl'
+  fig_out_path: 'data/experiments/25_everything_including_limma/heat/figs/model_fit_nice.svg'
