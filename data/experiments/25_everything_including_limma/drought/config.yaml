@@ -15,6 +15,6 @@ hyperparams:
   top_nr_clusters: 13
   do_sim_data: False
   do_interpolate: False
-  n_starts: 1000
+  n_starts: 5000
   do_extra_datapoints: False
   add_circadian_clock: False

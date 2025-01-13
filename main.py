@@ -25,17 +25,13 @@ from petab_integration.petab_scripts import plot_nicely_from_artifact
 # GEOparse.logger.set_verbosity('INFO')
 
 # logging.basicConfig(level=logging.DEBUG)
-
+# Local mlflow server for logging
 mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
 
 def main():
     # ONLY EDIT THESE LINES
-    # name = '09_heat_data_end_to_end'
-    # name = '19_heat_pypesto'
-    # name = '22_drought_pypesto'
-    # name = '23_coherence_with_stat_tests'
-    name = '24_visualise_fit_result_nicely'
-    # name = '25_everything_including_limma'
+    # name = '24_visualise_fit_result_nicely'
+    name = '25_everything_including_limma'
     # name = '26_server_output_visualisation'
     # name = '28_sa_in_drought'
     experiment_path = Path(f'data/experiments') / name
@@ -50,153 +46,6 @@ def main():
                                   logging.StreamHandler()])
 
     match name:
-        case '07_module_size_distribution':
-            # FUll module size distributions
-            module_size_pipeline(experiment_path)
-        case "14_drought_from_wgcna":
-            _, hyper_params, _ = config_preprocess(
-                experiment_path)
-            expr_mat_time, module_module = drought_from_wgcna(experiment_path)
-        case "19_heat_pypesto":
-            # Run heat data e2e first for this to run:
-            heat_data_to_sbml(experiment_path)
-            pypesto_from_sbml(experiment_path, 'heat')
-
-        case "20_go_terms_deepsplit_values":
-            # for treatment_name in ['heat']:
-            # for treatment_name in ['drought']:
-            for treatment_name in ['heat', 'drought']:
-                data_params, hyper_params, experiment_params = config_preprocess(
-                    experiment_path / treatment_name)
-
-                def use_for_analysis(filename: str):
-                    """Only keep the deepsplit = 1 or 2 values (because
-                    that's all what's needed for the analysis).
-                    """
-                    if any((f'ds{i}' in filename)
-                           for i in hyper_params['r_deep_split']):
-                        return True
-                    else:
-                        return False
-
-                skip = True
-                if not skip:
-                    one_gene_list_file_per_cluster(
-                        in_dir=Path(data_params['in_path']),
-                        out_dir=Path(data_params['out_path']),
-                        use_for_analysis_func=use_for_analysis
-                    )
-
-                go_enrich_output_path = (
-                        experiment_path / treatment_name
-                        / 'go_outputs_exp_evidence_only_background_de_genes'
-                )
-
-                ### RUN SNAKEMAKE ###
-                # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
-                analyse_go_enrichments_find_enrichment(
-                    go_enrich_output_path,
-                    experiment_path / treatment_name / 'figures',
-                    )
-
-                with mlflow.start_run(
-                        description=experiment_params['description']):
-                    mlflow.log_params(data_params)
-                    mlflow.log_params(hyper_params)
-                    mlflow.set_tags(experiment_params)
-                    mlflow.log_artifact(str(experiment_path / treatment_name / 'figures'))
-
-        case "21_score_distributions_of_random_modules":
-            for treatment_name in ['drought', 'heat']:
-            # for treatment_name in ['heat']:
-                data_params, hyper_params, experiment_params = config_preprocess(
-                    experiment_path / treatment_name)
-
-                if 'heat' in data_params['in_path']:
-                    condition_name = 'heat'
-                    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_heat(
-                        data_params['in_path'], hyper_params['agg_method'],
-                        hyper_params['do_log2'])
-                elif 'drought' in data_params['in_path']:
-                    condition_name = 'drought'
-                    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_drought(
-                        data_params['in_path'], hyper_params['agg_method'],
-                        hyper_params['do_log2'])
-                else:
-                    raise NotImplementedError
-
-                skip = True
-                if not skip:
-                    expr_mat_copy = copy.deepcopy(expr_mat_time)
-                    expr_mat_copy.save_random_modules_for_goa_find_enrichment(
-                        wgcna_label_file = data_params['wgna_label_file'],
-                        out_dir=Path(data_params['split_by_module_out_path'])
-                    )
-
-                ### RUN SNAKEMAKE ###
-                # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
-
-                analyse_go_enrichments_find_enrichment(
-                    # Path('data/experiments/21_score_distributions_of_random_modules/drought/go_outputs_exp_evidence_only'),
-                    Path(data_params['split_by_module_out_path']).parent / 'go_outputs_exp_evidence_only',
-                    experiment_path / treatment_name / 'figures',
-                )
-
-                jackknife_paths = (
-                    list(Path(
-                        data_params['jacknife_path'])
-                         .glob(data_params['jacknife_glob_command'])
-                         )
-                )
-                get_coherence_random_modules(
-                    wgcna_label_file=data_params['wgna_label_file'],
-                    expr_mat_time=expr_mat_time,
-                    figure_out_dir=Path(data_params['fig_out_path'])
-                )
-
-                # Get the scores for the local / global / combined scores -> maybe just the combined scores?
-
-                # Do statistical tests to see what they are like / and / or calculate module-specific Z-scores
-
-                with mlflow.start_run(
-                        description=experiment_params['description']):
-                    mlflow.log_params(data_params)
-                    mlflow.log_params(hyper_params)
-                    mlflow.set_tags(experiment_params)
-                    mlflow.log_artifact(
-                        str(experiment_path / treatment_name / 'figures'))
-
-        case '22_drought_pypesto':
-            drought_data_to_sbml(experiment_path)
-            pypesto_from_sbml(experiment_path, 'drought')
-
-        case '23_coherence_with_stat_tests':
-            for treatment_name in ['drought', 'heat']:
-                data_params, hyper_params, experiment_params = config_preprocess(
-                    experiment_path / treatment_name)
-
-                if 'heat' in data_params['in_path_expr_mat']:
-                    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_heat(
-                        data_params['in_path_expr_mat'],
-                        hyper_params['agg_method'], hyper_params['do_log2'])
-                elif 'drought' in data_params['in_path_expr_mat']:
-                    expr_mat_time: ExpressionMatrixTimeSeries = expr_mat_from_drought(
-                        data_params['in_path_expr_mat'],
-                        hyper_params['agg_method'], hyper_params['do_log2'])
-                else:
-                    raise NotImplementedError
-                do_coherence_with_stat_tests(
-                    in_dir=Path(data_params['in_path_clusterings']),
-                    expr_mat_time=expr_mat_time,
-                    out_dir=Path(data_params['out_path'])
-                )
-                with mlflow.start_run(
-                        description=experiment_params['description']):
-                    mlflow.log_params(data_params)
-                    mlflow.log_params(hyper_params)
-                    mlflow.set_tags(experiment_params)
-                    mlflow.log_artifact(
-                        str(experiment_path / treatment_name / 'figures'))
         case '24_visualise_fit_result_nicely':
             config_path = experiment_path / 'config.yaml'
             with config_path.open('r') as f:

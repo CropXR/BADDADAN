@@ -9,8 +9,8 @@ from experiment_scripts import pypesto_from_sbml
 @click.argument('treatment_name', type=str)
 @click.argument('expr_mat_pkl_path', type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.argument('sbml_path', type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.argument('pypesto_result_for_param_guess', type=click.Path(exists=True, dir_okay=False, path_type=Path))
-def main(treatment_path, treatment_name, expr_mat_pkl_path, sbml_path, pypesto_result_for_param_guess):
+# @click.argument('pypesto_result_for_param_guess', type=click.Path(exists=True, dir_okay=False, path_type=Path))
+def main(treatment_path, treatment_name, expr_mat_pkl_path, sbml_path):
     """
     Run PyPESTO from SBML with treatment data.
 
@@ -29,7 +29,7 @@ def main(treatment_path, treatment_name, expr_mat_pkl_path, sbml_path, pypesto_r
         expr_mat_pkl_path,
         sbml_path,
         do_ml_flow_logging=False,
-        use_best_params_as_init=pypesto_result_for_param_guess
+        use_best_params_as_init=None
     )
 
 
