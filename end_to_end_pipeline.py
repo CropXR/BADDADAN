@@ -3,15 +3,17 @@ from pathlib import Path
 
 import mlflow
 
-from experiment_scripts import config_preprocess, expr_mat_time_factory, \
-    save_files_for_wgcna_cutting, see_gene_module_sizes, \
+from experiment_scripts import save_files_for_wgcna_cutting, \
     do_coherence_with_stat_tests, analyse_go_enrichments_find_enrichment, \
     from_expr_mat_time_to_ode, save_supp_table_go_enrichments, \
     pypesto_from_sbml
-from helpers import one_gene_list_file_per_cluster
+from figure_pipelines import see_gene_module_sizes
+from expr_mat_factories import expr_mat_time_factory
+from helpers import one_gene_list_file_per_cluster, config_preprocess
 
 
 def full_pipeline_prototype(experiment_path: Path):
+    """Main script: do all processing from input data to output model in one go"""
     skip_slow_steps = True
     # for treatment_name in ['heat']:
     # for treatment_name in ['drought']:

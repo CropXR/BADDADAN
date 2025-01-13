@@ -1,39 +1,34 @@
 import copy
 import logging
-from copy import deepcopy
 from itertools import combinations
 from pathlib import Path
-from random import sample
 import re
 
 import dill as pickle
 import mlflow
+import networkx as nx
 import numpy as np
 import pandas as pd
 import pypesto
 import pypesto.petab
 import petab
 import amici.petab.simulator
-import yaml
 import seaborn as sns
-import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
+from matplotlib.ticker import MaxNLocator, AutoMinorLocator
 from scipy.spatial.distance import squareform
-from sklearn.metrics import adjusted_rand_score
-from scipy.cluster.hierarchy import linkage, fcluster
 import amici
 from tqdm import tqdm
 from statannotations.Annotator import Annotator
 
 from DynamicModels.OdeModel import OdeModel
-from Expressions.ExpressionMatrix import AggregationMethod, \
-    ExpressionMatrixTimeSeries
+from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 from GoEnrich.EnrichedGeneModuleGoTerms import EnrichedGeneModuleGoTerms
-from analysis_pipelines import module_network_from_tf2_output
-from data_wrangling import expr_mat_from_heat, expr_mat_from_drought
+from data_wrangling import module_network_from_tf2_output
+from expr_mat_factories import expr_mat_from_heat, expr_mat_from_drought
+from exceptions import RegulatoryDisagreementError
+from helpers import config_preprocess
 
-from exploring_questions import plot_module_size_distributions, \
-    combine_local_distance_and_prior, similarity_matrices_local_and_atted, \
-    check_correlation_cutoffs_for_intermodular_network
 from petab_integration.petab_scripts import write_petab_files, \
     param_optimise_petab_problem
 
@@ -47,54 +42,6 @@ def save_supp_table_go_enrichments(expr_mat_pickl_path, go_enrich_output_path,
         out_path=treatment_path / 'go_terms_supp_table.csv'
     )
 
-
-def see_gene_module_sizes(expr_mat_time: ExpressionMatrixTimeSeries,
-                          cut_modules_path: Path,
-                          figure_path: Path):
-    out_records = []
-    for dyntreecut_file in cut_modules_path.iterdir():
-        expr_mat_time_copy = copy.deepcopy(expr_mat_time)
-        expr_mat_time_copy.assign_clusters_from_wgcna(dyntreecut_file)
-        sizes = expr_mat_time_copy.get_module_sizes()
-        method, ds_value = dyntreecut_file.name.split('_wgcna_clustered_')
-        ds_value = re.search('(?<=ds)\d+', ds_value).group()
-        for size in sizes:
-            out_records.append((size, method, ds_value))
-    df = pd.DataFrame.from_records(out_records,
-                                   columns=['module_size', 'method',
-                                            'deepsplit'])
-    plot_gene_modules_ds_size_distribution(df, figure_path)
-
-def expr_mat_time_factory(folder: Path,
-                          expression_path: str,
-                          agg_method: AggregationMethod,
-                          do_log2: bool,
-                          gpl_path = None
-                          ) -> ExpressionMatrixTimeSeries:
-    if folder.name.startswith('drought'):
-        expr_mat_time = expr_mat_from_drought(
-            in_file_path=expression_path,
-            agg_method=agg_method,
-            do_log2=do_log2)
-    elif folder.name.startswith('heat'):
-        expr_mat_time = expr_mat_from_heat(in_path=expression_path,
-                                           agg_method=agg_method,
-                                           do_log2=do_log2,
-                                           gpl_path=gpl_path)
-    else:
-        raise NotImplementedError
-    return expr_mat_time
-
-
-def module_size_pipeline(experiment_path):
-    for file in experiment_path.iterdir():
-        if file.name.endswith('expr_mat_dict.pkl'):
-            plot_module_size_distributions(file)
-    with mlflow.start_run():
-        for file in experiment_path.iterdir():
-            mlflow.log_artifact(str(file))
-            # if not file.suffix in ['.npy', '.pkl', '.gzip']:
-            #     mlflow.log_artifact(str(file))
 
 def drought_from_wgcna(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(
@@ -131,119 +78,6 @@ def drought_from_wgcna(experiment_path):
     expr_mat_time.keep_only_modules_in_network(module_module)
 
     return expr_mat_time, module_module
-
-
-
-def save_jackknife_files(experiment_path, expr_mat_time, condition_name):
-    data_params, hyper_params, experiment_params = config_preprocess(
-        experiment_path)
-
-    (atted_dist_df, atted_score,
-     condition_base_path, local_dist,
-     min_dist_df, sum_dist_df) = save_files_for_wgcna_cutting(experiment_path,
-                                                              data_params,
-                                                              expr_mat_time)
-
-    generate_jackknifes(atted_dist_df, atted_score, condition_base_path,
-                        hyper_params, local_dist, min_dist_df, sum_dist_df)
-
-
-def generate_jackknifes(atted_dist_df, atted_score, condition_base_path,
-                        hyper_params, local_dist, min_dist_df, sum_dist_df):
-    out_records = []
-    do_debug_thing = False
-    # Save jackknifed distance matrices
-    for i in range(hyper_params['nr_jackknifes']):
-        logging.info(f'Iteration {i + 1}')
-        rand_index = sample(
-            local_dist.index.tolist(),
-            round(hyper_params['subset_size'] * len(local_dist.index.tolist()))
-        )
-        # From subset get local and global dists
-        subset_local_df = local_dist.loc[rand_index, rand_index]
-        subset_atted_df = atted_score.loc[rand_index, rand_index]
-
-        local_jackknife_dir = condition_base_path / 'jackknifes' / 'local'
-        local_jackknife_dir.mkdir(exist_ok=True)
-        subset_local_df.to_parquet(local_jackknife_dir
-                                   / f'jackknife_{i}.parquet.gzip',
-                                   compression='gzip')
-
-        atted_jackknife_dir = condition_base_path / 'jackknifes' / 'atted'
-        atted_jackknife_dir.mkdir(exist_ok=True)
-        subset_atted_dist_df = subset_atted_df.max().max() - subset_atted_df
-        subset_atted_dist_df.to_parquet(atted_jackknife_dir
-                                        / f'jackknife_{i}.parquet.gzip',
-                                        compression='gzip')
-
-        min_jackknife_dir = condition_base_path / 'jackknifes' / 'combined_min'
-        min_jackknife_dir.mkdir(exist_ok=True)
-        # And min dists
-        subset_min_dist_df = combine_local_distance_and_prior(
-            subset_local_df,
-            subset_atted_df,
-            dists_out_path=(min_jackknife_dir
-                            / f'jackknife_{i}.parquet.gzip'),
-            combo='min',
-            calculate_linkages=False,
-            plot_out_path=None,
-        )
-
-        # And sum dists
-        sum_jackknife_dir = condition_base_path / 'jackknifes' / 'combined_sum'
-        sum_jackknife_dir.mkdir(exist_ok=True)
-        subset_sum_dist_df = combine_local_distance_and_prior(
-            subset_local_df,
-            subset_atted_df,
-            dists_out_path=(sum_jackknife_dir / f'jackknife_{i}.parquet.gzip'),
-            combo='sum',
-            calculate_linkages=False,
-            plot_out_path=None,
-        )
-
-        if do_debug_thing:
-            # Just for one jackknife atm
-            def debug_func(dist1, dist2, nclust=50):
-                a = cluster_from_dists(dist1, nclust)
-                b = cluster_from_dists(dist2, nclust)
-
-                merged_df = a.join(b, how='inner',
-                                   lsuffix='_subset',
-                                   rsuffix='_og')
-
-                return adjusted_rand_score(merged_df['colors_subset'],
-                                           merged_df['colors_og'])
-
-            def cluster_from_dists(dist, nclust=50):
-                clustering = fcluster(
-                    linkage(squareform(dist, checks=False), method='average'),
-                    nclust, 'maxclust')
-                return pd.DataFrame(clustering, index=dist.index,
-                                    columns=['colors'])
-
-            for nclust in range(1, 500, 50):
-                out_records.append(
-                    ('local', debug_func(
-                        subset_local_df, local_dist, nclust=nclust),
-                     nclust))
-                out_records.append(
-                    ('min_dist', debug_func(
-                        min_dist_df, subset_min_dist_df, nclust=nclust),
-                     nclust))
-                out_records.append(
-                    ('sum_dist', debug_func(
-                        sum_dist_df, subset_sum_dist_df, nclust=nclust),
-                     nclust))
-                out_records.append(
-                    ('atted', debug_func(
-                        subset_atted_dist_df, atted_dist_df, nclust=nclust),
-                     nclust))
-    if do_debug_thing:
-        plot_df = pd.DataFrame.from_records(out_records,
-                                            columns=['dist', 'ari', 'nclust'])
-        sns.lineplot(data=plot_df, x='nclust', y='ari', hue='dist')
-        plt.show()
-
 
 def save_files_for_wgcna_cutting(experiment_path: Path,
                                  data_params: dict,
@@ -282,15 +116,12 @@ def save_files_for_wgcna_cutting(experiment_path: Path,
     #     plot_out_path=fig_folder,
     # )
     # And combined dists
-    sum_dist_df = combine_local_distance_and_prior(
-        local_dist,
-        atted_score,
-        dists_out_path=(experiment_path
-                        / 'full_datasets' / 'combined_sum_dists.parquet.gzip'),
-        combo='sum',
-        calculate_linkages=False,
-        plot_out_path=fig_folder,
-    )
+    sum_dist_df = combine_local_distance_and_prior(local_dist, atted_score,
+                                                   dists_out_path=(
+                                                               experiment_path
+                                                               / 'full_datasets' / 'combined_sum_dists.parquet.gzip'),
+                                                   combo='sum',
+                                                   plot_out_path=fig_folder)
 
     atted_dist_df = atted_score.max().max() - atted_score
     atted_dist_df.to_parquet(experiment_path
@@ -298,15 +129,6 @@ def save_files_for_wgcna_cutting(experiment_path: Path,
                              compression='gzip')
     return atted_dist_df, atted_score, experiment_path, local_dist, sum_dist_df
 
-
-def wgcna_with_similarity_scores(experiment_path):
-    data_params, hyper_params, experiment_params = config_preprocess(
-        experiment_path)
-    expr_mat_time = expr_mat_from_drought(data_params['in_path'],
-                                          hyper_params['agg_method'],
-                                          hyper_params['do_log2'])
-    similarity_matrices_local_and_atted(expr_mat_time, data_params['atted_path'],
-                                        out_path=experiment_path)
 
 def drought_data_to_sbml(experiment_path):
     # Load the config file
@@ -540,20 +362,6 @@ def read_go_enrich_files_into_df(in_path):
     return all_result_df
 
 
-def config_preprocess(experiment_path: Path) -> tuple[dict, dict, dict]:
-    config_path = experiment_path / 'config.yaml'
-    with config_path.open('r') as f:
-        config = yaml.safe_load(f)
-    data_params = config['data']
-    hyper_params = config['hyperparams']
-    experiment_params = config['experiment_data']
-    agg_method_dict = {'mean': AggregationMethod.MEAN,
-                       'eigengene': AggregationMethod.EIGENGENE}
-    hyper_params['agg_method'] = agg_method_dict.get(
-        hyper_params.get('agg_method')
-    )
-    return data_params, hyper_params, experiment_params
-
 def heat_data_to_sbml(experiment_path):
     data_params, hyper_params, experiment_params = config_preprocess(
         experiment_path)
@@ -623,109 +431,6 @@ def from_expr_mat_time_to_ode(data_params,
         nonlinear=True,
         add_circadian_clock=hyper_params['add_circadian_clock'])
     return my_ode
-
-
-def ground_truth_vs_jackknife(experiment_path, expr_mat_time):
-    data_params, hyper_params, experiment_params = config_preprocess(
-        experiment_path)
-
-    in_path = Path(data_params['r_out_path'])
-    out_list = []
-    module_size_list = []
-    # FOr keyword, find jackknifes:
-    for method in ['atted', 'combined_min', 'combined_sum', 'local']:
-        for deepsplit_value in hyper_params['r_deep_split']:
-            expr_mat_time_copy = deepcopy(expr_mat_time)
-            jackknife_paths = list(
-                in_path.glob(f'{method}/*ds{deepsplit_value}.csv')
-            )
-            logging.info(f'Doing {method} with {deepsplit_value=}')
-            # Full dataset
-            full_dataset_path_list = list(
-                in_path.glob(f'full_datasets/{method}*ds{deepsplit_value}.csv')
-            )
-            assert len(jackknife_paths) == hyper_params['nr_jackknifes']
-            assert  len(full_dataset_path_list) == 1
-            full_dataset_path = full_dataset_path_list[0]
-            full_dataset = pd.read_csv(full_dataset_path, usecols=[1,2])
-            full_dataset = full_dataset.set_index('gene_id')
-
-            # Module sizes (in full dataset)
-            module_size_list.extend(
-                [(method, deepsplit_value, size)
-                for size in full_dataset.value_counts().to_list()]
-            )
-            # sns.histplot(full_dataset.value_counts().to_list())
-            # plt.xlabel('Module size')
-            # plt.savefig(in_path.parent / 'figs'
-            #             / f'{method}_size_modules_ds{deepsplit_value}.png')
-            # plt.close()
-
-            # Do coherence per module
-            expr_mat_time_copy.assign_clusters_from_wgcna(full_dataset_path)
-            coherence_entry = expr_mat_time_copy.get_all_explained_vars()
-            out_list.extend([(method, deepsplit_value, 'coherence', i) for i in coherence_entry])
-
-            # Robustness
-            for jackknife_path in jackknife_paths:
-                    subset = pd.read_csv(jackknife_path, usecols=[1,2])
-                    subset = subset.set_index('gene_id')
-                    # Merge genes
-                    merged_df = subset.join(full_dataset,
-                                            how='inner',
-                                                       lsuffix='_subset',
-                                                       rsuffix='_og')
-                    ari = adjusted_rand_score(merged_df['colors_subset'],
-                                              merged_df['colors_og'])
-                    out_list.append((method, deepsplit_value, 'robustness', ari))
-
-    metric_df = pd.DataFrame.from_records(out_list, columns=['method', 'deepsplit', 'metric', 'score'])
-
-    module_size_df = pd.DataFrame.from_records(module_size_list, columns=['method', 'deepsplit', 'size'] )
-    module_size_df['deepsplit'] = module_size_df['deepsplit'].astype('str')
-    module_size_df['size'] = module_size_df['size'].astype('int')
-
-    sns.boxplot(data=module_size_df, x='size', y='deepsplit', hue='method')
-    plt.savefig(in_path.parent /  'figs' / 'module_size_hue_is_ds.png')
-
-    sns.catplot(data=module_size_df, x='deepsplit', col='method',
-                col_wrap=2, kind='count')
-    plt.savefig(in_path.parent / 'figs' / 'module_counts.png')
-    plt.close()
-
-    # Select deepsplit value on most comparable module sizes
-    if 'drought' in data_params['in_path']:
-        valid_rows = metric_df[
-            (metric_df['method'] == 'local') & (metric_df['deepsplit'] == 2)
-            | (metric_df['method'].isin(['atted', 'combined_sum'])) & (metric_df['deepsplit'] == 1) ]
-    elif 'heat' in data_params['in_path']:
-        valid_rows = metric_df[
-            (metric_df['deepsplit'] == 1) & (metric_df['method'].isin(['atted', 'combined_sum', 'local']))]
-
-    sns.catplot(valid_rows, x='method', y='score', row='metric',
-                kind='box', hue='method', )
-    plt.savefig(
-        in_path.parent / 'figs' / 'coherence_robustness_modules_selected_ds_separate_rows_boxplot.png')
-
-    sns.catplot(valid_rows, x='method', y='score', row='metric',
-                kind='violin', hue='method')
-    plt.savefig(
-        in_path.parent / 'figs' / 'coherence_robustness_modules_selected_ds_separate_rows_violin.png')
-
-    sns.catplot(metric_df, x='deepsplit', y='score', hue='metric',
-                col='method', kind='box')
-    plt.savefig(in_path.parent /  'figs' / 'coherence_robustness_modules.png')
-    plt.close()
-
-
-
-    # sns.violinplot(data=robustness_df, y='ari', x='method')
-    # plt.savefig(in_path.parent /  'figs' / 'robustness_modules.png')
-    # plt.close()
-    #
-    # sns.violinplot(data=coherence_df, y='coherence', x='method')
-    # plt.savefig(in_path.parent / 'figs' / 'coherence_modules.png')
-    # plt.close()
 
 
 def pypesto_from_sbml(experiment_path: Path,
@@ -916,3 +621,275 @@ def do_coherence_with_stat_tests(in_dir: Path,
     plt.savefig(out_dir / 'boxplot_coherence_with_stat_test.svg',
                 bbox_inches='tight')
     plt.close()
+
+
+def plot_module_size_distributions(pkl_path: Path):
+    with pkl_path.open('rb') as f:
+        cluster_dict = pickle.load(f)
+    records = []
+    for dist, expr_mat in cluster_dict.items():
+        sizes = expr_mat.df.cluster_id.value_counts()
+        for size in sizes:
+            records.append((dist, size))
+    df = pd.DataFrame.from_records(records, columns=['method', 'size'])
+    sns.boxplot(data=df, y='size', x='method')
+    plt.title(pkl_path.name.split('_')[0])
+    plt.yscale('log')
+    plt.ylabel('Module size')
+    plt.show()
+    df.groupby('method')['size'].sum()
+
+
+def combine_local_distance_and_prior(local_dist: pd.DataFrame,
+                                     prior_score: pd.DataFrame,
+                                     dists_out_path: Path, combo: str = 'sum',
+                                     plot_out_path: Path | None = None):
+    """Get combo of local distances and atted_distances to
+    do distances simulatenously
+
+    :param local_dist: local distances as dataframe
+    :param prior_score: prior scores (e.g. from atted)
+    :param dists_out_path: file path to save combined distances (should be a name that ends in .parquet.gzip)
+    :param combo: how to combine the distances (sum vs minimum of either)
+    :param plot_out_path: directory in which to save figures. If none, no plotting
+    :return:
+    """
+
+    # toy_size = 5000
+    # atted_score = atted_score.iloc[:toy_size, :toy_size]
+    # local_dist = local_dist.iloc[:toy_size, :toy_size]
+
+    # get intersection
+    selected_genes = prior_score.index.intersection(local_dist.index)
+    # Shrink dataframes so match in size
+    local_dist = local_dist.loc[selected_genes, selected_genes]
+    prior_score = prior_score.loc[selected_genes, selected_genes]
+
+    # Higher score -> lower dist
+    atted_dist = prior_score.max().max() - prior_score
+
+    assert (local_dist.index.equals(
+        atted_dist.index) and local_dist.columns.equals(atted_dist.columns))
+
+    local_dist_flat = squareform(local_dist)
+    atted_dist_flat = squareform(atted_dist, checks=False)
+
+    # Convert into z-scores
+    local_dist_flat_norm = (local_dist_flat - np.mean(
+        local_dist_flat)) / np.std(local_dist_flat)
+    atted_dist_flat_norm = (atted_dist_flat - np.mean(
+        atted_dist_flat)) / np.std(atted_dist_flat)
+
+    if plot_out_path:
+        # Plot both distributions
+        sns.histplot(local_dist_flat, binwidth=.2, element='step',
+                     fill=False, common_norm=False)
+        sns.histplot(atted_dist_flat, binwidth=.2, element='step',
+                     fill=False, common_norm=False)
+        plt.legend(['Local Distances', 'Atted Distances'])
+
+        plt.savefig(plot_out_path / 'raw_input_distances.png')
+        plt.close()
+
+        sns.histplot(local_dist_flat_norm, binwidth=.2, element='step',
+                     fill=False, common_norm=False)
+        sns.histplot(atted_dist_flat_norm, binwidth=.2, element='step',
+                     fill=False, common_norm=False)
+        plt.legend(['Local Distances', 'Atted Distances'])
+        plt.savefig(plot_out_path / 'normalised_distances.png')
+        plt.close()
+
+    if combo =='sum':
+        combined_distances = local_dist_flat_norm + atted_dist_flat_norm
+    elif combo == 'min':
+        combined_distances = np.minimum(local_dist_flat_norm,
+                                        atted_dist_flat_norm)
+        if plot_out_path:
+            sns.scatterplot(y=atted_dist_flat_norm, x=local_dist_flat_norm, s=.2)
+            # make line
+            x = np.linspace(min(local_dist_flat_norm), max(local_dist_flat_norm))
+            plt.plot(x, x, color=sns.color_palette()[1])
+            plt.xlabel('Local')
+            plt.ylabel('Atted')
+            plt.savefig(plot_out_path / 'scatter_atted_vs_local.png')
+    else:
+        raise NotImplementedError
+
+    # sns.histplot(combined_distances, binwidth=.2, element='step', fill=False)
+    # plt.savefig(out_path / 'combined_distances.png')
+    # plt.close()
+
+    # Rescale and reshape again
+    combined_distances = combined_distances - np.min(combined_distances)
+    combined_distances = combined_distances / max(combined_distances)
+    if plot_out_path:
+        sns.histplot(combined_distances)
+        plt.savefig(plot_out_path / 'combined_distances.png')
+        plt.close()
+
+    square_no_negative = squareform(combined_distances)
+    combined_dist_df = pd.DataFrame(data=square_no_negative,
+                                  index=local_dist.index,
+                                  columns=local_dist.index)
+
+    combined_dist_df.to_parquet(dists_out_path, compression='gzip')
+
+    # / f'atted_local_dist_{combo}_combined_no_negative.parquet.gzip'
+    return combined_dist_df
+
+
+def get_coherence_random_modules(wgcna_label_file : str,
+                                 expr_mat_time: ExpressionMatrixTimeSeries,
+                                 figure_out_dir: Path):
+    expr_mat_time.assign_clusters_from_wgcna(wgcna_label_file)
+    coherence_entry = expr_mat_time.get_all_explained_vars()
+    coherence_entry = [['combined_dists', i] for i in coherence_entry]
+
+    for i in range(4):
+        expr_mat_time_random = copy.deepcopy(expr_mat_time)
+        # expr_mat_time_random.do_random_clustering_with_given_size_dist(
+        #     data_params['wgna_label_file'])
+
+        expr_mat_time_random.do_random_clustering_with_given_size_dist(
+            wgcna_label_file=None,
+            use_own_clustering=True
+        )
+        # Do coherence per module
+        coherence_entry_random_cluster = expr_mat_time_random.get_all_explained_vars()
+        coherence_entry_random_cluster = [[f'random_{i}', j] for j in coherence_entry_random_cluster]
+        coherence_entry.extend(coherence_entry_random_cluster)
+
+    df = pd.DataFrame.from_records(coherence_entry, columns=['Method', 'Coherence'])
+    sns.boxplot(data=df, y='Coherence', x='Method', hue='Method')
+    plt.ylim((0, .9))
+    plt.savefig(figure_out_dir / 'boxplot_coherence_with_random_modules.png')
+    plt.close()
+
+    sns.swarmplot(data=df, y='Coherence', x='Method', hue='Method')
+    plt.ylim((0, .9))
+    plt.savefig(figure_out_dir / 'swarmplot_coherence_with_random_modules.png')
+    plt.close()
+
+
+def check_correlation_cutoffs_for_intermodular_network(expr_mat_time,
+                                                       tf2_in_path,
+                                                       tf2_out_path,
+                                                       plotting_path):
+    out_records = []
+    cutoff_values = np.arange(0, 1, 0.05)
+    for cutoff_value in cutoff_values:
+        # get rid of floating point stuff
+        cutoff_value = round(cutoff_value, 2)
+        try:
+            module_module = module_network_from_tf2_output(
+                expr_mat_time, tf2_in_path,
+                tf2_out_path,
+                threshold=cutoff_value,
+                module_plot_path=None
+            )
+            nr_nodes = module_module.graph.number_of_nodes()
+            nr_edges = module_module.graph.number_of_edges()
+            nr_interconnected_components = len(
+                list(nx.weakly_connected_components(module_module.graph))
+            )
+            # if .7 < cutoff_value < .85:
+            #     # plt.title()
+            #     module_module.plot_network(title=str(cutoff_value))
+            #     plt.show()
+        except RegulatoryDisagreementError as e:
+            nr_nodes, nr_edges, nr_interconnected_components = (
+                np.nan, np.nan, np.nan)
+        out_records.append(
+            (cutoff_value, nr_nodes, nr_edges, nr_interconnected_components)
+        )
+    sparsity_df = pd.DataFrame.from_records(
+        out_records, columns=['cutoff', 'nr_nodes', 'nr_edges',
+                              'one_interconnected_graph']
+    )
+    plt.plot(sparsity_df['cutoff'], sparsity_df['nr_nodes'],
+             label='nr of nodes')
+    plt.plot(sparsity_df['cutoff'], sparsity_df['nr_edges'],
+             label='nr of edges')
+    has_one_interconnected = sparsity_df[
+        sparsity_df['one_interconnected_graph'] == 1]
+    disjoint_graphs = sparsity_df[sparsity_df['one_interconnected_graph'] > 1]
+    plt.plot(has_one_interconnected['cutoff'],
+             has_one_interconnected['nr_nodes'],
+             'o', label='Graph with a single weakly connected component')
+    plt.plot(disjoint_graphs['cutoff'], disjoint_graphs['nr_nodes'],
+             'x', label='Graph with multiple disjoint components')
+    plt.xlim((0, 1))
+    plt.gca().xaxis.set_major_locator(
+        MaxNLocator(integer=False, nbins=10))
+    plt.gca().xaxis.set_minor_locator(
+        AutoMinorLocator(2))
+    plt.legend()
+    # plt.title('Heat')
+    plt.xlabel('Correlation cutoff')
+    plt.tight_layout()
+    plt.savefig(plotting_path / 'correlation_cutoff_intermodular_network_stats.svg')
+    plt.close()
+
+
+def sa_drought_over_time():
+    in_file = Path('data/raw_data/sa_drought_levels.xlsx')
+    metab_df = pd.read_excel(in_file)
+    # Take mean over 4 biological samples
+    metab_df = metab_df.groupby(['Treatment', 'Time (days)'])['Salicylic acid (SA) '].mean().reset_index()
+    # sns.lineplot(data=df, x='Time (days)', y='Salicylic acid (SA) glycoside ', hue='Treatment')
+    # plt.show()
+    expr_mat_pickl_path = Path('data/experiments/25_everything_including_limma/drought/expr_mat_time.pkl')
+    with expr_mat_pickl_path.open('rb') as f:
+        expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
+    expr_mat_time.add_constant(3, do_all_pos_check=False)
+    expressions = expr_mat_time.extract_module_expressions_long_form()
+    # expression_list = expr_mat_time.split_series_into_different_conditions(
+    #     expressions)
+
+    for selected_cluster_id in [4, 15]:
+        subset = expressions[expressions['cluster_id'] == selected_cluster_id]
+        subset = subset[subset['condition'] != 'zero']
+        subset = subset[['time', 'condition', 'expression']]
+        # Assuming the first dataset is in `subset` and the second is in `metab_df`
+        # Convert time from timedelta to days
+        subset['time_days'] = subset['time'].dt.days
+        subset.rename(columns={'condition': 'Treatment'}, inplace=True)
+        subset['Treatment'] = subset[
+            'Treatment'].str.capitalize()
+
+        subset['Treatment'] = subset['Treatment'].replace(
+            {'Control': 'Watered'})
+
+        metab_df.rename(columns={
+            'Time (days)': 'time_days',
+            'Salicylic acid (SA) ': 'SA_level'
+        }, inplace=True)
+        merged_df = pd.merge(subset, metab_df,
+                             left_on=['Treatment', 'time_days'],
+                             right_on=['Treatment', 'time_days'], how='inner')
+
+        correlation = merged_df[['expression', 'SA_level']].corr().iloc[0, 1]
+        logging.info(
+            f"Correlation between expression of module {selected_cluster_id}"
+            f" and SA Levels (r = {correlation:.2f})")
+        # Plot the correlation
+        plt.figure(figsize=(8, 6))
+        sns.scatterplot(data=merged_df, x='expression', y='SA_level',
+                        hue='Treatment')
+
+        plt.xlabel(f"Gene Module {selected_cluster_id} Mean Expression")
+        plt.ylabel("Salicylic Acid Level")
+        plt.ylim((0,35))
+        plt.legend(title="Condition")
+        plt.tight_layout()
+        plt.show()
+
+
+    for metabolite in ['Salicylic acid (SA) ', 'Abscisic acid (ABA) ']:
+        sns.lineplot(data=metab_df, x='Time (days)',
+                     y=metabolite,
+                     hue='Treatment',
+                     hue_order=['Watered', 'Drought'],
+                     )
+        plt.ylabel(f'{metabolite[:-1]}, area under peak LC-ESI-QToF MS')
+        plt.show()

@@ -1,9 +1,18 @@
+import copy
+import re
+from pathlib import Path
+
+import mlflow
+import pandas as pd
 from matplotlib import pyplot as plt
 import seaborn as sns
 
-from Expressions.ExpressionMatrix import AggregationMethod
-from experiment_scripts import expr_mat_time_factory, \
-    do_coherence_with_stat_tests, analyse_go_enrichments_find_enrichment
+from Expressions.ExpressionMatrix import AggregationMethod, \
+    ExpressionMatrixTimeSeries
+from experiment_scripts import do_coherence_with_stat_tests, \
+    analyse_go_enrichments_find_enrichment, \
+    plot_gene_modules_ds_size_distribution, plot_module_size_distributions
+from expr_mat_factories import expr_mat_time_factory
 
 
 def fig2_from_generated_data(experiment_path):
@@ -59,3 +68,32 @@ def fig2_from_generated_data(experiment_path):
         ax.set_xticklabels(new_labels)
 
     plt.savefig(experiment_path / 'fig2.svg',    bbox_inches = 'tight')
+
+
+def see_gene_module_sizes(expr_mat_time: ExpressionMatrixTimeSeries,
+                          cut_modules_path: Path,
+                          figure_path: Path):
+    out_records = []
+    for dyntreecut_file in cut_modules_path.iterdir():
+        expr_mat_time_copy = copy.deepcopy(expr_mat_time)
+        expr_mat_time_copy.assign_clusters_from_wgcna(dyntreecut_file)
+        sizes = expr_mat_time_copy.get_module_sizes()
+        method, ds_value = dyntreecut_file.name.split('_wgcna_clustered_')
+        ds_value = re.search('(?<=ds)\d+', ds_value).group()
+        for size in sizes:
+            out_records.append((size, method, ds_value))
+    df = pd.DataFrame.from_records(out_records,
+                                   columns=['module_size', 'method',
+                                            'deepsplit'])
+    plot_gene_modules_ds_size_distribution(df, figure_path)
+
+
+def module_size_pipeline(experiment_path):
+    for file in experiment_path.iterdir():
+        if file.name.endswith('expr_mat_dict.pkl'):
+            plot_module_size_distributions(file)
+    with mlflow.start_run():
+        for file in experiment_path.iterdir():
+            mlflow.log_artifact(str(file))
+            # if not file.suffix in ['.npy', '.pkl', '.gzip']:
+            #     mlflow.log_artifact(str(file))

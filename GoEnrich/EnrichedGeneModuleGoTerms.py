@@ -6,19 +6,23 @@ from itertools import combinations
 
 
 class EnrichedGeneModuleGoTerms:
-    GODAG = get_godag("data/resources/go_annotations/go-basic.obo",
-                      optional_attrs={'relationship'})
     """Class to store the enriched GO terms of a module and calculate
      their semantic similarity
     """
-    def __init__(self, go_term_df: pd.DataFrame):
+    def __init__(
+            self, go_term_df: pd.DataFrame,
+            go_dag_path: str = "data/resources/go_annotations/go-basic.obo"
+    ):
         """
         :param go_term_df: Dataframe that contains enriched GO terms.
+        :param go_dag_path: Path to go dag (obo) file
         Typically output of the find_enrichment.py function of GOA tools.
         """
         self.go_terms = go_term_df['# GO'].to_list()
         relationships = {'part_of'}
-        self.wang_object = SsWang(self.go_terms, self.GODAG, relationships)
+        self.godag = get_godag(go_dag_path,
+                          optional_attrs={'relationship'})
+        self.wang_object = SsWang(self.go_terms, self.godag, relationships)
     def overall_wang_similarity(self):
         """Calculate the mean pairwise wang similarity between all GO terms.
 

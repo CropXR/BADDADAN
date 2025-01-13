@@ -80,7 +80,7 @@ class ModuleRegulatoryNetwork:
         """
         df = pd.read_csv(in_path, sep='\t')
         df = df[df['GeneSet'] != 'unnamed_set']
-        # TODO at some point do this as node attribute instead of prepending to string
+        # TODO later do this as node attribute instead of prepending to string
         df['target'] = cls.module_prefix + df['GeneSet'].astype(str)
         df['regulator_with_prefix'] = cls.tf_prefix + df['Regulator'].astype(str)
         df['origin'] = EdgeRelation.BINDS_TO
@@ -130,8 +130,7 @@ class ModuleRegulatoryNetwork:
 
     def clean_up_network(self) -> None:
         """Remove all non-binding TFs and unused modules."""
-        # TODO perhaps we can keep bidirectional edges, i.e. module
-        #  self-regulation might happen(?)
+        # Later stage module self-regulation might happen(?)
         self.remove_bidirectional_edges()
         self.remove_non_binding_tfs()
         self.remove_unused_modules()
@@ -163,8 +162,7 @@ class ModuleRegulatoryNetwork:
 
     def remove_bidirectional_edges(self):
         """In case a module encodes a TF, ensure it never also shows that the
-        TF bind to that module, because that is kinda senseless and probably
-        a false-positive.
+        TF bind to that module. I.e. no self-regulation happens.
         """
         bidirectional_edges = [(u, v, data) for (u, v, data)
                                in self.graph.edges(data=True)
@@ -191,17 +189,21 @@ class ModuleRegulatoryNetwork:
             original_modules = list(self.graph.predecessors(tf))
             target_modules = list(self.graph.successors(tf))
             if not tf_can_be_from_multiple_modules:
-                assert len(original_modules) == 1, f'TF ({tf}) can only be transcribed by one module'
+                assert len(original_modules) == 1, \
+                    f'TF ({tf}) can only be transcribed by one module'
             for original_module in original_modules:
                 for target_module in target_modules:
-                    regulation_type = self.graph.edges[tf, target_module]['origin']
+                    regulation_type = self.graph.edges[
+                        tf, target_module]['origin']
                     if regulation_type == EdgeRelation.UP_OR_DOWN:
                         # Unclear regulations can be ignored
                         continue
                     # If edge not already in candidate edges dict, add it
                     if not (original_module, target_module) in candidate_edges:
-                        candidate_edges[(original_module, target_module)] = {'origin': regulation_type,
-                        'tf_name': [tf]}
+                        candidate_edges[(original_module, target_module)] = {
+                            'origin': regulation_type,
+                            'tf_name': [tf]
+                        }
                     # Check if edge agrees with existing edge
                     elif candidate_edges[(original_module, target_module)]['origin'] == regulation_type:
                         logging.debug(f'Found agreement between regulatory '
@@ -441,27 +443,6 @@ class ModuleRegulatoryNetwork:
                 out_list.append(out_entry)
         df = pd.DataFrame.from_records(out_list, columns=['from', 'to', 'cor', 'tf'])
         return df
-
-    def check_consistency_between_module_regulations(self) -> pd.Series:
-        """If more than 1 TF connects modules, see if they all agree (e.g. all up or downregulate)
-
-        To do this check if all connections are either above or below a various correlation thresholds, and return
-        the fraction of all connections in which the TFs agree.
-        """
-        df = self.get_intermodular_connection_df()
-        grouped_df = df.groupby(['from', 'to'])
-        at_least_double = grouped_df.filter(lambda x: len(x) > 1)
-        at_least_double_grpd = at_least_double.groupby(['from', 'to'])
-        # Get if they agree?
-        def check_agreement(x):
-            out = []
-            my_range = np.arange(0,1,0.1)
-            for cor_thresh in my_range:
-                is_consistent = all(x['cor'] > cor_thresh) or all(x['cor'] < cor_thresh)
-                out.append(is_consistent)
-            return pd.Series(out, index=my_range)
-        agrees_df = at_least_double_grpd.apply(check_agreement)
-        return agrees_df.mean()
 
     def see_how_many_tfs_between_modules(self) -> pd.DataFrame:
         """Get a distribution of how many TFs are between modules

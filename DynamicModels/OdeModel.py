@@ -15,16 +15,12 @@ from Formula.LinearFormula import LinearFormula
 
 
 class OdeModel:
-    """Stores the ODEs for all modules. Can also be used to calculate next time steps."""
+    """Stores the ODEs for all modules."""
     def __init__(self,
                  formula_per_module: list[LinearFormula | NonLinearFormula],
                  is_nonlinear: bool):
         self.formula_per_module = formula_per_module
         self.is_nonlinear = is_nonlinear
-        # self.old_to_new_mapping = old_to_new_mapping
-        # logging.info(f'Mapped old module names to new module names:')
-        # for k,v in self.old_to_new_mapping.items():
-        #     logging.info(f'{k} -> {v}')
 
     def __repr__(self):
         return ('OdeModel:\n'
@@ -71,16 +67,6 @@ class OdeModel:
             for formula in formulas:
                 formula.add_circadian_clock_term()
         return cls(formulas, nonlinear)
-
-    def compute_one_step(self, t: float, y: list[float],
-                         params: dict[str, float]) -> list[float]:
-        """Allows system of ODEs to be called. In this case returns dy/dt
-        for all y. Params should be a list which matches the parameter names
-        """
-        logging.debug(f'Mapped params in the following way: {params}')
-        one_step = [formula(t, y, params) for formula in self.formula_per_module]
-        logging.debug(one_step)
-        return one_step
 
     def get_module_names(self):
         """Get the names of all modules in the model"""
@@ -166,49 +152,6 @@ class OdeModel:
         assert isinstance(formula_of_interest, NonLinearFormula)
         origin_module_name = self.get_module_names()[origin_module_idx]
         formula_of_interest.flip_regulatory_direction(origin_module_name)
-
-    def calculate_solution(self, params: Parameters, t: np.ndarray,
-                           init_condition_names: list[str]) -> OdeResult:
-        """Return values at time points t, given a set of params.
-        I.e. this calculates the full solution over time of the system of ODEs.
-
-        :param params: Parameters to use when solving the system of ODEs
-        :param t: time points at which to save the solution
-        :param init_condition_names: List of strings that are the names of
-        the initial conditions. E.g ['y0', 'y1']. These are needed to
-        split off from the parameters that are provided
-        the solution
-        :return: Result of the ODE in OdeResult object
-        """
-        params = params.valuesdict()
-        # Split off initial conditions
-        y0 = []
-        for name in init_condition_names:
-            y0.append(params.pop(name))
-
-        t_start = min(t)
-        t_end = max(t)
-        # TODO make the solve method more easily configurable as well ;)
-        y_pred = solve_ivp(self.compute_one_step, (t_start, t_end),
-                                y0,
-                                t_eval=t,
-                                args=[params], method='Radau')
-        assert y_pred.success, (
-            f"Integration failed: {y_pred.message}"
-            f"\nParams: {params}")
-        return y_pred
-
-    def derivatives_at_time_points(self, time_points, spline_per_rows, params
-                                   ) -> np.array:
-        """Get derivatives of function at all time points,
-        used for gradient matching fitting
-        """
-        out = []
-        for t in time_points:
-            y = [spline(t) for spline in spline_per_rows]
-            out.append(self.compute_one_step(time_points, y, params))
-        out = np.array(out)
-        return out
 
     def save_to_sbml(self, out_path,
                      u_t_function: str):

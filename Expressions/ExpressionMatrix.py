@@ -28,13 +28,12 @@ from selenium.webdriver.common.by import By
 from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.stats import zscore, bootstrap
-import qnorm
 from scipy.integrate._ivp.ivp import OdeResult
 from scipy.spatial.distance import pdist, squareform
 from sklearn.decomposition import PCA
-from sklearn.metrics import mean_squared_error, silhouette_score
+from sklearn.metrics import mean_squared_error
 
-from helpers import calculate_coefficient_of_variation, calculate_qcd, mean_bootstrap_error
+from helpers import mean_bootstrap_error
 
 class AggregationMethod(Enum):
     """Used to set the type of aggregation methot that is used
@@ -167,53 +166,6 @@ class ExpressionMatrixTimeSeries:
         df = df.drop('ID', axis=1)
         return df
 
-    def plot_corr_distribution(self, out_path: Path = None):
-        """Plot the distribution of correlations between all genes,
-        can be used to select a proper cutoff
-        """
-        correlation_matrix = np.corrcoef(self.df)
-        upper_tri = np.triu(correlation_matrix, k=1)
-        flat_values = upper_tri[np.nonzero(upper_tri)]
-        sns.set_style('ticks')
-        sns.histplot(flat_values, element='step')
-        plt.xlabel('Pairwise pearson correlation')
-        sns.despine()
-        if out_path:
-            plt.savefig(out_path)
-        plt.show()
-
-    def save_edgelist_for_cytoscape(self,
-                                    out_path: Path,
-                                    correlation_cutoff: float,
-                                    abs_correlation: bool = True):
-        """Save edgelist file that can be visualised with cytoscape
-
-        :param out_path: path to save output file (.tsv file format)
-        :param correlation_cutoff at this cutoff, genes are assigned an edge
-        :param abs_correlation: If true, compare absolute correlation to
-        cutoff instead of value between -1 and 1
-        """
-        correlation_matrix = np.corrcoef(self.df)
-        # Find the correlations to check
-        corr_to_check = np.triu(correlation_matrix, k=1)
-        if abs_correlation:
-            corr_to_check = abs(corr_to_check)
-        # Select pairs above cutoff
-        mask = corr_to_check > correlation_cutoff
-        indices = np.where(mask)
-        # Convert to edgelist
-        gene_names = self.df.index
-        # In case there are multiple gene names, just take the first one
-        clean_gene_names = [name.split(';')[0] if ';' in name else name
-                            for name in gene_names]
-        pairs = [(clean_gene_names[i], clean_gene_names[j], correlation_matrix[i, j]) for
-                 i, j in zip(*indices)]
-        # Save gene pairs to a file
-        with out_path.open('w+') as f:
-            f.write("Gene1\tGene2\tCorr_strength\n")
-            for pair in pairs:
-                f.write(f"{pair[0]}\t{pair[1]}\t{pair[2]}\n")
-
     def get_sample_names(self) -> np.array:
         """Returns all names of samples"""
         return self.df.columns.to_numpy()
@@ -284,9 +236,8 @@ class ExpressionMatrixTimeSeries:
         :param mapping_df: Index should be gene name, column should be 'cluster_id'
         """
         assert not mapping_df.index.has_duplicates, 'Mapping dataframe contains duplicate indices'
-        # TODO is this proper way to handle mismatch?
+        # If maps to multiple genes/probes just take the first one
         self.df.index = [i.split(';')[0] for i in self.df.index]
-        # Drop duplicates based on index
         self.df = self.df.reset_index().drop_duplicates(
             subset='index').set_index('index')
         if 'cluster_id' in self.df.columns:
@@ -306,24 +257,14 @@ class ExpressionMatrixTimeSeries:
         # Make sure clustering has been performed
         if not self.has_been_clustered:
             logging.warning('Not clustered yet=')
-        # expressions = self.
-        # match self.aggregation_method:
-        #     case AggregationMethod.MEAN:
-        #         func = self._get_mean_over_time
-        #     case AggregationMethod.EIGENGENE:
-        #         func = self._get_eigengene_over_time
-        #     case _:
-        #         raise NotImplementedError(
-        #             f'{self.aggregation_method=} is not implemented')
+
         expressions = self.df.groupby('cluster_id').apply(
             self._aggregate_module_expressions_one_group)
-
         transpose_expression = expressions.T
 
         if 'light' in transpose_expression.index.names:
             transpose_expression.index = transpose_expression.index.droplevel('light')
 
-        # Get time point info from sample names
         # Convert to long form
         expressions = transpose_expression.reset_index().melt(
             id_vars=['time', 'condition'], value_name='expression')
@@ -478,55 +419,6 @@ class ExpressionMatrixTimeSeries:
         dist_df = pd.DataFrame(square_dist, index=self.df.index, columns=self.df.index)
         return dist_df
 
-    def do_hierachical_clustering(self, n_cluster: int,
-                                  do_plotting: bool = False) -> None:
-        """Hierarchically cluster genes based on correlation of expression,
-        and extract given number of clusters. Adds column cluster_id to
-        object, which indicates for each gene to which cluster it belongs.
-
-        :param n_cluster: Number of clusters to extract
-        :param do_plotting: If true, plot a clustermap with labels to
-                            indicate the clustering
-        :returns: Dataframe with cluster_id column which indicates the
-                  clustering.
-        """
-        # # Calculate pearson correlation
-        # subset_corr = np.corrcoef(self.df)
-        # # Calculate distance
-        # dist = 1 - subset_corr
-        #
-        # # subset_corr = np.abs(subset_corr)
-        # # subset_corr = subset_corr**2
-        # # Squareform diagonality checking can be too strict, so we do it
-        # # explicitly here and disable checks in the squareform function call
-        # assert np.allclose(dist, dist.T), 'Matrix does not appear symmetrical?'
-        # assert sum(np.diag(dist)) < 1e-6, 'Sum of diagonal too high'
-        # dist = squareform(dist, checks=False)
-
-        dist = pdist(self.df, metric='correlation')
-        # Create linkage matrix and infer clusters
-        linkage_matrix = linkage(dist, method='complete')
-        # linkage_matrix = linkage(dense_dist, method='average')
-        clustering = fcluster(linkage_matrix, n_cluster, 'maxclust')
-        self.df = self.df.assign(cluster_id=clustering)
-        self.has_been_clustered = True
-
-    @classmethod
-    def from_simulated_data(cls, sim_data: OdeResult):
-        """Create df where each gene is just representative of one module,
-        so you can feed simulated data into all the algorithms that
-        need ExpressionMatrixTimeSeries as an input.
-        """
-        df = pd.DataFrame.from_records(sim_data.y)
-        # Dummy column names
-        df.columns = [f'AtGen_6-9711_Simulated-Shoots-{t}h_Rep1'
-                      for t in sim_data.t]
-        created_object = cls(df)
-        created_object.df['cluster_id'] = df.index.to_list()
-        created_object.has_been_clustered = True
-
-        return created_object
-
     def plot_clusters_over_time(self, plot_units: bool = False,
                                 out_path: Path | None = None) -> None:
 
@@ -568,104 +460,6 @@ class ExpressionMatrixTimeSeries:
                 plt.show()
             plt.close()
 
-    def plot_per_gene_mad(self) -> pd.Series:
-        """Plot per gene mean absolute deviation across samples"""
-        mad_series = self._calculate_per_gene_statistic('mad')
-        sns.histplot(mad_series)
-        plt.show()
-        return mad_series
-
-    def scatterplot_of_two_per_gene_stats(
-            self,
-            stat1: Literal['std', 'mean', 'mad', 'cv', 'qcd', 'cond_rmse'],
-            stat2: Literal['std', 'mean', 'mad', 'cv', 'qcd', 'cond_rmse'],
-            title: str = None,
-            out_path: str = None,
-            plotting_func = sns.scatterplot
-    ) -> pd.DataFrame:
-        """Show a scatterplot between summary statistics of each gene.
-        E.g. between mean expression and its standard deviation
-
-        :param stat1: Statistic shown on x-axis
-        :param stat2: Statistic shown on y-axis
-        """
-        stat_name_list = [stat1, stat2]
-        out_list = []
-        for stat_name in stat_name_list:
-            stat_list = self._calculate_per_gene_statistic(stat_name)
-            stat_list.name = stat_name
-            out_list.append(stat_list)
-
-        merged_df = pd.concat(out_list, axis=1, join='inner')
-        plotting_func(data=merged_df, x=stat1, y=stat2)
-        if title:
-            plt.suptitle(title)
-        if out_path:
-            plt.savefig(out_path)
-            plt.close()
-        else:
-            plt.show()
-        return merged_df
-
-    def _calculate_per_gene_statistic(
-            self,
-            method: Literal['std', 'mad', 'cv', 'qcd', 'cond_rmsd',
-            'norm_cond_rmsd', 'mean']
-    ) -> pd.Series:
-        """Calculate for each gene a statistic over all samples
-
-        :param method: Method to calculate over samples:
-                        std: standard deviation
-                        mad: mean absolute deviation
-                        cv: coefficient of variation
-                        qcd: quartile coefficient of dispersion
-                        cond_rmse: root mean square error of expression
-                        norm_cond_rmse: root mean square error of expression
-                            divided by standard deviation over all samples
-                        between treatment and control
-                        mean: mean expression over all samples
-        :return: Series containing output result for each gene
-        """
-
-        if method in ['qcd', 'cv']:
-            # Cannot take negative values:
-            # Subtract minimum value to all values, so qcd / cv does not
-            # get negative inputs
-            min_value = self.df.min().min()
-            if min_value < 0:
-                # all_num_df = self.df.apply(pd.to_numeric)
-                translated_df = self.df - min_value
-            else:
-                translated_df = self.df
-
-        # # Random snippet to plot compare measures
-        # self.df['qcd'] = translated_df.apply(calculate_qcd, axis=1)
-        # self.df['cv'] = translated_df.apply(calculate_coefficient_of_variation,
-        #                               axis=1)
-        # fig, axs = plt.subplots(2, 1)
-        # sns.stripplot(data=self.df, x='qcd', ax=axs[0], alpha=.5)
-        # sns.stripplot(data=self.df, x='cv', ax=axs[1], alpha=.5)
-        # plt.tight_layout()
-        # plt.show()
-        # logging.info(self.df[['qcd', 'cv']].corr('spearman'))
-
-        match method:
-            case 'mean':
-                return self.df.mean(axis=1)
-            case 'cond_rmsd':
-                return self.get_gene_rmse_difference_between_conditions()
-            case 'std':
-                return self.df.std(axis=1)
-            case 'mad':
-                return self.df.mad(axis=1)
-            case 'qcd':
-                return translated_df.apply(calculate_qcd, axis=1)
-            case 'cv':
-                return translated_df.apply(calculate_coefficient_of_variation,
-                                           axis=1)
-            case _:
-                raise NotImplementedError(f'{method} not available')
-
     def _get_gene_expression_long_form(self):
         """Expression of all individual genes.
         Used if you want to plot them all seperately
@@ -698,34 +492,6 @@ class ExpressionMatrixTimeSeries:
         expression_df = expression_df.merge(self.df['cluster_id'],
                                             left_on='ID_REF', right_index=True)
         return expression_df
-
-    def get_lpan_input_tfs(self) -> pd.DataFrame:
-        """Get expressions of transcription factors to be used in Rscript LPAN.
-        Only use this if the object contains only transcription factors.
-        I.e. the object has been created from a .split_off_tfs() method call.
-        """
-        output_df = self.df
-        output_df.index = self.tf_prefix + output_df.index.astype(str)
-        return output_df
-
-    def split_off_tfs(self, path_to_tf_file: Path) \
-            -> tuple[ExpressionMatrixTimeSeries, ExpressionMatrixTimeSeries]:
-        """Split time series into set of transcription factors, and set of non-
-        transcription factors
-
-        :param path_to_tf_file: Path to file which contains list of
-        transcription factor gene ids in column GeneID in tsv file.
-        E.g. it can be downloaded from http://planttfdb.gao-lab.org/index.php?sp=Ath
-        :return: Tuple of ExpressionMatrixTimeSeries non-tfs, and tfs.
-        """
-        tf_annotation_df = pd.read_csv(path_to_tf_file, sep='\t')
-        is_tf = self.df.index.isin(tf_annotation_df.Gene_ID)
-        assert is_tf.any(), 'No transcription factors in the modules. ' \
-                            'Consider increasing the number of genes that you consider'
-        tfs_df, non_tfs_df = self.df[is_tf], self.df[~is_tf]
-
-        return (ExpressionMatrixTimeSeries(non_tfs_df),
-                ExpressionMatrixTimeSeries(tfs_df))
 
     def merge_biological_samples(self) -> None:
         """Calculate average of all biological samples"""
@@ -798,8 +564,8 @@ class ExpressionMatrixTimeSeries:
 
     def get_correlation(self, module_index: int, tf_name: str,
                         plot: bool = False, method: str = 'pearson') -> float:
-        """Calculate the correlation between eigengene of a module and a
-        transcription factor
+        """Calculate the correlation between summary (eigengene/mean)
+         of a module and a transcription factor
 
         :param module_index: the index of the module (e.g. 1)
         :param tf_name: Name of transcription factor
@@ -808,7 +574,6 @@ class ExpressionMatrixTimeSeries:
         :param plot: If true, plot the distribution of correlations
         :return: Pearson correlation coefficient
         """
-        # TODO eventually check if this can be moved higher up in the hierarchy
         assert self.has_been_clustered, 'Cluster object first'
         if tf_name not in self.df.index:
             logging.warning(f'TF ({tf_name}) not present in dataframe')
@@ -905,47 +670,15 @@ class ExpressionMatrixTimeSeries:
         mse = self._calculate_mse_two_expression_series(expressions)
         return mse
 
-    def get_gene_rmse_difference_between_conditions(self) -> pd.Series:
-        """For each gene calculate the MSE of its expression in
-        control vs treatment
-        """
-        annotated_df = self._annotate_sample_names_expressions(self.df.T)
-
-        control_series = annotated_df[annotated_df.index.get_level_values(
-            'condition').isin(['zero', self.condition_names[0]])]
-        treatment_series = annotated_df[annotated_df.index.get_level_values(
-            'condition').isin(['zero', self.condition_names[1]])]
-
-        control_series.index = control_series.index.droplevel('condition')
-        treatment_series.index = treatment_series.index.droplevel('condition')
-
-        rmse = mean_squared_error(control_series, treatment_series,
-                                  multioutput='raw_values',
-                                    squared=False)
-        rmse = pd.Series(rmse, index=annotated_df.columns)
-        rmse.name = 'mean_square_error'
-        return rmse
-
-        # def small_changing_function(x):
-        #     x.name = 'expressions'
-        #     return self._calculate_mse_two_expression_series(x)
-        # mse =  annotated_df.apply(small_changing_function)
-        # # TO speed up first split the df into two, then do subtraction and squaring simultaneously
-        # logging.info('Calculating difference between gene expression in '
-        #              'samples, this is implemented quite poorly '
-        #              'so will probably take a while 🙃')
-        #
-        # return mse
-
     def _calculate_mse_two_expression_series(self, expressions):
         # Split into drought and control time series
         assert len(self.condition_names) == 2, (
             f'Can only calculate difference '
             f'between two conditions.'
-            f' Now provides with'
+            f' Now provided with'
             f' {len(self.condition_names)}'
             f'conditions: {self.condition_names}.'
-            f'Specify self.condition_names to get this workin properly.')
+            f'Specify self.condition_names to get this working properly.')
         control_series, drought_series = self.split_series_into_different_conditions(
             expressions)
         # Ensure that in similar order and everything matches
@@ -1011,22 +744,6 @@ class ExpressionMatrixTimeSeries:
         one_group_df = one_group_df.drop('cluster_id', axis=1)
         pca = self._do_pca_of_group(one_group_df)
         return pca.explained_variance_ratio_[0]
-
-    def _get_module_variation_over_time(self,
-                                        one_group_df: pd.DataFrame
-                                        ) -> float | np.floating:
-        """Standard deviation of module expression over time
-
-        Used to see if a gene module changes expression throughout
-        the different samples.
-
-        :param one_group_df: Dataframe that should come from one cluster.
-        :return: standard deviation of expression of module through time
-        """
-
-        expr_through_time = self._aggregate_module_expressions_one_group(
-            one_group_df)
-        return np.std(expr_through_time)
 
     def get_z_score_of_cluster_characteristics(
             self,
@@ -1111,19 +828,6 @@ class ExpressionMatrixTimeSeries:
         self.df = self.df[self.df['cluster_id'].isin(best_clusters.index)]
         return best_clusters
 
-    def get_pairwise_module_correlations(self) -> pd.DataFrame:
-        """Get dataframe that shows pairwise module correlations"""
-        match self.aggregation_method:
-            case AggregationMethod.EIGENGENE:
-                expressions = self.df.groupby('cluster_id').apply(
-                    self._get_eigengene_over_time)
-            case AggregationMethod.MEAN:
-                expressions = self.df.groupby('cluster_id').mean()
-            case _:
-                raise NotImplementedError(f'{self.aggregation_method} not found as method')
-        correlations = expressions.T.corr()
-        return correlations
-
     def keep_only_modules_in_network(self, module_module):
         """Filters the expression matrix to keep only the modules present
         in the given module_module network.
@@ -1135,10 +839,6 @@ class ExpressionMatrixTimeSeries:
             self.df['cluster_id'].isin(
                 [int(i.replace(module_module.module_prefix, ""))
                  for i in module_module.get_modules()])]
-
-    def get_sem_per_cluster(self):
-        assert self.has_been_clustered
-        return self.df.groupby('cluster_id').sem()
 
     def get_std_per_cluster(self, mean_over_all_samples=False):
         """Standard deviation of each cluster
@@ -1240,22 +940,6 @@ class ExpressionMatrixTimeSeries:
         assignment_df = assignment_df.drop('colors', axis=1)
 
         self._apply_cluster_mapping_from_df(assignment_df)
-
-    def do_genewise_min_max_scaling(self):
-        """Do min-max scaling for all genes"""
-        # Correct axis
-        if self.has_been_clustered:
-            clusters = self.df['cluster_id']
-            self.df = self.df.drop('cluster_id', axis=1)
-
-        # self.df = self.df.apply(lambda x: (x - x.mean()) / x.std(), axis=1)
-        self.df = self.df.apply(lambda x: (x - x.min()) / (x.max() - x.min()), axis=1)
-
-        # assert np.all(self.df.mean(axis=1) < 0.01)
-
-        if self.has_been_clustered:
-            self.df['cluster_id'] = clusters
-        self.has_been_scaled = True
 
     def get_correlation_matrix(self) -> pd.DataFrame:
         assert not self.has_been_clustered
@@ -1383,7 +1067,6 @@ class ExpressionMatrixTimeSeries:
             else:
                 continue
 
-
         full_df = pd.concat(df_list)
         # fix_order for display purposes
         full_df = full_df[
@@ -1392,5 +1075,3 @@ class ExpressionMatrixTimeSeries:
              'depth', 'study_count', 'p_fdr_bh', 'study_items']
         ]
         full_df.to_csv(out_path, index=False)
-
-

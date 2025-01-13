@@ -1,15 +1,11 @@
 import logging
 from pathlib import Path
-from typing import Dict
 
-import numpy as np
+import networkx as nx
 import pandas as pd
-from scipy.cluster.hierarchy import linkage
-from scipy.spatial.distance import squareform
 
-from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries, \
-    AggregationMethod
-from helpers import get_info_from_gse65046, get_info_from_emtab375
+from DynamicModels.ModuleRegulatoryNetwork import ModuleRegulatoryNetwork
+from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 
 
 def merge_ath_annotation_for_goatools(in_path: Path,
@@ -54,39 +50,6 @@ def parse_go_enrichment_output(in_file: Path, cutoff: float = 0.05) -> pd.DataFr
     df['module_name'] = in_file.stem
     return df
 
-def create_correlation_matrix_from_atted_ii_raw(corr_file: Path, gene_ids: Path):
-    """From pairwise correlations of atted_ii, create one expressionmatrix as pandas dataframe
-
-    :param corr_file: path to file that contains atted_ii correlations in the form of
-        10723023:818113 7.9030
-        10723023:835497 6.6774
-        10723023:816702 6.3223
-        first item gene 1, second gene 2, third item the correlation value
-    :param gene_ids: list of all gene ids, will be used to construct the
-                     dataframe
-    :return: Dataframe with all values
-    """
-    with gene_ids.open('r') as f:
-        gene_names = f.read().split()
-    corr_matrix = pd.DataFrame(index=gene_names, columns=gene_names)
-    with corr_file.open('r') as f:
-        all_lines = f.readlines()
-        for i, line in enumerate(all_lines):
-            if i % 1_000_000 == 0:
-                print(f'{i/len(all_lines):.2%}')
-            line = line.strip()
-            connection, new_corr = line.split()
-            new_corr = float(new_corr)
-            gene_1, gene_2 = connection.split(':')
-            existing_corr = corr_matrix.at[gene_1, gene_2]
-            if np.isnan(existing_corr):
-                corr_matrix.at[gene_1, gene_2] = new_corr
-                corr_matrix.at[gene_2, gene_1] = new_corr
-    # Return upper triangle only
-    upper_tri_df = corr_matrix.where(
-        np.triu(np.ones(corr_matrix.shape)).astype(np.bool))
-    return upper_tri_df
-
 def entrez_to_tair_id(annotation_path: Path, coexpression_matrix_path: Path):
     """Convert entrez gene ID columns and rows in dataframe to locus tag IDs
 
@@ -105,45 +68,38 @@ def entrez_to_tair_id(annotation_path: Path, coexpression_matrix_path: Path):
     df_coexp_rename = df_coexp.rename(index=translation_dict, columns=translation_dict)
     df_coexp_rename.to_csv(out_path)
 
-def calculate_linkage_matrix_from_atted_ii(in_path: Path, out_dir: Path):
-    """From atted_ii z-scores, calculate linkage matrices
 
-    :param in_path: path to atted_ii matrix that contains pairwise Z-scores
-                    between genes
-    :param out_dir: path in which to save the calculated linkage matrices
+def module_network_from_tf2_output(expr_mat_time : ExpressionMatrixTimeSeries,
+                                   tf2_in_path: Path,
+                                   tf2_out_path: Path,
+                                   threshold: float,
+                                   module_plot_path: Path
+                                   ) -> ModuleRegulatoryNetwork:
+    """From TF2Network output, generate a module module network
+
+    :param expr_mat_time: Expression matrix time series
+    :param tf2_in_path: Path to TF2Network input
+    :param tf2_out_path: Path to TF2Network output
+    :param threshold: Up/down regulation threshold
+    :param module_plot_path: Path where to plot output module network
+    :return: Module module network
     """
-    out_dir.mkdir(exist_ok=True)
-    df = pd.read_csv(in_path, index_col=0)
-    # Todo later on try with absolute Z-scores
-    # From Z score to distance; substract maximum z-score
-    dist = df.max().max() - df
-    # Convert matrix into dense format
-    dense_dist = squareform(dist, checks=False)
-    for method in ['complete', 'single', 'average']:
-        logging.info(f'Performing {method} now')
-        linkage_matrix = linkage(dense_dist, method=method)
-        out_path = out_dir / f'{in_path.stem}_{method}_linkage.npy'
-        np.save(out_path, linkage_matrix)
-
-def expr_mat_from_heat(in_path: str, agg_method: AggregationMethod, do_log2: bool, gpl_path=None):
-    expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
-            in_path, log2_transform=do_log2, gpl_path=gpl_path)
-    expr_mat_time.keep_only_samples_with_string('normal light')
-    expr_mat_time.aggregation_method = agg_method
-    expr_mat_time.condition_names = ['21', '32']
-    expr_mat_time.column_parser = get_info_from_emtab375
-    return expr_mat_time
-
-
-def expr_mat_from_drought(in_file_path: str, agg_method: AggregationMethod, do_log2: bool):
-    if in_file_path.endswith('csv'):
-        expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_csv(
-            in_file_path, log2_transform=do_log2)
-    else:
-        expr_mat_time: ExpressionMatrixTimeSeries = ExpressionMatrixTimeSeries.from_geo_file(
-            in_file_path, annotate_from_gpl=True, log2_transform=do_log2)
-    expr_mat_time.column_parser = get_info_from_gse65046
-    expr_mat_time.aggregation_method = agg_method
-    expr_mat_time.condition_names = ['control', 'drought']
-    # expr_mat_time.merge_biological_samples()
-    return expr_mat_time
+    my_grn = ModuleRegulatoryNetwork.from_tf2_tsv(tf2_out_path)
+    my_grn.add_tf_module_mappings(tf2_in_path,
+                                  from_tf2_input=True)
+    my_grn.keep_only_modules_of_interest(expr_mat_time)
+    my_grn.clean_up_network()
+    my_grn.check_if_tfs_created_by_module(expr_mat_time,
+                                          do_plotting=False,
+                                          remove_low_corr=True,
+                                          assert_correlated=False,
+                                          corr_cutoff=.3)
+    my_grn.set_up_or_downregulation(expr_mat_time, do_plotting=False,
+                                    threshold=threshold)
+    # my_grn.plot_network(nx.d  raw_kamada_kawai, with_labels=False)
+    module_module = my_grn.get_module_module_network()
+    # # module_module.graph = nx.create_empty_copy(module_module.graph, with_data=False)
+    if module_plot_path is not None:
+        module_module.plot_network(nx.draw_kamada_kawai , with_labels=True, out_path=module_plot_path)
+    logging.info(list(module_module.graph.edges(data=True)))
+    return module_module

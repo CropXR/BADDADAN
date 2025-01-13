@@ -7,21 +7,18 @@ import mlflow
 from matplotlib import pyplot as plt
 
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
-from data_wrangling import expr_mat_from_heat, expr_mat_from_drought
-from experiment_scripts import (module_size_pipeline, drought_data_to_sbml,
+from expr_mat_factories import expr_mat_from_heat, expr_mat_from_drought
+from experiment_scripts import (drought_data_to_sbml,
                                 heat_data_to_sbml, \
-                                config_preprocess, drought_from_wgcna, \
-                                wgcna_with_similarity_scores, \
-                                save_jackknife_files, \
-                                ground_truth_vs_jackknife, pypesto_from_sbml, \
+                                drought_from_wgcna, \
+                                pypesto_from_sbml, \
                                 analyse_go_enrichments_find_enrichment,
-                                do_coherence_with_stat_tests)
+                                do_coherence_with_stat_tests,
+                                get_coherence_random_modules,
+                                sa_drought_over_time)
 from end_to_end_pipeline import full_pipeline_prototype
-from exploring_questions import get_coherence_random_modules, \
-    get_robustness_random_modules, sa_drought_over_time
-from figure_pipelines import fig2_from_generated_data
-from helpers import plot_y_and_y_hat, get_info_from_gse65046, \
-    one_gene_list_file_per_cluster
+from figure_pipelines import fig2_from_generated_data, module_size_pipeline
+from helpers import one_gene_list_file_per_cluster, config_preprocess
 from petab_integration.petab_scripts import plot_nicely_from_artifact
 
 # pd.options.display.width = 0
@@ -60,39 +57,6 @@ def main():
             _, hyper_params, _ = config_preprocess(
                 experiment_path)
             expr_mat_time, module_module = drought_from_wgcna(experiment_path)
-        case "15_wgcna_with_similarity_scores":
-            wgcna_with_similarity_scores(experiment_path)
-        case "18_robustness_with_wgcna_cutting":
-            data_params, hyper_params, experiment_params = config_preprocess(
-                experiment_path)
-            if 'heat' in data_params['in_path']:
-                # Get heat expr_mat
-                condition_name = 'heat'
-                expr_mat_time = expr_mat_from_heat(data_params['in_path'],
-                                                   hyper_params['agg_method'],
-                                                   hyper_params['do_log2'])
-            elif 'drought' in data_params['in_path']:
-                # Get drought expr_mat
-                condition_name = 'drought'
-                expr_mat_time = expr_mat_from_drought(data_params['in_path'],
-                                                      hyper_params[
-                                                          'agg_method'],
-                                                      hyper_params['do_log2'])
-            else:
-                raise NotImplementedError(
-                    "Couldn't find what condition (drought or heat) was used"
-                )
-            skip = True
-            if not skip:
-                save_jackknife_files(
-                    experiment_path, expr_mat_time, condition_name)
-
-            #####################
-            ## RUN R CODE HERE ##
-            #####################
-
-            ground_truth_vs_jackknife(experiment_path, expr_mat_time)
-
         case "19_heat_pypesto":
             # Run heat data e2e first for this to run:
             heat_data_to_sbml(experiment_path)
@@ -184,11 +148,6 @@ def main():
                          .glob(data_params['jacknife_glob_command'])
                          )
                 )
-                get_robustness_random_modules(
-                    jackknife_paths=jackknife_paths,
-                    full_dataset_path=data_params['wgna_label_file'],
-                    figure_out_dir=Path(data_params['fig_out_path']))
-
                 get_coherence_random_modules(
                     wgcna_label_file=data_params['wgna_label_file'],
                     expr_mat_time=expr_mat_time,
