@@ -18,59 +18,6 @@ rule target:
         expand("go_outputs_exp_evidence_only_background_de_genes/{id}.tsv", id=IDS)
         # expand("go_outputs_exp_evidence_only/{id}.tsv", id=IDS)
 
-# rule go_annotate:
-#     input:
-#         "split_by_module/{id}.csv",
-#         "../../../resources/go_annotations/ATH_GO_GOSLIM_genes_only_experimental_evidence.txt",
-#         "../../../resources/go_annotations/ATH_GO_GOSLIM_one_gene_per_line_only_experimental_evidence.txt",
-#     params:
-#         obo="../../../resources/go_annotations/go-basic.obo"
-#     output:
-#         "go_outputs_exp_evidence_only/{id}.tsv"
-#     log:
-#         "go_outputs_exp_evidence_only/{id}.log"
-#     shell:
-#         # "find_enrichment.py {input} --pval=0.05 --method=fdr_bh --pval_field=fdr_bh --obo {params.obo} --ns=BP --outfile {output} > {log}"
-#         "find_enrichment.py {input} --pval=0.05 --method=fdr_bh --pval_field=fdr_bh --obo {params.obo} --ns=BP --outfile {output} --min_overlap .1 > {log}"
-#         # "find_enrichment.py {input} --pval=0.05 --method=fdr_bh --pval_field=fdr_bh --obo {params.obo} --ns=BP --outfile {output} > {log}"
-
-
-
-rule go_annotate:
-    input:
-        "split_by_module/{id}.csv",
-        "../../../resources/go_annotations/tair.gaf.all_background_genes",
-        "../../../resources/go_annotations/tair.gaf",
-    params:
-        obo="../../../resources/go_annotations/go-basic.obo"
-    output:
-        "go_outputs_exp_evidence_only/{id}.tsv"
-    log:
-        "go_outputs_exp_evidence_only/{id}.log"
-    shell:
-        "find_enrichment.py {input} --pval=0.05 --method=fdr_bh --pval_field=fdr_bh --obo {params.obo} --ns=BP "
-        "--outfile {output} "
-        "--ev_inc Experimental --ev_exc Similarity,Combinatorial,High_Throughput,Author,Curatorial,ND,IEA "
-        "> {log}"
-
-
-rule go_annotate_from_random:
-    input:
-        "random_split_by_module/{id}.csv",
-        "../../../resources/go_annotations/tair.gaf.all_background_genes",
-        "../../../resources/go_annotations/tair.gaf",
-    params:
-        obo="../../../resources/go_annotations/go-basic.obo"
-    output:
-        "go_outputs_exp_evidence_only/{id}.tsv"
-    log:
-        "go_outputs_exp_evidence_only/{id}.log"
-    shell:
-        "find_enrichment.py {input} --pval=0.05 --method=fdr_bh --pval_field=fdr_bh --obo {params.obo} --ns=BP "
-        "--outfile {output} "
-        "--ev_inc Experimental --ev_exc Similarity,Combinatorial,High_Throughput,Author,Curatorial,ND,IEA "
-        "> {log}"
-
 
 rule go_annotate_only_DE_background:
     input:
