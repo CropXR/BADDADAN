@@ -14,7 +14,7 @@ from helpers import one_gene_list_file_per_cluster, config_preprocess
 
 def full_pipeline_prototype(experiment_path: Path):
     """Main script: do all processing from input data to output model in one go"""
-    skip_slow_steps = True
+    skip_slow_steps = False
     # for treatment_name in ['heat']:
     # for treatment_name in ['drought']:
     for treatment_name in ['drought', 'heat']:
@@ -73,16 +73,15 @@ def full_pipeline_prototype(experiment_path: Path):
                               cut_modules_path=treatment_path / 'dyntreecut_output',
                               figure_path=treatment_path / 'figs')
 
-        skip_making_one_file_per_clust = True
-        if not skip_making_one_file_per_clust:
+
+        if not skip_slow_steps:
             one_gene_list_file_per_cluster(
                 in_dir=treatment_path / 'dyntreecut_output',
                 out_dir=treatment_path / 'split_by_module',
                 use_for_analysis_func=lambda x: True
             )
-        skip_making_random_modules = True
         # Also generate random clusters that have the same size as a representative of these clusters
-        if not skip_making_random_modules:
+        if not skip_slow_steps:
             expr_mat_time.save_random_modules_for_goa_find_enrichment(
                 wgcna_label_file=treatment_path
                                  / 'dyntreecut_output'
@@ -91,8 +90,7 @@ def full_pipeline_prototype(experiment_path: Path):
             )
 
         # Coherence
-        skip_coherence = True
-        if not skip_coherence:
+        if not skip_slow_steps:
             do_coherence_with_stat_tests(
                 in_dir=treatment_path / 'split_by_module',
                 expr_mat_time=expr_mat_time,
@@ -102,22 +100,20 @@ def full_pipeline_prototype(experiment_path: Path):
         # continue
         # Do GO enrichment
         ### RUN SNAKEMAKE ###
-        # snakemake - s.. /../../../ snakemake_workflows / Snakefile_wgcna_deepsplit_go_terms - r - c5 - k
+        # snakemake -s ../../../../snakemake_workflows/Snakefile_wgcna_deepsplit_go_terms -r -c5 -k
 
         go_enrich_output_path = (
                 treatment_path
                 / 'go_outputs_exp_evidence_only_background_de_genes'
         )
-        skip_go_enrich_analysis = True
-        if not skip_go_enrich_analysis:
+        if not skip_slow_steps:
             analyse_go_enrichments_find_enrichment(
                 go_enrich_output_path,
                 treatment_path / 'figs',
                 )
 
-        skip_ode_steps = False
         sbml_path = treatment_path / 'module_network.xml'
-        if not skip_ode_steps:
+        if not skip_slow_steps:
             # ODE modelling steps
             my_ode = from_expr_mat_time_to_ode(data_params, treatment_path,
                                                expr_mat_time, hyper_params)
@@ -128,9 +124,7 @@ def full_pipeline_prototype(experiment_path: Path):
             my_ode.save_to_sbml(sbml_path,
                                 u_t_function)
 
-        skip_make_supp_table = True
-
-        if not skip_make_supp_table:
+        if not skip_slow_steps:
             # Save GO enrich files into one file
             expr_mat_pickl_path = treatment_path / 'expr_mat_time.pkl'
             save_supp_table_go_enrichments(expr_mat_pickl_path,
