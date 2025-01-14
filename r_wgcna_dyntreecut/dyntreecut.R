@@ -75,35 +75,6 @@ main <- function(in_dir, out_dir, yaml_path){
          SIMPLIFY = FALSE)
 }
 
-do_drought <- function(){
-  message('Processing drought')
-  # Do the jackknifes
-  for (word in c('atted', 'local', 'combined_min', 'combined_sum')){
-    in_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/drought/jackknifes", word)
-    out_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/drought/r_output", word)
-    message(paste('Processing', word))
-    main(in_dir, out_dir)
-  }
-  
-  main("../data/experiments/18_robustness_with_wgcna_cutting/drought/full_datasets",
-       "../data/experiments/18_robustness_with_wgcna_cutting/drought/r_output/full_datasets")
-}
-
-do_heat <- function(){
-  message('Processing heat')
-  # Do the jackknifes
-  for (word in c('atted', 'local', 'combined_min', 'combined_sum')){
-    in_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/heat/jackknifes", word)
-    out_dir <- file.path("../data/experiments/18_robustness_with_wgcna_cutting/heat/r_output", word)
-    message(paste('Processing', word))
-    main(in_dir, out_dir)
-  }
-  
-  main("../data/experiments/18_robustness_with_wgcna_cutting/heat/full_datasets",
-       "../data/experiments/18_robustness_with_wgcna_cutting/heat/r_output/full_datasets")
-}
-
-
 setwd('C:/Users/noord087/PycharmProjects/d3c2_project/data/experiments/25_everything_including_limma')
 
 main("drought/full_datasets", "drought/dyntreecut_output", 'drought/config.yaml')
