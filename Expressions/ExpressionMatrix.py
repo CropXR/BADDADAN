@@ -516,7 +516,6 @@ class ExpressionMatrixTimeSeries:
         df_no_cluster_column.columns = pd.MultiIndex.from_tuples(
             column_tuples, names=['sample_name', 'time', 'condition', 'replicate'])
         stacked_df = df_no_cluster_column.stack(level=['time', 'replicate'])
-        # TODO check if only 1 non-NaN item per row
         # Sorry about how ugly this is, it's Friday afternoon 😶
         expressions_per_gene = stacked_df.sum(axis=1)
         expression_df = pd.DataFrame(expressions_per_gene, columns=['expression'])
