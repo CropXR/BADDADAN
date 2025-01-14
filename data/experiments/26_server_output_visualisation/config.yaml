@@ -1,0 +1,8 @@
+drought:
+  out_folder_experiment: 'data/experiments/25_everything_including_limma/drought'
+  artifact_path: 'data/experiments/25_everything_including_limma/drought/pypesto_results.hdf5'
+  petab_yaml: 'data/experiments/25_everything_including_limma/drought/petab_files/baddadan_drought_petab.yaml'
+heat:
+  out_folder_experiment: 'data/experiments/25_everything_including_limma/heat'
+  artifact_path: 'data/experiments/25_everything_including_limma/drought/pypesto_results.hdf5'
+  petab_yaml: 'data/experiments/25_everything_including_limma/heat/petab_files/baddadan_heat_petab.yaml'
