@@ -33,8 +33,6 @@ from scipy.spatial.distance import pdist, squareform
 from sklearn.decomposition import PCA
 from sklearn.metrics import mean_squared_error
 
-from helpers import mean_bootstrap_error
-
 class AggregationMethod(Enum):
     """Used to set the type of aggregation methot that is used
     to represent a module as one number. Can be either through
@@ -165,6 +163,45 @@ class ExpressionMatrixTimeSeries:
         # Remove old probe ID column
         df = df.drop('ID', axis=1)
         return df
+
+    @staticmethod
+    def mean_bootstrap_error(in_df: pd.DataFrame, confidence_level: float) -> pd.DataFrame:
+        """From a dataframe, calculate the per-column 95% mean bootstrap error"""
+        in_df = in_df.drop('cluster_id', axis=1)
+        x = in_df.to_numpy()
+
+        all_bs = bootstrap((x,), np.mean,
+                           confidence_level=confidence_level).confidence_interval
+        out_df = pd.DataFrame([all_bs.low, all_bs.high], columns=in_df.columns, index=['lower', 'upper'])
+
+        return out_df
+
+        # # Some old crap that can be ignored
+
+        # Only
+        # bs_error = (all_bs.high - all_bs.low) / 2
+        # out_df = out_df - x.mean(axis=0)
+        # assert all(out_df.loc[:, 'lower'] < 0) and all(out_df.loc[:, 'lower'] > 0)
+        # out_df.loc[:, 'lower'] = out_df.loc[:, 'lower'].abs()
+
+        # Plot genes
+        # # Only control or drought
+        # test_df = in_df.loc[:,in_df.columns.str.contains('control')]
+        # test_df = in_df.loc[:,in_df.columns.str.contains('drought')]
+        # for index, row in test_df.iterrows():
+        #     plt.plot(row, alpha=.1)
+        # plt.plot()
+        # plt.plot(test_df.mean())
+        #
+        # plt.xlabel('Condition')
+        # plt.xticks()
+        # plt.ylabel('Expression Value')
+        # plt.title('Gene Expression Across Conditions')
+        # plt.legend(loc='upper right')
+        # plt.show()
+
+        # Luckily looks good :)
+
 
     def get_sample_names(self) -> np.array:
         """Returns all names of samples"""
@@ -859,7 +896,8 @@ class ExpressionMatrixTimeSeries:
     def get_ci_per_cluster(self, confidence_level=.99, for_error_bars: bool = False):
         """Get confidence interval per cluster at each time point"""
         assert self.has_been_clustered
-        bs_df = self.df.groupby('cluster_id').apply(mean_bootstrap_error, confidence_level=confidence_level)
+        bs_df = self.df.groupby('cluster_id').apply(
+            self.mean_bootstrap_error, confidence_level=confidence_level)
         if for_error_bars:
             mean_df = self.df.groupby('cluster_id').mean()
             bs_df = abs(bs_df - mean_df)
