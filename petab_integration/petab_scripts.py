@@ -13,11 +13,13 @@ import pypesto
 import petab
 import yaml
 import amici
+from amici.petab import rdatas_to_simulation_df
 from matplotlib import pyplot as plt
 from pypesto import optimize as optimize, profile as profile
 from pypesto.visualize.model_fit import visualize_optimized_model_fit
 import pypesto.petab
 from scipy.interpolate import CubicSpline, UnivariateSpline
+from sklearn.metrics import mean_squared_error
 
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
 
@@ -469,9 +471,25 @@ def plot_nicely_from_artifact(out_folder_of_experiment: str,
     out_folder_of_experiment = Path(out_folder_of_experiment)
     _, problem = prepare_petab_files_for_fitting(out_folder_of_experiment,
                                                  petab_problem)
-    # To improve:
-    # Standard deviations (?) -> quite hard maybe? ->
-    # build upon existing functionality I built earlier maybe?
+
+    # Look into rdatas_to_simulation_df using to calculate MSE?
+
+    x = loaded_result.optimize_result.list[0]["x"][
+        problem.x_free_indices
+    ]
+    sim_df = rdatas_to_simulation_df(
+        problem.objective(x, return_dict=True)['rdatas'],
+        problem.objective.amici_model,
+        petab_problem.measurement_df)
+    # Get experimental measurements
+    joined_df = sim_df.merge(petab_problem.measurement_df,
+                 on=['observableId', 'time', 'simulationConditionId'])
+    # Only keep final time points once
+    joined_df = joined_df.drop_duplicates()
+    mse = mean_squared_error(joined_df['simulation'],
+                                 joined_df['measurement'])
+    logging.info(f'MSE = {mse}')
+    # return
     if expr_mat_time_path:
         with expr_mat_time_path.open('rb') as f:
             expr_mat_time: ExpressionMatrixTimeSeries = pickle.load(f)
@@ -520,6 +538,7 @@ def plot_pypesto_module_fit(petab_problem, optimise_result, problem, error_bar_s
                 if line.get_marker() == 'x':
                     # Experimental data
                     line_color = line.get_color()
+                    line.set_linestyle('--')
                     errors_for_condition = None
                     for error_bars in error_bar_size_list:
                         if any(error_bars['condition'] == condition_name_dict['control_keyword']) and line_color == '#1f77b4': # Blue is control condition

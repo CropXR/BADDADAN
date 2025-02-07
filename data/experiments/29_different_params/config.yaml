@@ -1,0 +1,14 @@
+drought:
+  out_folder_experiment: 'data/experiments/29_different_params/drought'
+  mlflow_result_uri: 'mlflow-artifacts:/519377491142935077/aecdd41e925a4c1d9318160525bd3479/artifacts/29_different_params/drought/first_10_optims.hdf5'
+  petab_yaml: 'data/experiments/25_everything_including_limma/drought/petab_files/baddadan_drought_petab.yaml'
+  param_names: ['beta_2_4']
+  new_value: -6
+heat:
+  out_folder_experiment: 'data/experiments/29_different_params/heat'
+  mlflow_result_uri: 'mlflow-artifacts:/519377491142935077/aecdd41e925a4c1d9318160525bd3479/artifacts/29_different_params/heat/first_10_optims.hdf5'
+  petab_yaml: 'data/experiments/25_everything_including_limma/heat/petab_files/baddadan_heat_petab.yaml'
+  expr_mat_pkl: 'data/experiments/25_everything_including_limma/heat/expr_mat_time.pkl'
+  param_names: ['beta_11_4', 'beta_11_5', 'beta_11_14', 'beta_11_29']
+#  param_name: 'beta_29_25'
+  new_value: -6

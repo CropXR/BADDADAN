@@ -22,7 +22,7 @@ def full_pipeline_prototype(experiment_path: Path):
         treatment_path = experiment_path / treatment_name
         data_params, hyper_params, experiment_params = config_preprocess(
             treatment_path)
-        # Uncomment to only save files
+        # # Uncomment to only save files
         # with mlflow.start_run(
         #         description=experiment_params['description']):
         #     mlflow.log_params(data_params)
@@ -65,6 +65,14 @@ def full_pipeline_prototype(experiment_path: Path):
         #
         expr_mat_time.merge_biological_samples()
         # # Read DE genes from limma output and get the ATTED/Merged/Local scores
+        # g = sns.clustermap(a.iloc[:2000, :2000], cmap='coolwarm', cbar_pos=None,
+        #                    dendrogram_ratio=0);
+        # g.ax_heatmap.set_xticks([]);
+        # g.ax_heatmap.set_yticks([]);
+        # plt.tight_layout();
+        # # plt.show()
+
+
         if not skip_slow_steps:
             save_files_for_wgcna_cutting(treatment_path, data_params, expr_mat_time)
         ## Here: run wgcna cutting script (r_wgcna_dyntreecut/dyntreecut.R) ##
