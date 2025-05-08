@@ -57,4 +57,4 @@ python server_scripts.py --help
 ```
 
 # Citing
-Link to the preprint will be shown here once submitted.
+The preprint for BADDADAN can be found here: [BADDADAN: Mechanistic Modelling of Time Series Gene Module Expression](https://doi.org/10.1101/2025.02.18.638670).
