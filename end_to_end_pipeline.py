@@ -14,7 +14,7 @@ from helpers import one_gene_list_file_per_cluster, config_preprocess
 
 def full_pipeline_prototype(experiment_path: Path):
     """Main script: do all processing from input data to output model in one go"""
-    skip_slow_steps = False
+    skip_slow_steps = True
     # for treatment_name in ['heat']:
     # for treatment_name in ['drought']:
     for treatment_name in ['drought', 'heat']:
@@ -72,14 +72,14 @@ def full_pipeline_prototype(experiment_path: Path):
         # plt.tight_layout();
         # # plt.show()
 
-
+        skip_slow_steps = True
         if not skip_slow_steps:
             save_files_for_wgcna_cutting(treatment_path, data_params, expr_mat_time)
         ## Here: run wgcna cutting script (r_wgcna_dyntreecut/dyntreecut.R) ##
         # continue
-        see_gene_module_sizes(expr_mat_time,
-                              cut_modules_path=treatment_path / 'dyntreecut_output',
-                              figure_path=treatment_path / 'figs')
+            see_gene_module_sizes(expr_mat_time,
+                                  cut_modules_path=treatment_path / 'dyntreecut_output',
+                                  figure_path=treatment_path / 'figs')
 
 
         if not skip_slow_steps:
@@ -121,6 +121,7 @@ def full_pipeline_prototype(experiment_path: Path):
                 )
 
         sbml_path = treatment_path / 'module_network.xml'
+        skip_slow_steps = False
         if not skip_slow_steps:
             # ODE modelling steps
             my_ode = from_expr_mat_time_to_ode(data_params, treatment_path,
@@ -131,20 +132,20 @@ def full_pipeline_prototype(experiment_path: Path):
                 else 'drought * time / 13'
             my_ode.save_to_sbml(sbml_path,
                                 u_t_function)
-
+        skip_slow_steps = True
         if not skip_slow_steps:
             # Save GO enrich files into one file
             expr_mat_pickl_path = treatment_path / 'expr_mat_time.pkl'
             save_supp_table_go_enrichments(expr_mat_pickl_path,
                                            go_enrich_output_path,
                                            treatment_path)
-
-        # This is done on server now
-        pypesto_from_sbml(treatment_path,
-                          treatment_name,
-                          treatment_path / 'expr_mat_time.pkl',
-                          sbml_path
-                          )
+        #
+        # # This is done on server now
+        # pypesto_from_sbml(treatment_path,
+        #                   treatment_name,
+        #                   treatment_path / 'expr_mat_time.pkl',
+        #                   sbml_path,
+        #                   )
 
                           # use_best_params_as_init= treatment_path / 'pypesto_results.hdf5')
 

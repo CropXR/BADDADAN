@@ -352,12 +352,13 @@ def create_conditions_tsv(out_path: str | Path,
 
 def param_optimise_petab_problem(petab_problem: petab.v1.Problem,
                                  out_folder: Path,
-                                 n_starts: int):
+                                 n_starts: int,
+                                 n_cores: int = None):
     """Given a petab problem, perform parameter optimisation"""
     optimizer, problem = prepare_petab_files_for_fitting(out_folder,
                                                          petab_problem)
 
-    engine = pypesto.engine.MultiProcessEngine()
+    engine = pypesto.engine.MultiProcessEngine(n_cores)
     # engine = pypesto.engine.SingleCoreEngine()
 
     result = optimize.minimize(

@@ -10,10 +10,11 @@ from Formula.FormulaSuperClass import FormulaSuperClass
 
 class NonLinearFormula(FormulaSuperClass):
     def __init__(self, module_name: str,
-                 regulator_edges: InEdgeDataView):
+                 regulator_edges: InEdgeDataView,
+                 n: int = 2):
         super().__init__(module_name)
         for regulator, _, direction in regulator_edges:
-            self.add_regulator(regulator, direction)
+            self.add_regulator(regulator, direction, n)
         self.compile_formula()
 
     def get_hill_equation_outcomes(
@@ -48,11 +49,12 @@ class NonLinearFormula(FormulaSuperClass):
                        time_point, outcome, norm_outcome)
             regulator_count += 1
 
-    def add_regulator(self, regulator: str, direction: EdgeRelation):
+    def add_regulator(self, regulator: str, direction: EdgeRelation, n=2):
         """Add a regulator (e.g. MODULE2) to the equation. And returns name of
         the new parameter
 
         :param regulator: Name of regulator module, e.g. MODULE3
+        :param n: Order of hill equation. Default: 2.
         :return: Name of the new parameter
         """
         b_param_name, k_param_name, var_name = self.generate_param_and_var_names(
@@ -61,10 +63,10 @@ class NonLinearFormula(FormulaSuperClass):
         self.params.extend([b_param_name, k_param_name])
         if direction == EdgeRelation.UPREGULATES:
             term_to_add = self.generate_hill_activation_term(
-                b_param_name, k_param_name, var_name, n=2)
+                b_param_name, k_param_name, var_name, n=n)
         elif direction == EdgeRelation.DOWNREGULATES:
             term_to_add = self.generate_hill_inhibition_term(
-                b_param_name, k_param_name, var_name, n=2)
+                b_param_name, k_param_name, var_name, n=n)
         else:
             raise NotImplementedError('If regulatory interaction is unclear, cannot use that properly yet')
         self.formula_parts.append(term_to_add)

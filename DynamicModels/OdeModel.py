@@ -35,7 +35,8 @@ class OdeModel:
     def construct_from_regulatory_network(
             cls, gene_network: ModuleRegulatoryNetwork,
             nonlinear: bool = False,
-            add_circadian_clock: bool = False
+            add_circadian_clock: bool = False,
+            n: int = 2
     ) -> OdeModel:
         """Create ODE network from ModuleRegulatoryNetwork.
 
@@ -58,7 +59,7 @@ class OdeModel:
         for module in sorted(list(graph)):
             if nonlinear:
                 regulator_edges = graph.in_edges(module, data='origin')
-                formula = NonLinearFormula(module, regulator_edges)
+                formula = NonLinearFormula(module, regulator_edges, n=n)
             else:
                 regulators = list(graph.predecessors(module))
                 formula = LinearFormula(module, regulators)

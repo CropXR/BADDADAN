@@ -429,7 +429,8 @@ def from_expr_mat_time_to_ode(data_params,
     my_ode = OdeModel.construct_from_regulatory_network(
         module_module,
         nonlinear=True,
-        add_circadian_clock=hyper_params['add_circadian_clock'])
+        add_circadian_clock=hyper_params['add_circadian_clock'],
+        n=hyper_params['hill_equation_order'])
     return my_ode
 
 

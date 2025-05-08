@@ -11,12 +11,14 @@
 library(limma)
 library(splines)
 library(ggplot2)
+library(dplyr)
+library(WGCNA)
 
 # Load required library
 # install.packages("VennDiagram")
 library(VennDiagram)
 
-do_drought <- function(drought_path, drought_out_path){
+do_drought <- function(drought_path, drought_out_path, time_points){
   df = read.csv(drought_path, header=TRUE, row.names=1)
   
   # Do some limma checks to see if samples are alright
@@ -24,38 +26,67 @@ do_drought <- function(drought_path, drought_out_path){
   plotMDS(df)
   
   cols = colnames(df)
+
   split_data <- strsplit(cols, "\\.")
   targets <- do.call(rbind, split_data)
   targets <- as.data.frame(targets, stringsAsFactors = FALSE)
   colnames(targets) <- c("Time", "Condition", "Replicate")
   targets$Time <- as.numeric(gsub("X", "", targets$Time))
   
+  # Filter for selected time points
+  targets <- targets[targets$Time %in% time_points, ]
+  
+  # Create a regex pattern to match any of the selected time points
+  pattern <- paste0("^X(", paste(time_points, collapse = "|"), ")\\.")
+  selected_cols <- colnames(df)[grepl(pattern, colnames(df))]
+  df <- df[, selected_cols]
+  
   # levels to use for design
   lev <- c('zero_0')
-  lev <- c(lev, lapply(1:13, function(i) paste("control", i, sep='_')))
-  lev <- c(lev, lapply(1:13, function(i) paste("drought", i, sep='_')))
+  lev <- c(lev, lapply(time_points[time_points > 0], function(i) paste("control", i, sep='_')))
+  lev <- c(lev, lapply(time_points[time_points > 0], function(i) paste("drought", i, sep='_')))
   
   f <- factor(paste(targets$Condition, targets$Time, sep='_'), levels=lev)
   
   design <- model.matrix(~0+f)
   colnames(design) <- lev
+  # 
+  # drought_contrasts <- makeContrasts(
+  #   Dif1d = (drought_1 - zero_0)    - (control_1 - zero_0),
+  #   Dif2d = (drought_2 - drought_1) - (control_2 - control_1),
+  #   Dif3d = (drought_3 - drought_2) - (control_3 - control_2),
+  #   Dif4d = (drought_4 - drought_3) - (control_4 - control_3),
+  #   Dif5d = (drought_5 - drought_4) - (control_5 - control_4),
+  #   Dif6d = (drought_6 - drought_5) - (control_6 - control_5),
+  #   Dif7d = (drought_7 - drought_6) - (control_7 - control_6),
+  #   Dif8d = (drought_8 - drought_7) - (control_8 - control_7),
+  #   Dif9d = (drought_9 - drought_8) - (control_9 - control_8),
+  #   Dif10d = (drought_10 - drought_9) - (control_10 - control_9),
+  #   Dif11d = (drought_11 - drought_10) - (control_11 - control_10),
+  #   Dif12d = (drought_12 - drought_11) - (control_12 - control_11),
+  #   Dif13d = (drought_13 - drought_12) - (control_13 - control_12),
+  #   levels=design)
   
-  drought_contrasts <- makeContrasts(
-    Dif1d = (drought_1 - zero_0)    - (control_1 - zero_0),
-    Dif2d = (drought_2 - drought_1) - (control_2 - control_1),
-    Dif3d = (drought_3 - drought_2) - (control_3 - control_2),
-    Dif4d = (drought_4 - drought_3) - (control_4 - control_3),
-    Dif5d = (drought_5 - drought_4) - (control_5 - control_4),
-    Dif6d = (drought_6 - drought_5) - (control_6 - control_5),
-    Dif7d = (drought_7 - drought_6) - (control_7 - control_6),
-    Dif8d = (drought_8 - drought_7) - (control_8 - control_7),
-    Dif9d = (drought_9 - drought_8) - (control_9 - control_8),
-    Dif10d = (drought_10 - drought_9) - (control_10 - control_9),
-    Dif11d = (drought_11 - drought_10) - (control_11 - control_10),
-    Dif12d = (drought_12 - drought_11) - (control_12 - control_11),
-    Dif13d = (drought_13 - drought_12) - (control_13 - control_12),
-    levels=design)
-  
+  contrast_list <- setNames(
+    lapply(2:length(time_points), function(i) {
+      if (i == 2) {
+        # First contrast should be against zero_0
+        paste0(
+          "(drought_", time_points[i], " - zero_0) - ",
+          "(control_", time_points[i], " - zero_0)"
+        )
+      } else {
+        # The rest follow the usual pattern
+        paste0(
+          "(drought_", time_points[i], " - drought_", time_points[i - 1], ") - ",
+          "(control_", time_points[i], " - control_", time_points[i - 1], ")"
+        )
+      }
+    }),
+    paste0("Dif", time_points[-1], "d")
+  )
+  # Convert to formula-like expression
+  drought_contrasts <- makeContrasts(contrasts = unlist(contrast_list), levels = design)
   
   fit <- lmFit(df, design)
   
@@ -63,36 +94,43 @@ do_drought <- function(drought_path, drought_out_path){
   fit2 <- eBayes(fit2)
   out_table = topTable(fit2, number=nrow(df), p.value=.05)
   
-  
-  "AT2G22540" %in% rownames(out_table)
-  # Great news, the gene they found in the paper (AGL22) is also found here
-  
-  writeClipboard(paste(rownames(head(out_table, n=50)), collapse = "\n"))
-  
-  # Test plotting a gene
-  gene_series <- t(df['AT3G62950',])
-  gene_series <- as.data.frame(gene_series)
-  colnames(gene_series) <- 'Expression'
-  gene_series <- cbind(gene_series, targets)
-  
-  # Create the plot
-  p <- ggplot(gene_series, aes(x = Time, y = Expression, color = Condition)) +
-    geom_point() +
-    labs(title = "Expression Over Time", x = "Time", y = "Expression") +
-    theme_minimal()
-  
-  # Display the plot
-  print(p)
-  
-  # Looks DE indeed
-  
   out_df <- df[rownames(out_table),]
+  # Extract time points and conditions from column names
+  colnames(out_df) <- gsub("^X", "", colnames(out_df))  # Remove the "X" if needed
+
+  # Use a regular expression to group by condition and timepoint
+  condition_time <- sub("([0-9]+)\\.(control|zero|drought)\\.([a-d])", "\\1_\\2", colnames(out_df))
   
-  original_headers <- colnames(read.csv(drought_path, check.names=FALSE))
+  # Assign the new grouping as the column names
+  colnames(out_df) <- condition_time
   
-  colnames(out_df) <- original_headers[-1]
+  # Now calculate the mean across replicates (e.g. control_a, control_b, ...)
+  out_df_mean <- as.data.frame(sapply(split.default(out_df, sub(" [a-z]$", "", names(out_df))), rowMeans, na.rm = TRUE))
   
-  write.csv(out_df, drought_out_path)
+  cor_mat <- cor(t(out_df_mean), method = "pearson")  
+  dist_mat <- as.dist(1 - cor_mat) 
+  gene_tree <- hclust(dist_mat, method = "average")  
+  
+  dynamicMods = cutreeDynamic(dendro = gene_tree, distM = as.matrix(dist_mat),
+                              deepSplit = 1, pamRespectsDendro = TRUE,
+                              minClusterSize = 20);
+  
+  module_df <- data.frame(
+    gene_id = rownames(out_df),
+    colors = dynamicMods
+  )
+  
+  # Create a string of all selected time points, joined by underscores
+  time_point_str <- paste(time_points, collapse = "_")
+  
+  # Modify the filename to include the time points
+  file_name <- paste('drought', time_point_str, "days.csv", sep = "_")
+  
+  dir.create(file.path(drought_out_path), showWarnings = FALSE)
+  
+  out_path <- file.path(drought_out_path, file_name)
+  
+  write.csv(module_df, out_path)
   # Cols are samples, rows are genes, values are expression values in csv
 }
 
@@ -173,8 +211,6 @@ do_drought_spline <- function(drought_path, drought_out_path){
   spline_model <- lm(Expression~nat_spline, data=investigate_series)
   plot(Expression~Time, data=investigate_series)
   points(investigate_series$Time, predict(spline_model), col='red')
-  
-  
 }
 
 
@@ -329,15 +365,29 @@ compare_spline_vs_normal_de_drought <- function(drought_out_path,
 
 setwd('C:/Users/noord087/PycharmProjects/d3c2_project/data/experiments/25_everything_including_limma')
 
-do_drought('drought/01_input_for_limma.csv',
-           'drought/02a_drought_expr_matrix_limma_filtered.csv')
+# Define the time points sets
+time_points_sets <- list(
+  0:13,
+  c(0, 1, 3, 5, 7, 9, 11, 13),
+  c(0, 1, 4, 7, 13)
+)
 
-do_heat('heat/01_input_for_limma.csv', 
-        'heat/02_heat_expr_matrix_limma_filtered.csv',
-        '../../raw_data/expression_datasets/emtab375/heat_sample_metadata.csv')
+# Loop through each set of time points
+for (time_points in time_points_sets) {
+  # Print a message indicating which set is running
+  message("Running for time points: ", paste(time_points, collapse = ", "))
+  
+  do_drought('drought/01_input_for_limma.csv', 
+             'drought/sparse_sample_experiment/', 
+             time_points = time_points)
+}
 
-do_drought_spline('drought/01_input_for_limma.csv',
-                  'drought/02b_drought_expr_matrix_limma_spline_filtered.csv')
+# do_heat('heat/01_input_for_limma.csv', 
+#         'heat/sparse_sample_experiment/02_heat_expr_matrix_limma_filtered.csv',
+#         '../../raw_data/expression_datasets/emtab375/heat_sample_metadata.csv')
 
-compare_spline_vs_normal_de_drought('drought/02a_drought_expr_matrix_limma_filtered.csv',
-                                    'drought/02b_drought_expr_matrix_limma_spline_filtered.csv')
+# do_drought_spline('drought/01_input_for_limma.csv',
+#                   'drought/sparse_sample_experiment/02b_drought_expr_matrix_limma_spline_filtered.csv')
+
+# compare_spline_vs_normal_de_drought('drought/02a_drought_expr_matrix_limma_filtered.csv',
+#                                     'drought/02b_drought_expr_matrix_limma_spline_filtered.csv')

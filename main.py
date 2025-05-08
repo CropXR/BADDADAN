@@ -21,11 +21,12 @@ mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
 def main():
     # ONLY EDIT THESE LINES
     # name = "24_visualise_fit_result_nicely"
-    name = '25_everything_including_limma'
+    # name = '25_everything_including_limma'
     # name = '26_server_output_visualisation'
     # name = '27_fig2'
     # name = '28_sa_in_drought'
     # name = '29_different_params'
+    name = '30_response_to_reviewers'
     experiment_path = Path(f'data/experiments') / name
     mlflow.set_experiment(name)
 
@@ -84,6 +85,8 @@ def main():
                     )
             with mlflow.start_run():
                 mlflow.log_artifact(str(experiment_path))
+        case '30_response_to_reviewers':
+            full_pipeline_prototype(experiment_path)
         case _:
             raise NotImplementedError(f'{name} not found')
 
