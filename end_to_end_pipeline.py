@@ -15,9 +15,9 @@ from helpers import one_gene_list_file_per_cluster, config_preprocess
 def full_pipeline_prototype(experiment_path: Path):
     """Main script: do all processing from input data to output model in one go"""
     skip_slow_steps = True
-    # for treatment_name in ['heat']:
+    for treatment_name in ['heat']:
     # for treatment_name in ['drought']:
-    for treatment_name in ['drought', 'heat']:
+    # for treatment_name in ['drought', 'heat']:
         logging.info(f'Doing {treatment_name}')
         treatment_path = experiment_path / treatment_name
         data_params, hyper_params, experiment_params = config_preprocess(
@@ -75,13 +75,14 @@ def full_pipeline_prototype(experiment_path: Path):
         skip_slow_steps = True
         if not skip_slow_steps:
             save_files_for_wgcna_cutting(treatment_path, data_params, expr_mat_time)
+        # continue
         ## Here: run wgcna cutting script (r_wgcna_dyntreecut/dyntreecut.R) ##
         # continue
-            see_gene_module_sizes(expr_mat_time,
-                                  cut_modules_path=treatment_path / 'dyntreecut_output',
-                                  figure_path=treatment_path / 'figs')
 
-
+        see_gene_module_sizes(expr_mat_time,
+                              cut_modules_path=treatment_path / 'dyntreecut_output',
+                              figure_path=treatment_path / 'figs')
+        skip_slow_steps = True
         if not skip_slow_steps:
             one_gene_list_file_per_cluster(
                 in_dir=treatment_path / 'dyntreecut_output',
@@ -89,6 +90,7 @@ def full_pipeline_prototype(experiment_path: Path):
                 use_for_analysis_func=lambda x: True
             )
         # Also generate random clusters that have the same size as a representative of these clusters
+        skip_slow_steps = True
         if not skip_slow_steps:
             expr_mat_time.save_random_modules_for_goa_find_enrichment(
                 wgcna_label_file=treatment_path
@@ -96,13 +98,14 @@ def full_pipeline_prototype(experiment_path: Path):
                                  / 'combined_sum_dists_wgcna_clustered_ds1.csv',
                 out_dir=treatment_path / 'split_by_module'
             )
-
+        skip_slow_steps = True
         # Coherence
         if not skip_slow_steps:
             do_coherence_with_stat_tests(
                 in_dir=treatment_path / 'split_by_module',
                 expr_mat_time=expr_mat_time,
-                out_dir=treatment_path / 'figs'
+                out_dir=treatment_path / 'figs',
+                do_stat_test=False
             )
 
         # continue
@@ -114,11 +117,24 @@ def full_pipeline_prototype(experiment_path: Path):
                 treatment_path
                 / 'go_outputs_exp_evidence_only_background_de_genes'
         )
+        skip_slow_steps = False
         if not skip_slow_steps:
             analyse_go_enrichments_find_enrichment(
                 go_enrich_output_path,
                 treatment_path / 'figs',
+                do_annotations=False
                 )
+        continue
+
+        with mlflow.start_run(
+                description=experiment_params['description']):
+            mlflow.log_params(data_params)
+            mlflow.log_params(hyper_params)
+            mlflow.set_tags(experiment_params)
+            mlflow.log_artifact(
+                str(treatment_path / 'figs'))
+
+        continue
 
         sbml_path = treatment_path / 'module_network.xml'
         skip_slow_steps = False

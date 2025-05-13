@@ -105,23 +105,17 @@ def save_files_for_wgcna_cutting(experiment_path: Path,
     local_dist.to_parquet(experiment_path
                           / 'full_datasets' / 'local_dists.parquet.gzip',
                           compression='gzip')
-    # # And combined min dists -> not doing these
-    # min_dist_df = combine_local_distance_and_prior(
-    #     local_dist,
-    #     atted_score,
-    #     dists_out_path=(experiment_path
-    #                     / 'full_datasets' / 'combined_min_dists.parquet.gzip'),
-    #     combo='min',
-    #     calculate_linkages=False,
-    #     plot_out_path=fig_folder,
-    # )
+
     # And combined dists
-    sum_dist_df = combine_local_distance_and_prior(local_dist, atted_score,
-                                                   dists_out_path=(
-                                                               experiment_path
-                                                               / 'full_datasets' / 'combined_sum_dists.parquet.gzip'),
-                                                   combo='sum',
-                                                   plot_out_path=fig_folder)
+    for w in [0.25,0.5,0.75]:
+        sum_dist_df = combine_local_distance_and_prior(local_dist, atted_score,
+                                                       dists_out_path=(
+                                                                   experiment_path
+                                                                   / 'full_datasets' / f"combined_sum_dists_w_{str(w).replace('.','_')}.parquet.gzip"),
+                                                       combo='sum',
+                                                       # plot_out_path=fig_folder,
+                                                       w_global=w
+                                                       )
 
     atted_dist_df = atted_score.max().max() - atted_score
     atted_dist_df.to_parquet(experiment_path
@@ -146,7 +140,8 @@ def drought_data_to_sbml(experiment_path):
 def analyse_go_enrichments_find_enrichment(
         in_path: Path,
         out_path: Path,
-        ax_to_plot_on: bool | plt.Axes = False):
+        ax_to_plot_on: bool | plt.Axes = False,
+        do_annotations: bool = True):
     # For DS and Method
     all_result_df = read_go_enrich_files_into_df(in_path)
     # plot_gene_modules_ds_size_distribution(all_result_df, out_path)
@@ -157,7 +152,8 @@ def analyse_go_enrichments_find_enrichment(
     # Fraction of modules with > 0 GO term
     at_least_one_go_term_barplot_keywords = dict(
         data=valid_rows, y='nr_enriched_go_terms', x='method',
-        estimator=lambda y: (y > 0).sum() / len(y)
+        estimator=lambda y: (y > 0).sum() / len(y),
+        order=['atted_dists', 'combined_sum_dists_w_0_75', 'combined_sum_dists_w_0_5', 'combined_sum_dists_w_0_25', 'local_dists']
     )
     # plt.close()
     if ax_to_plot_on:
@@ -166,38 +162,42 @@ def analyse_go_enrichments_find_enrichment(
         ax = sns.barplot(**at_least_one_go_term_barplot_keywords)
     ax.set_ylabel('Fraction of modules with > 0 enriched GO term')
 
-    pairs = list(combinations(
-        ['atted_dists', 'combined_sum_dists', 'local_dists'],
-        # ['atted_dists', 'combined_sum_dists', 'local_dists', 'random'],
-        2))
+    if do_annotations:
+        pairs = list(combinations(
+            ['atted_dists', 'combined_sum_dists', 'local_dists'],
+            # ['atted_dists', 'combined_sum_dists', 'local_dists', 'random'],
+            2))
 
-    annotator = Annotator(
-        ax, pairs, **at_least_one_go_term_barplot_keywords
-    )
-    annotator.configure(test='Mann-Whitney',
-                        loc='outside')
-    annotator.apply_and_annotate()
+        annotator = Annotator(
+            ax, pairs, **at_least_one_go_term_barplot_keywords
+        )
+        annotator.configure(test='Mann-Whitney',
+                            loc='outside')
+        annotator.apply_and_annotate()
     if ax_to_plot_on:
         return
     # plt.tight_layout()
+    ax.tick_params(axis='x', labelrotation=90)
     plt.savefig(out_path / 'fraction_at_least_one_go_term_selected_ds.svg',
                 bbox_inches='tight')
     plt.close()
 
     # GO semantic similarity scores
     ax =  sns.boxplot(data=valid_rows, y='semantic_similarity', x='method')
-    annotator.new_plot(ax, pairs, data=valid_rows, y='semantic_similarity',
-                       x='method')
-    annotator.apply_and_annotate()
+    if do_annotations:
+        annotator.new_plot(ax, pairs, data=valid_rows, y='semantic_similarity',
+                           x='method')
+        annotator.apply_and_annotate()
     plt.savefig(out_path / 'semantic_similarity_boxplot.svg',
                 bbox_inches='tight')
     plt.close()
 
     # Other figures
     ax = sns.boxplot(data=valid_rows, y='nr_enriched_go_terms', x='method')
-    annotator.new_plot(ax, pairs, data=valid_rows, y='nr_enriched_go_terms',
-                          x='method')
-    annotator.apply_and_annotate()
+    if do_annotations:
+        annotator.new_plot(ax, pairs, data=valid_rows, y='nr_enriched_go_terms',
+                              x='method')
+        annotator.apply_and_annotate()
     plt.savefig(out_path /
                 'go_terms_per_module_boxplot_selected_ds.svg', bbox_inches='tight')
     plt.close()
@@ -213,53 +213,6 @@ def analyse_go_enrichments_find_enrichment(
     plt.savefig(out_path / 'jointplot_enriched_go_terms_semantic_sim_selected_ds.svg')
     plt.close()
 
-    # # Everything linked to module sizes just skipping now # #
-    # mean_module_size = all_result_df.groupby(
-    #     ['method', 'deepsplit'])['module_size'].mean()
-    # mean_enriched_go_terms = all_result_df.groupby(
-    #     ['method', 'deepsplit'])['nr_enriched_go_terms'].mean()
-    #
-    # mean_semantic_similarity = all_result_df.groupby(
-    #     ['method', 'deepsplit'])['semantic_similarity'].mean()
-    #
-    #
-    # mean_module_size_and_go_enrichments = pd.concat(
-    #     [mean_module_size, mean_enriched_go_terms, mean_semantic_similarity], axis=1).reset_index()
-    # mean_module_size_and_go_enrichments = mean_module_size_and_go_enrichments.rename(
-    #     {'module_size': 'mean_module_size',
-    #         'semantic_similarity': 'mean_semantic_similarity'}, axis='columns')
-    #
-    # sns.scatterplot(data=mean_module_size_and_go_enrichments, x='mean_module_size',
-    #                 y='nr_enriched_go_terms', hue='method', style='deepsplit')
-    # plt.ylabel('Mean nr of enriched go terms per module')
-    # # Add error bar?
-    # plt.savefig(out_path / 'module_size_mean_nr_go_terms_scatterplot.png')
-    # plt.show()
-    # plt.close()
-    #
-    # sns.scatterplot(data=mean_module_size_and_go_enrichments, x='mean_module_size',
-    #                 y='mean_semantic_similarity', hue='method', style='deepsplit')
-    # plt.ylabel('Mean semantic similarity within a module')
-    # plt.savefig(out_path / 'module_size_mean_semantic_sim_scatterplot.png')
-    # # Add error bar?
-    # plt.show()
-    # plt.close()
-    #
-    #
-    # mean_module_size = mean_module_size.reset_index()
-    # mean_module_size = mean_module_size.rename(
-    #     {'module_size': 'mean_module_size'}, axis='columns')
-    # newer_df = all_result_df.merge(mean_module_size, on=['method', 'deepsplit'])
-    # sns.lineplot(data=newer_df, x='mean_module_size', y='nr_enriched_go_terms',
-    #              hue='method', style='method', err_style='bars', marker='o')
-    # plt.savefig(out_path / 'module_size_mean_nr_go_terms_line_plot.png')
-    # # plt.errorbar(...)
-    # plt.show()
-    #
-    # sns.lineplot(data=newer_df, x='mean_module_size', y='semantic_similarity',
-    #              hue='method', style='method', err_style='bars', marker='o')
-    # plt.savefig(out_path / 'module_size_mean_semantic_sim_line_plot.png')
-
 
 def extract_only_selected_ds_row_from_df(all_result_df, in_path):
     """Do not compare between all different deepsplit (DS) values
@@ -272,32 +225,24 @@ def extract_only_selected_ds_row_from_df(all_result_df, in_path):
         valid_rows = all_result_df
     elif 'drought' == in_path.parent.name:
         valid_rows = all_result_df[
-            (all_result_df['method'] == 'local_dists')
-            & (all_result_df['deepsplit'] == '2')
+            (all_result_df['method'].isin(['local_dists', 'combined_sum_dists_w_0_25'])
+            & (all_result_df['deepsplit'] == '2'))
             | (all_result_df['method'].isin(
-                ['atted_dists', 'combined_sum_dists', 'random']))
+                ['atted_dists', 'combined_sum_dists_w_0_5', 'combined_sum_dists_w_0_75', 'random']))
             & (all_result_df['deepsplit'] == '1')
             ]
     elif 'heat' == in_path.parent.name:
         valid_rows = all_result_df[
             (all_result_df['deepsplit'] == '1')
             & (all_result_df['method'].isin(
-                ['atted_dists', 'combined_sum_dists', 'local_dists',
+                ['atted_dists', 'combined_sum_dists_w_0_25', 'combined_sum_dists_w_0_5', 'combined_sum_dists_w_0_75', 'local_dists',
                  'random']))
             ]
     assert len(valid_rows) > 0
     return valid_rows
 
 
-def plot_gene_modules_ds_size_distribution(all_result_df: pd.DataFrame, out_path: Path):
-    size_pairs = [
-        (('1', 'atted_dists'), ('1', 'combined_sum_dists')),
-        (('1', 'local_dists'), ('1', 'combined_sum_dists')),
-        (('1', 'atted_dists'), ('1', 'local_dists')),
-        # (('2', 'atted_dists'), ('2', 'combined_sum_dists')),
-        # (('2', 'local_dists'), ('2', 'combined_sum_dists')),
-        # (('2', 'atted_dists'), ('2', 'local_dists')),
-    ]
+def plot_gene_modules_ds_size_distribution(all_result_df: pd.DataFrame, out_path: Path, do_annotations = True):
 
     # Remove the random clustering because not relevant for this (its size distribution is equal to the combined_sum_dists)
     all_result_df = all_result_df[all_result_df['method'] != 'random']
@@ -313,13 +258,22 @@ def plot_gene_modules_ds_size_distribution(all_result_df: pd.DataFrame, out_path
         data=all_result_df, x='module_size', hue='method',
         y='deepsplit'
     )
-    annotator = Annotator(
-        ax, size_pairs, data=all_result_df, x='module_size',
-        hue='method', y='deepsplit', orient='h'
-    )
-    annotator.configure(test='Mann-Whitney',
-                        loc='outside', text_format='star')
-    annotator.apply_and_annotate()
+    if do_annotations:
+        size_pairs = [
+            (('1', 'atted_dists'), ('1', 'combined_sum_dists')),
+            (('1', 'local_dists'), ('1', 'combined_sum_dists')),
+            (('1', 'atted_dists'), ('1', 'local_dists')),
+            # (('2', 'atted_dists'), ('2', 'combined_sum_dists')),
+            # (('2', 'local_dists'), ('2', 'combined_sum_dists')),
+            # (('2', 'atted_dists'), ('2', 'local_dists')),
+        ]
+        annotator = Annotator(
+            ax, size_pairs, data=all_result_df, x='module_size',
+            hue='method', y='deepsplit', orient='h'
+        )
+        annotator.configure(test='Mann-Whitney',
+                            loc='outside', text_format='star')
+        annotator.apply_and_annotate()
     plt.savefig(out_path / 'module_sizes_deepsplit_hue_is_method_boxplot.svg',
                 bbox_inches='tight')
     plt.close()
@@ -570,15 +524,16 @@ def simulated_data_pypesto(petab_problem, model_folder):
 def do_coherence_with_stat_tests(in_dir: Path,
                                  expr_mat_time: ExpressionMatrixTimeSeries,
                                  out_dir: Path,
-                                 ax_to_plot_on: bool | plt.Axes = False):
+                                 ax_to_plot_on: bool | plt.Axes = False,
+                                 do_stat_test: bool = True):
     """Measure coherence between different clusterings and do statistical test"""
     out_records = []
-    for method in ['atted_dists', 'combined_sum_dists',
-                   'local_dists', 'random']:
+    for method in ['atted_dists', 'combined_sum_dists_w_0_25', 'combined_sum_dists_w_0_5', 'combined_sum_dists_w_0_75',
+                   'local_dists']:
         for ds_filename in ['ds1']: #, 'ds2']:
             # if (method, ds_filename) == ('random', 'ds2'):
             #     continue
-            if 'drought' in in_dir.parts and method == 'local_dists':
+            if 'drought' in in_dir.parts and (method in ['local_dists', 'combined_sum_dists_w_0_25']):
                 ds_filename = 'ds2'
             expr_mat_time_copy = copy.deepcopy(expr_mat_time)
             pattern = f"{method}*{ds_filename}*"
@@ -601,23 +556,24 @@ def do_coherence_with_stat_tests(in_dir: Path,
     if ax_to_plot_on:
         ax = sns.boxplot(data=df, y='coherence', x='method', ax=ax_to_plot_on)
     else:
-        ax = sns.boxplot(data=df, y='coherence', x='method')
+        ax = sns.boxplot(data=df, y='coherence', x='method', order = ['atted_dists', 'combined_sum_dists_w_0_75', 'combined_sum_dists_w_0_5', 'combined_sum_dists_w_0_25', 'local_dists'])
 
-    pairs = list(combinations(
-        # ['atted_dists', 'combined_sum_dists', 'local_dists'],
-        ['atted_dists', 'combined_sum_dists', 'local_dists', 'random'],
-        2))
+    if do_stat_test:
+        pairs = list(combinations(
+            # ['atted_dists', 'combined_sum_dists', 'local_dists'],
+            ['atted_dists', 'combined_sum_dists', 'local_dists', 'random'],
+            2))
 
-    annotator = Annotator(
-        ax, pairs, data=df, y='coherence', x='method'
-    )
-    annotator.configure(test='Mann-Whitney',
-                        loc='outside')
-    annotator.apply_and_annotate()
+        annotator = Annotator(
+            ax, pairs, data=df, y='coherence', x='method'
+        )
+        annotator.configure(test='Mann-Whitney',
+                            loc='outside')
+        annotator.apply_and_annotate()
     if ax_to_plot_on:
         return
     plt.ylim((0, .9))
-
+    ax.tick_params(axis='x', labelrotation=90)
     out_dir.mkdir(exist_ok=True)
     plt.savefig(out_dir / 'boxplot_coherence_with_stat_test.svg',
                 bbox_inches='tight')
@@ -644,7 +600,8 @@ def plot_module_size_distributions(pkl_path: Path):
 def combine_local_distance_and_prior(local_dist: pd.DataFrame,
                                      prior_score: pd.DataFrame,
                                      dists_out_path: Path, combo: str = 'sum',
-                                     plot_out_path: Path | None = None):
+                                     plot_out_path: Path | None = None,
+                                     w_global: float = 0.5):
     """Get combo of local distances and atted_distances to
     do distances simulatenously
 
@@ -701,7 +658,8 @@ def combine_local_distance_and_prior(local_dist: pd.DataFrame,
         plt.close()
 
     if combo =='sum':
-        combined_distances = local_dist_flat_norm + atted_dist_flat_norm
+        combined_distances = ((1 - w_global) * local_dist_flat_norm
+                              + w_global * atted_dist_flat_norm)
     elif combo == 'min':
         combined_distances = np.minimum(local_dist_flat_norm,
                                         atted_dist_flat_norm)

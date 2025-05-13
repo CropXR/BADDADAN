@@ -86,6 +86,9 @@ def main():
             with mlflow.start_run():
                 mlflow.log_artifact(str(experiment_path))
         case '30_response_to_reviewers':
+            # with mlflow.start_run():
+            #     mlflow.log_artifact(str(experiment_path / 'hill_order_1'))
+            #     mlflow.log_artifact(str(experiment_path / 'hill_order_3'))
             full_pipeline_prototype(experiment_path)
         case _:
             raise NotImplementedError(f'{name} not found')

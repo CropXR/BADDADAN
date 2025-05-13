@@ -75,7 +75,7 @@ main <- function(in_dir, out_dir, yaml_path){
          SIMPLIFY = FALSE)
 }
 
-setwd('C:/Users/noord087/PycharmProjects/d3c2_project/data/experiments/25_everything_including_limma')
+setwd('C:/Users/noord087/PycharmProjects/d3c2_project/data/experiments/30_response_to_reviewers')
 
 main("drought/full_datasets", "drought/dyntreecut_output", 'drought/config.yaml')
 

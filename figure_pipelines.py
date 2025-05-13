@@ -92,7 +92,7 @@ def see_gene_module_sizes(expr_mat_time: ExpressionMatrixTimeSeries,
     df = pd.DataFrame.from_records(out_records,
                                    columns=['module_size', 'method',
                                             'deepsplit'])
-    plot_gene_modules_ds_size_distribution(df, figure_path)
+    plot_gene_modules_ds_size_distribution(df, figure_path, do_annotations=False)
 
 
 def module_size_pipeline(experiment_path):

@@ -40,7 +40,7 @@ rule go_annotate_only_DE_background:
 
 rule get_de_genes:
     input:
-        'dyntreecut_output/combined_sum_dists_wgcna_clustered_ds1.csv'
+        'dyntreecut_output/combined_sum_dists_w_0_5_wgcna_clustered_ds1.csv'
     output:
         "all_DE_genes.txt"
     shell:
