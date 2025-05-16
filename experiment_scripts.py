@@ -387,18 +387,69 @@ def compare_parameters_between_hill_orders():
                                   "hill_3"]
     df_nonlinear_pivot.loc[:, 'hill_1':'hill_3'] = df_nonlinear_pivot.loc[:, 'hill_1':'hill_3'].map(lambda x: 10 ** x)
 
-    sns.relplot(data=df_linear_pivot, col='exp_name', row='param_name', x='hill_2', y='hill_1', facet_kws={'sharex': False, 'sharey': False,})
+    # Hill 1 vs 2
+    g = sns.relplot(data=df_linear_pivot, col='exp_name', row='param_name', x='hill_2', y='hill_1', facet_kws={'sharex': False, 'sharey': False,})
+    corr_df = df_linear_pivot.groupby(['param_name', 'exp_name'])[["hill_1", "hill_2"]].corr(method='pearson')
+    # Iterate through the subplots and add correlation text
+    for (param_name, exp_name), ax in g.axes_dict.items():
+        # Extract the correlation value
+        try:
+            corr_value = corr_df.xs((param_name, exp_name)).loc[
+                "hill_1", "hill_2"]
+            ax.text(
+                0.05, 0.95,
+                f"r = {corr_value:.2f}",
+                transform=ax.transAxes,
+                fontsize=12,
+                verticalalignment='top',
+                bbox=dict(boxstyle="round", alpha=0.1)
+            )
+        except KeyError:
+            # Handle missing data
+            ax.text(
+                0.05, 0.95,
+                "r = N/A",
+                transform=ax.transAxes,
+                fontsize=12,
+                verticalalignment='top',
+                bbox=dict(boxstyle="round", alpha=0.1)
+            )
     plt.tight_layout()
-    # TODO calculate correlation
     plt.savefig(out_dir / 'linear_params_hill_2_vs_hill_1.svg')
     plt.show()
 
-    sns.relplot(data=df_linear_pivot, col='exp_name', row='param_name', x='hill_2', y='hill_3', facet_kws={'sharex': False, 'sharey': False,})
+    # Hill 2 vs 3
+    g = sns.relplot(data=df_linear_pivot, col='exp_name', row='param_name', x='hill_2', y='hill_3', facet_kws={'sharex': False, 'sharey': False,})
+    corr_df = df_linear_pivot.groupby(['param_name', 'exp_name'])[["hill_3", "hill_2"]].corr(method='pearson')
+    # Iterate through the subplots and add correlation text
+    for (param_name, exp_name), ax in g.axes_dict.items():
+        # Extract the correlation value
+        try:
+            corr_value = corr_df.xs((param_name, exp_name)).loc[
+                "hill_3", "hill_2"]
+            ax.text(
+                0.05, 0.95,
+                f"r = {corr_value:.2f}",
+                transform=ax.transAxes,
+                fontsize=12,
+                verticalalignment='top',
+                bbox=dict(boxstyle="round", alpha=0.1)
+            )
+        except KeyError:
+            # Handle missing data
+            ax.text(
+                0.05, 0.95,
+                "r = N/A",
+                transform=ax.transAxes,
+                fontsize=12,
+                verticalalignment='top',
+                bbox=dict(boxstyle="round", alpha=0.1)
+            )
     plt.tight_layout()
-    # TODO calculate correlation
     plt.savefig(out_dir / 'linear_params_hill_2_vs_hill_3.svg')
-    # plt.show()
+    plt.show()
 
+    # Nonlinear hill 2 vs 1
     g = sns.relplot(
         data=df_nonlinear_pivot,
         col='exp_name',
@@ -407,12 +458,38 @@ def compare_parameters_between_hill_orders():
         y='hill_1',
         facet_kws={'sharex': False, 'sharey': False}
     )
-    g.set(xscale="log", yscale="log")
+    corr_df = df_nonlinear_pivot.groupby(['param_name', 'exp_name'])[
+        ["hill_1", "hill_2"]].corr(method='pearson')
+    # Iterate through the subplots and add correlation text
+    for (param_name, exp_name), ax in g.axes_dict.items():
+        # Extract the correlation value
+        try:
+            corr_value = corr_df.xs((param_name, exp_name)).loc[
+                "hill_1", "hill_2"]
+            ax.text(
+                0.05, 0.95,
+                f"r = {corr_value:.2f}",
+                transform=ax.transAxes,
+                fontsize=12,
+                verticalalignment='top',
+                bbox=dict(boxstyle="round", alpha=0.1)
+            )
+        except KeyError:
+            # Handle missing data
+            ax.text(
+                0.05, 0.95,
+                "r = N/A",
+                transform=ax.transAxes,
+                fontsize=12,
+                verticalalignment='top',
+                bbox=dict(boxstyle="round", alpha=0.1)
+            )
+    # g.set(xscale="log", yscale="log")
     plt.tight_layout()
-    # TODO calculate correlation
     plt.savefig(out_dir / 'nonlinear_params_hill_2_vs_hill_1.svg')
     plt.show()
 
+    # Nonlinear hill 2 vs 3
     g = sns.relplot(
         data=df_nonlinear_pivot,
         col='exp_name',
@@ -421,10 +498,35 @@ def compare_parameters_between_hill_orders():
         y='hill_3',
         facet_kws={'sharex': False, 'sharey': False}
     )
-    g.set(xscale="log", yscale="log")
+    # g.set(xscale="log", yscale="log")
+    corr_df = df_nonlinear_pivot.groupby(['param_name', 'exp_name'])[
+        ["hill_3", "hill_2"]].corr(method='pearson')
+    # Iterate through the subplots and add correlation text
+    for (param_name, exp_name), ax in g.axes_dict.items():
+        # Extract the correlation value
+        try:
+            corr_value = corr_df.xs((param_name, exp_name)).loc[
+                "hill_3", "hill_2"]
+            ax.text(
+                0.05, 0.95,
+                f"r = {corr_value:.2f}",
+                transform=ax.transAxes,
+                fontsize=12,
+                verticalalignment='top',
+                bbox=dict(boxstyle="round", alpha=0.1)
+            )
+        except KeyError:
+            # Handle missing data
+            ax.text(
+                0.05, 0.95,
+                "r = N/A",
+                transform=ax.transAxes,
+                fontsize=12,
+                verticalalignment='top',
+                bbox=dict(boxstyle="round", alpha=0.1)
+            )
     plt.tight_layout()
     plt.savefig(out_dir / 'nonlinear_params_hill_2_vs_hill_3.svg')
-    # TODO calculate correlation
     plt.show()
     print()
     # # Create the DataFrame
