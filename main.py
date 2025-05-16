@@ -5,7 +5,8 @@ import yaml
 import mlflow
 from matplotlib import pyplot as plt
 
-from experiment_scripts import sa_drought_over_time
+from experiment_scripts import sa_drought_over_time, \
+    compare_parameters_between_hill_orders
 from end_to_end_pipeline import full_pipeline_prototype
 from figure_pipelines import fig2_from_generated_data, \
     run_pypesto_model_with_different_params
@@ -89,7 +90,9 @@ def main():
             # with mlflow.start_run():
             #     mlflow.log_artifact(str(experiment_path / 'hill_order_1'))
             #     mlflow.log_artifact(str(experiment_path / 'hill_order_3'))
-            full_pipeline_prototype(experiment_path)
+            compare_parameters_between_hill_orders()
+            # full_pipeline_prototype(experiment_path)
+
         case _:
             raise NotImplementedError(f'{name} not found')
 

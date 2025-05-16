@@ -1,4 +1,5 @@
 import copy
+from copy import deepcopy
 import logging
 from itertools import combinations
 from pathlib import Path
@@ -20,6 +21,7 @@ from scipy.spatial.distance import squareform
 import amici
 from tqdm import tqdm
 from statannotations.Annotator import Annotator
+
 
 from DynamicModels.OdeModel import OdeModel
 from Expressions.ExpressionMatrix import ExpressionMatrixTimeSeries
@@ -213,6 +215,307 @@ def analyse_go_enrichments_find_enrichment(
     plt.savefig(out_path / 'jointplot_enriched_go_terms_semantic_sim_selected_ds.svg')
     plt.close()
 
+def from_list_create_records(param_value_list, hill_order, exp_name):
+    if exp_name == 'drought':
+        petab_yaml_path = 'data/experiments/30_response_to_reviewers/hill_order_1/drought/petab_files/baddadan_drought_petab.yaml'
+    elif exp_name == 'heat':
+        petab_yaml_path = 'data/experiments/30_response_to_reviewers/hill_order_1/heat/petab_files/baddadan_heat_petab.yaml'
+    else:
+        raise ValueError
+    petab_problem = petab.v1.Problem.from_yaml(petab_yaml_path)
+    assert len(param_value_list) == len(petab_problem.parameter_df)
+    for param_name, param_value in list(zip(petab_problem.parameter_df.index.to_list(),
+             param_value_list)) :
+        yield (exp_name, hill_order, param_name, param_value)
+
+def compare_parameters_between_hill_orders():
+
+    records = []
+    # Just copy-pasted the params here to save time
+
+    hill_order = 1
+    exp_name = 'drought'
+    param_value_list = [0.00000000e+00, -3.34941862e-01, -4.85531338e+00, 7.25557267e-01,
+        -1.72586631e+01, -3.86700540e+00, 2.39113658e+00, 1.00000000e+00,
+        -2.55340546e+01, 9.30899389e+00, 2.29165029e+00, 6.78925618e-01,
+        -5.55722853e+00, 5.28298540e-01, -1.35096428e+01, 9.77602257e+00,
+        2.21877157e+00, 9.97501840e-01, -2.27847827e+00, 5.74916965e-01,
+        -4.23428857e+00, 2.64086135e-01, -7.04802270e-04, 4.35045553e-01,
+        -1.67669224e+01, 2.01531630e+00, -5.16538074e+00, -8.64098502e-01,
+        -3.69029045e+00, 9.24518853e-01, 2.36545856e+00, 9.99976092e-01,
+        -3.60960482e+00, -9.43468800e-01, -1.86288623e+01, 1.00000000e+01,
+        2.03385372e+00, 4.80261581e-01, -2.38847650e+01, 1.00000000e+01,
+        2.48251368e+00, 1.00000000e+00, -4.81361541e+00, 9.12578217e-01,
+        -1.37879546e+00, 1.00000000e+00, -2.06807980e+00, 3.78704283e-01,
+        -2.64346732e+00, -5.92304194e-01]
+
+    records.extend(from_list_create_records(param_value_list, hill_order, exp_name))
+
+    exp_name = 'heat'
+    param_value_list = [-0.5460262, 1.70805759, -5.45258915, -0.23220054, 1.98832469,
+        -0.95116928, -5.6536398, -2.43177523, -2.75148761, -2.47960166,
+        -1.91303155, -3.36929136, 0.40359694, -4.05801035, 0.38664217,
+        0.53964787, 3.14159265, 10.0, -49.39505545, 0.59470926,
+        2.39674894, 0.59575701, -5.32799333, 0.53041615, 1.78734318,
+        0.88743527, -6.3479198, -2.64811188, -2.4672032, -5.78330414,
+        0.47980794, 0.16787094, -2.74442424, 9.97741353, -1.62311173,
+        0.91188365, 1.25220268, 0.9991174, -4.3906762, -0.9990819,
+        0.10776662, 0.87727807, -9.99998109, -12.29955092, 9.28864236,
+        2.96629495, -1.0, -5.00578728, 0.2659731, -2.60959135,
+        -1.45297931, 0.38470963, -47.97141547, -1.29236776, 2.83837837,
+        1.0, -4.04695641, -0.9175726, -10.0, -23.91303908,
+        2.90611837, -5.64875494, 0.46454112, 2.99963561, -0.68116389,
+        -4.57938569, 0.20747781, 1.47702414, -4.01146759, 6.27989802,
+        0.33445832, -2.88857643, 10.0]
+
+    records.extend(
+        from_list_create_records(param_value_list, hill_order,
+                                 exp_name))
+    hill_order = 2
+    exp_name = 'drought'
+    param_value_list = [-1.29829257e+01, -4.13400768e+00, 1.89479277e+00, 4.77624262e-01,
+        -4.40884177e+00, -8.02892555e+00, 1.67567615e+00, 5.98415442e-01,
+        -4.86279644e+01, 7.29414592e+00, 2.40902849e+00, 4.09462398e-01,
+        -5.85135105e+00, 4.98410744e-02, -1.71352345e+01, 4.63937281e+00,
+        2.02670050e+00, 4.89787898e-01, -5.26442633e+00, 9.89352259e-01,
+        -5.87285700e+00, 6.83111833e-01, 0.00000000e+00, 4.30992385e-01,
+        -4.81118466e+01, -1.00000000e+01, -6.00000000e+00, 9.98366033e-01,
+        1.82083525e+00, -1.00000000e+00, -5.35541302e+00, 9.79239477e-01,
+        2.97956231e+00, 1.00000000e+00, -1.59787900e-02, 3.61172899e-01,
+        -5.99965365e+00, 9.99482840e-01, -3.63533001e+01, -9.71477066e+00,
+        -5.19454897e+00, 2.98537327e-01, 1.62321922e+00, -1.00000000e+00,
+        -5.82667687e+00, 1.32615786e-01, -2.37261884e+00, 6.76363853e-01,
+        2.97450369e+00, 1.00000000e+00]
+
+    records.extend(
+        from_list_create_records(param_value_list, hill_order,
+                                 exp_name))
+
+    exp_name = 'heat'
+    param_value_list = [-35.68702996, 7.29541046, 2.43465553, 0.42079014, -5.67245029,
+        -0.99999998, 1.24971416, -3.14159265, -9.999639, -1.60372074,
+        -1.28725875, -3.37514782, -0.79147651, -2.81430989, 0.13881748,
+        0.34852835, 3.14159265, 6.52139167, -5.58885348, 3.75822383,
+        -2.4037046, 1.0, 1.0668709, -1.0, 0.84142191,
+        0.69717016, -1.96931112, -4.77782451, -4.93511529, 1.3097554,
+        0.03877861, -4.25581064, 1.04209152, -0.70703833, -3.18807585,
+        1.64055782, -3.99688115, -0.71651645, 1.32000768, 0.10684638,
+        0.37993437, 0.71107932, -10.0, -28.98100143, -10.0,
+        -3.24130932, 0.81595611, 2.29592358, 0.54261054, 1.20210577,
+        2.35760875, 8.62466979, -3.40795353, -1.29584235, 2.04417025,
+        1.0, 0.68525122, 3.14159265, 3.766625, -0.2951119,
+        2.04973664, 1.55764656, 0.89647388, -3.14411046, 0.75311115,
+        0.53988612, -0.25420156, -6.63449903, -1.07320478, 1.75268803,
+        -0.72960853, 2.74419591, 2.4884024]
+
+    records.extend(
+        from_list_create_records(param_value_list, hill_order,
+                                 exp_name))
+    hill_order = 3
+    exp_name = 'drought'
+    param_value_list = [-4.89565134e+01, -9.99543844e+00, 2.32851525e+00, 6.00440428e-01,
+        -4.53434131e-01, -1.22281955e+00, 6.56329467e-01, 4.93629855e-01,
+        -4.42478133e+01, 1.00000000e+01, 2.28189597e+00, 3.51707102e-01,
+        -4.72433005e+00, -9.38559334e-01, -1.54192528e+01, 1.00000000e+01,
+        1.57832067e+00, -1.00000000e+00, -5.64644141e+00, -6.53817815e-01,
+        2.38169087e+00, 1.00000000e+00, -3.53566989e-03, 4.54052054e-01,
+        -8.16831613e+00, -1.00000000e+01, -4.07780547e+00, -9.74362150e-01,
+        1.85163321e+00, 5.44770651e-01, -5.05412987e+00, -5.69645756e-01,
+        -5.94178717e+00, 9.63195107e-01, -2.53829112e+01, 1.00000000e+01,
+        1.99401148e+00, 2.98440307e-01, -4.22423674e+00, -9.16848437e+00,
+        -2.43583693e+00, -8.84977958e-01, -2.52209923e+00, 1.84403518e-02,
+        -2.95253866e+00, 9.41945836e-01, 1.88057070e+00, 6.84939572e-01,
+        -4.17895723e+00, -2.74345544e-01]
+
+    records.extend(
+        from_list_create_records(param_value_list, hill_order,
+                                 exp_name))
+
+    exp_name = 'heat'
+    param_value_list = [0.00000000e+00, 3.93008411e-02, -1.95754090e+00, -6.37778912e-01,
+        -3.64285497e+00, 5.44581517e-01, -3.00486252e-01, 1.63806777e+00,
+        4.50451654e-02, -4.48864805e+01, -6.93944995e+00, 2.93336746e+00,
+        -8.73933398e-02, 2.07488608e+00, 1.05358343e-01, -3.92765277e+00,
+        9.40531549e-01, 9.77449476e+00, -4.08752340e+00, 2.66248369e+00,
+        -1.53211975e+00, 7.75706555e-01, -3.50886659e+00, 4.44548186e-01,
+        7.04152379e-01, 7.37339140e-01, 7.17125316e+00, -1.04898116e+01,
+        -9.80710001e+00, 1.68828359e+00, 1.20869348e-01, -3.15936327e+00,
+        2.10062303e+00, -6.87420788e+00, -2.78127425e+01, 9.58260013e+00,
+        2.06521047e+00, 5.62047637e-01, -5.82314918e+00, 5.62495892e-01,
+        -5.03237892e+00, -4.28255933e-01, 7.32665855e-01, -4.00728226e+00,
+        -2.86286781e+00, -5.38930486e+00, -4.44859569e-01, 9.64607402e-01,
+        4.48297896e-01, -4.82523483e+00, -5.26254686e-01, 8.85140061e+00,
+        -6.37890214e-02, 4.10942055e-02, -4.78146498e+00, 7.44927473e-01,
+        -6.30592050e-01, -3.14159265e+00, 1.10072871e-01, -2.84951646e+01,
+        1.00000000e+01, 2.19897702e+00, 5.23988899e-01, -4.66800086e+00,
+        8.63902423e-01, -4.33855199e+00, -1.28946919e+00, 1.00000000e+01,
+        -1.70109394e+00, 2.70768982e+00, -4.12816990e+00, -1.64010371e-01,
+        3.91038703e+00]
+
+    records.extend(
+        from_list_create_records(param_value_list, hill_order,
+                                 exp_name))
+    out_dir = Path('data/experiments/30_response_to_reviewers')
+    # Create the DataFrame (assuming 'records' is already defined)
+    df = pd.DataFrame.from_records(records, columns=['exp_name', 'hill_order',
+                                                     'param_name',
+                                                     'param_value'])
+
+    sns.set_context(font_scale=2)
+    # Separate the parameters into linear and non-linear categories
+    linear_params = ['delta', 'gamma', 'b_', 'phi']
+    nonlinear_params = ['beta', 'k', 'a']
+
+    # Filter the data for each category
+    df_linear = df[df['param_name'].str.startswith(tuple(linear_params))]
+    df_nonlinear = df[df['param_name'].str.startswith(tuple(nonlinear_params))]
+
+    # Pivot the data for each category
+    df_linear_pivot = df_linear.pivot(index=["exp_name", "param_name"],
+                                      columns="hill_order",
+                                      values="param_value").reset_index()
+    df_linear_pivot['param_name'] = df_linear_pivot.param_name.apply(lambda x: x.split('_')[0])
+    df_linear_pivot.columns = ["exp_name", "param_name", "hill_1", "hill_2",
+                               "hill_3"]
+
+    df_nonlinear_pivot = df_nonlinear.pivot(index=["exp_name", "param_name"],
+                                            columns="hill_order",
+                                            values="param_value").reset_index()
+    df_nonlinear_pivot['param_name'] = df_nonlinear_pivot.param_name.apply(
+        lambda x: x.split('_')[0])
+    df_nonlinear_pivot.columns = ["exp_name", "param_name", "hill_1", "hill_2",
+                                  "hill_3"]
+    df_nonlinear_pivot.loc[:, 'hill_1':'hill_3'] = df_nonlinear_pivot.loc[:, 'hill_1':'hill_3'].map(lambda x: 10 ** x)
+
+    sns.relplot(data=df_linear_pivot, col='exp_name', row='param_name', x='hill_2', y='hill_1', facet_kws={'sharex': False, 'sharey': False,})
+    plt.tight_layout()
+    # TODO calculate correlation
+    plt.savefig(out_dir / 'linear_params_hill_2_vs_hill_1.svg')
+    plt.show()
+
+    sns.relplot(data=df_linear_pivot, col='exp_name', row='param_name', x='hill_2', y='hill_3', facet_kws={'sharex': False, 'sharey': False,})
+    plt.tight_layout()
+    # TODO calculate correlation
+    plt.savefig(out_dir / 'linear_params_hill_2_vs_hill_3.svg')
+    # plt.show()
+
+    g = sns.relplot(
+        data=df_nonlinear_pivot,
+        col='exp_name',
+        row='param_name',
+        x='hill_2',
+        y='hill_1',
+        facet_kws={'sharex': False, 'sharey': False}
+    )
+    g.set(xscale="log", yscale="log")
+    plt.tight_layout()
+    # TODO calculate correlation
+    plt.savefig(out_dir / 'nonlinear_params_hill_2_vs_hill_1.svg')
+    plt.show()
+
+    g = sns.relplot(
+        data=df_nonlinear_pivot,
+        col='exp_name',
+        row='param_name',
+        x='hill_2',
+        y='hill_3',
+        facet_kws={'sharex': False, 'sharey': False}
+    )
+    g.set(xscale="log", yscale="log")
+    plt.tight_layout()
+    plt.savefig(out_dir / 'nonlinear_params_hill_2_vs_hill_3.svg')
+    # TODO calculate correlation
+    plt.show()
+    print()
+    # # Create the DataFrame
+    # df = pd.DataFrame.from_records(records, columns=['exp_name', 'hill_order', 'param_name', 'param_value'])
+    #
+    # # Identify linear and non-linear parameters
+    # linear_params = df[~df['param_name'].str.startswith(('beta_', 'k_', 'a_'))]
+    # nonlinear_params = df[df['param_name'].str.startswith(('beta_', 'k_', 'a_'))].copy()
+    #
+    # # Apply transformation to non-linear parameters
+    # nonlinear_params['param_value'] = 10 ** nonlinear_params['param_value']
+    #
+    # # Pivot the data
+    # df_pivot_linear = linear_params.pivot(index=["exp_name", "param_name"], columns="hill_order", values="param_value").reset_index()
+    # df_pivot_linear.columns = ["exp_name", "param_name", "hill_1", "hill_2", "hill_3"]
+    #
+    # df_pivot_nonlinear = nonlinear_params.pivot(index=["exp_name", "param_name"], columns="hill_order", values="param_value").reset_index()
+    # df_pivot_nonlinear.columns = ["exp_name", "param_name", "hill_1", "hill_2", "hill_3"]
+    #
+    # # Marker mapping for non-linear parameters
+    # marker_map = {
+    #     'beta_': 'o',  # Circle
+    #     'k_': '^',     # Triangle
+    #     'a_': 's'      # Square
+    # }
+    #
+    # # Function to get marker based on parameter name
+    # def get_marker(param_name):
+    #     for prefix, marker in marker_map.items():
+    #         if param_name.startswith(prefix):
+    #             return marker
+    #     return 'x'  # Fallback (shouldn't be used)
+    #
+    # # === PLOT 1: Linear Parameters (Linear-Linear Scale) ===
+    # fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    # axes = axes.flatten()
+    #
+    # for i, exp in enumerate(df_pivot_linear['exp_name'].unique()):
+    #     exp_data = df_pivot_linear[df_pivot_linear['exp_name'] == exp]
+    #
+    #     corr_1_2 = exp_data[["hill_1", "hill_2"]].corr(method='pearson').iloc[0, 1]
+    #     corr_3_2 = exp_data[["hill_3", "hill_2"]].corr(method='pearson').iloc[0, 1]
+    #
+    #     sns.scatterplot(data=exp_data, x="hill_2", y="hill_1", ax=axes[i], alpha=0.7)
+    #     axes[i].set_title(f"Linear Params - Hill 1 vs Hill 2 - {exp}")
+    #     axes[i].text(0.05, 0.95, f"r = {corr_1_2:.2f}", transform=axes[i].transAxes,
+    #                  fontsize=12, verticalalignment='top', bbox=dict(boxstyle="round", alpha=0.1))
+    #
+    #     sns.scatterplot(data=exp_data, x="hill_2", y="hill_3", ax=axes[i + 2], alpha=0.7)
+    #     axes[i + 2].set_title(f"Linear Params - Hill 3 vs Hill 2 - {exp}")
+    #     axes[i + 2].text(0.05, 0.95, f"r = {corr_3_2:.2f}", transform=axes[i + 2].transAxes,
+    #                      fontsize=12, verticalalignment='top', bbox=dict(boxstyle="round", alpha=0.1))
+    #
+    # plt.tight_layout()
+    # plt.show()
+    #
+    #
+    # # === PLOT 2: Non-linear Parameters (Log-Log Scale, No Legend) ===
+    # fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    # axes = axes.flatten()
+    #
+    # for i, exp in enumerate(df_pivot_nonlinear['exp_name'].unique()):
+    #     exp_data = df_pivot_nonlinear[df_pivot_nonlinear['exp_name'] == exp]
+    #
+    #     corr_1_2 = exp_data[["hill_1", "hill_2"]].map(lambda x: np.log10(x)).corr(method='pearson').iloc[0, 1]
+    #     corr_3_2 = exp_data[["hill_3", "hill_2"]].map(lambda x: np.log10(x)).corr(method='pearson').iloc[0, 1]
+    #
+    #     for param in exp_data['param_name'].unique():
+    #         param_data = exp_data[exp_data['param_name'] == param]
+    #         marker = get_marker(param)
+    #
+    #         # Plot 1 vs 2
+    #         sns.scatterplot(data=param_data, x="hill_2", y="hill_1", ax=axes[i],  alpha=0.7, legend=False) # marker=marker,
+    #         # Plot 3 vs 2
+    #         sns.scatterplot(data=param_data, x="hill_2", y="hill_3", ax=axes[i + 2], alpha=0.7, legend=False) # marker=marker,
+    #
+    #     axes[i].set_xscale('log')
+    #     axes[i].set_yscale('log')
+    #     axes[i].set_title(f"Non-linear Params - Hill 1 vs Hill 2 - {exp}")
+    #     axes[i].text(0.05, 0.95, f"r = {corr_1_2:.2f}", transform=axes[i].transAxes,
+    #                  fontsize=12, verticalalignment='top', bbox=dict(boxstyle="round", alpha=0.1))
+    #
+    #     # axes[i + 2].set_xscale('log')
+    #     # axes[i + 2].set_yscale('log')
+    #     axes[i + 2].set_title(f"Non-linear Params - Hill 3 vs Hill 2 - {exp}")
+    #     axes[i + 2].text(0.05, 0.95, f"r = {corr_3_2:.2f}", transform=axes[i + 2].transAxes,
+    #                      fontsize=12, verticalalignment='top', bbox=dict(boxstyle="round", alpha=0.1))
+    #
+    #
+    # plt.tight_layout()
+    # plt.show()
 
 def extract_only_selected_ds_row_from_df(all_result_df, in_path):
     """Do not compare between all different deepsplit (DS) values
