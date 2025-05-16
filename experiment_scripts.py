@@ -581,28 +581,26 @@ def from_expr_mat_time_to_ode(data_params,
     expr_mat_time.write_tf2_input_file(
         out_path=tf2_in_path)
 
-    expr_mat_time.keep_highest_z_clusters(
-        hyper_params['top_nr_clusters'],
-        tf2_output_path=tf2_out_path,
-        plotting_path=experiment_path / 'figs')
-    # expr_mat_time.plot_clusters_over_time()
-
-    check_cutoffs = False
-    if check_cutoffs:
-        # Test what intermodular network looks like for various
-        # correlation cutoffs
-        check_correlation_cutoffs_for_intermodular_network(
-            expr_mat_time,
-            tf2_in_path,
-            tf2_out_path,
-            plotting_path=experiment_path / 'figs'
-        )
-
     module_module = module_network_from_tf2_output(
         expr_mat_time, tf2_in_path,
         tf2_out_path,
         threshold=hyper_params['edge_corr_threshold'],
-        module_plot_path=experiment_path / 'global_cluster_module_network.svg')
+        module_plot_path=experiment_path / 'no_filter_global_cluster_module_network.svg')
+    print('Unfiltered network')
+    module_module.print_stats()
+
+    expr_mat_time.keep_highest_z_clusters(
+        hyper_params['top_nr_clusters'],
+        tf2_output_path=tf2_out_path,
+        plotting_path=experiment_path / 'figs')
+    module_module = module_network_from_tf2_output(
+        expr_mat_time, tf2_in_path,
+        tf2_out_path,
+        threshold=hyper_params['edge_corr_threshold'],
+        module_plot_path=experiment_path / 'filtered_global_cluster_module_network.svg')
+    print('Filtered network')
+    module_module.print_stats()
+
     expr_mat_time.keep_only_modules_in_network(module_module)
     # expr_mat_time.plot_clusters_over_time()
     with (experiment_path / 'expr_mat_time.pkl').open('wb') as f:

@@ -90,8 +90,8 @@ def main():
             # with mlflow.start_run():
             #     mlflow.log_artifact(str(experiment_path / 'hill_order_1'))
             #     mlflow.log_artifact(str(experiment_path / 'hill_order_3'))
-            compare_parameters_between_hill_orders()
-            # full_pipeline_prototype(experiment_path)
+            # compare_parameters_between_hill_orders()
+            full_pipeline_prototype(experiment_path)
 
         case _:
             raise NotImplementedError(f'{name} not found')

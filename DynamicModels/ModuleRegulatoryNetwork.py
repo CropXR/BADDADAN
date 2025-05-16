@@ -456,4 +456,25 @@ class ModuleRegulatoryNetwork:
         size_distribution.name = 'nr_tfs_between_modules'
         return size_distribution.reset_index()
 
+    def print_stats(self):
+        # Key stats
+        num_nodes = self.graph.number_of_nodes()
+        num_edges = self.graph.number_of_edges()
+
+        nr_upregulated = 0
+        nr_downregulated = 0
+
+        for _,_, direction in self.graph.edges(data='origin'):
+            if direction == EdgeRelation.UPREGULATES:
+                nr_upregulated += 1
+            elif direction == EdgeRelation.DOWNREGULATES:
+                nr_downregulated += 1
+
+        density = nx.density(self.graph)
+
+        print(f"Nodes: {num_nodes}")
+        print(f"Edges: {num_edges}")
+        print(f"Density: {density:.4f}")
+        print(f"Fraction upregulated: {nr_upregulated / num_edges}")
+        print(f"Fraction downregulated: {nr_downregulated / num_edges}")
 

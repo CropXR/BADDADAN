@@ -117,24 +117,24 @@ def full_pipeline_prototype(experiment_path: Path):
                 treatment_path
                 / 'go_outputs_exp_evidence_only_background_de_genes'
         )
-        skip_slow_steps = False
+        skip_slow_steps = True
         if not skip_slow_steps:
             analyse_go_enrichments_find_enrichment(
                 go_enrich_output_path,
                 treatment_path / 'figs',
                 do_annotations=False
                 )
-        continue
+        # continue
 
-        with mlflow.start_run(
-                description=experiment_params['description']):
-            mlflow.log_params(data_params)
-            mlflow.log_params(hyper_params)
-            mlflow.set_tags(experiment_params)
-            mlflow.log_artifact(
-                str(treatment_path / 'figs'))
+        # with mlflow.start_run(
+        #         description=experiment_params['description']):
+        #     mlflow.log_params(data_params)
+        #     mlflow.log_params(hyper_params)
+        #     mlflow.set_tags(experiment_params)
+        #     mlflow.log_artifact(
+        #         str(treatment_path / 'figs'))
 
-        continue
+        # continue
 
         sbml_path = treatment_path / 'module_network.xml'
         skip_slow_steps = False
