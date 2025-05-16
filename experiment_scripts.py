@@ -361,7 +361,6 @@ def compare_parameters_between_hill_orders():
                                                      'param_name',
                                                      'param_value'])
 
-    sns.set_context(font_scale=2)
     # Separate the parameters into linear and non-linear categories
     linear_params = ['delta', 'gamma', 'b_', 'phi']
     nonlinear_params = ['beta', 'k', 'a']
@@ -387,9 +386,11 @@ def compare_parameters_between_hill_orders():
                                   "hill_3"]
     df_nonlinear_pivot.loc[:, 'hill_1':'hill_3'] = df_nonlinear_pivot.loc[:, 'hill_1':'hill_3'].map(lambda x: 10 ** x)
 
+    df_final = pd.concat([df_nonlinear_pivot, df_linear_pivot])
+
     # Hill 1 vs 2
-    g = sns.relplot(data=df_linear_pivot, col='exp_name', row='param_name', x='hill_2', y='hill_1', facet_kws={'sharex': False, 'sharey': False,})
-    corr_df = df_linear_pivot.groupby(['param_name', 'exp_name'])[["hill_1", "hill_2"]].corr(method='pearson')
+    g = sns.relplot(data=df_final, col='exp_name', row='param_name', x='hill_2', y='hill_1', facet_kws={'sharex': False, 'sharey': False,})
+    corr_df = df_final.groupby(['param_name', 'exp_name'])[["hill_1", "hill_2"]].corr(method='pearson')
     # Iterate through the subplots and add correlation text
     for (param_name, exp_name), ax in g.axes_dict.items():
         # Extract the correlation value
@@ -415,12 +416,12 @@ def compare_parameters_between_hill_orders():
                 bbox=dict(boxstyle="round", alpha=0.1)
             )
     plt.tight_layout()
-    plt.savefig(out_dir / 'linear_params_hill_2_vs_hill_1.svg')
+    plt.savefig(out_dir / 'all_params_hill_2_vs_hill_1.svg')
     plt.show()
 
     # Hill 2 vs 3
-    g = sns.relplot(data=df_linear_pivot, col='exp_name', row='param_name', x='hill_2', y='hill_3', facet_kws={'sharex': False, 'sharey': False,})
-    corr_df = df_linear_pivot.groupby(['param_name', 'exp_name'])[["hill_3", "hill_2"]].corr(method='pearson')
+    g = sns.relplot(data=df_final, col='exp_name', row='param_name', x='hill_2', y='hill_3', facet_kws={'sharex': False, 'sharey': False,})
+    corr_df = df_final.groupby(['param_name', 'exp_name'])[["hill_3", "hill_2"]].corr(method='pearson')
     # Iterate through the subplots and add correlation text
     for (param_name, exp_name), ax in g.axes_dict.items():
         # Extract the correlation value
@@ -446,178 +447,9 @@ def compare_parameters_between_hill_orders():
                 bbox=dict(boxstyle="round", alpha=0.1)
             )
     plt.tight_layout()
-    plt.savefig(out_dir / 'linear_params_hill_2_vs_hill_3.svg')
+    plt.savefig(out_dir / 'all_params_hill_2_vs_hill_3.svg')
     plt.show()
 
-    # Nonlinear hill 2 vs 1
-    g = sns.relplot(
-        data=df_nonlinear_pivot,
-        col='exp_name',
-        row='param_name',
-        x='hill_2',
-        y='hill_1',
-        facet_kws={'sharex': False, 'sharey': False}
-    )
-    corr_df = df_nonlinear_pivot.groupby(['param_name', 'exp_name'])[
-        ["hill_1", "hill_2"]].corr(method='pearson')
-    # Iterate through the subplots and add correlation text
-    for (param_name, exp_name), ax in g.axes_dict.items():
-        # Extract the correlation value
-        try:
-            corr_value = corr_df.xs((param_name, exp_name)).loc[
-                "hill_1", "hill_2"]
-            ax.text(
-                0.05, 0.95,
-                f"r = {corr_value:.2f}",
-                transform=ax.transAxes,
-                fontsize=12,
-                verticalalignment='top',
-                bbox=dict(boxstyle="round", alpha=0.1)
-            )
-        except KeyError:
-            # Handle missing data
-            ax.text(
-                0.05, 0.95,
-                "r = N/A",
-                transform=ax.transAxes,
-                fontsize=12,
-                verticalalignment='top',
-                bbox=dict(boxstyle="round", alpha=0.1)
-            )
-    # g.set(xscale="log", yscale="log")
-    plt.tight_layout()
-    plt.savefig(out_dir / 'nonlinear_params_hill_2_vs_hill_1.svg')
-    plt.show()
-
-    # Nonlinear hill 2 vs 3
-    g = sns.relplot(
-        data=df_nonlinear_pivot,
-        col='exp_name',
-        row='param_name',
-        x='hill_2',
-        y='hill_3',
-        facet_kws={'sharex': False, 'sharey': False}
-    )
-    # g.set(xscale="log", yscale="log")
-    corr_df = df_nonlinear_pivot.groupby(['param_name', 'exp_name'])[
-        ["hill_3", "hill_2"]].corr(method='pearson')
-    # Iterate through the subplots and add correlation text
-    for (param_name, exp_name), ax in g.axes_dict.items():
-        # Extract the correlation value
-        try:
-            corr_value = corr_df.xs((param_name, exp_name)).loc[
-                "hill_3", "hill_2"]
-            ax.text(
-                0.05, 0.95,
-                f"r = {corr_value:.2f}",
-                transform=ax.transAxes,
-                fontsize=12,
-                verticalalignment='top',
-                bbox=dict(boxstyle="round", alpha=0.1)
-            )
-        except KeyError:
-            # Handle missing data
-            ax.text(
-                0.05, 0.95,
-                "r = N/A",
-                transform=ax.transAxes,
-                fontsize=12,
-                verticalalignment='top',
-                bbox=dict(boxstyle="round", alpha=0.1)
-            )
-    plt.tight_layout()
-    plt.savefig(out_dir / 'nonlinear_params_hill_2_vs_hill_3.svg')
-    plt.show()
-    print()
-    # # Create the DataFrame
-    # df = pd.DataFrame.from_records(records, columns=['exp_name', 'hill_order', 'param_name', 'param_value'])
-    #
-    # # Identify linear and non-linear parameters
-    # linear_params = df[~df['param_name'].str.startswith(('beta_', 'k_', 'a_'))]
-    # nonlinear_params = df[df['param_name'].str.startswith(('beta_', 'k_', 'a_'))].copy()
-    #
-    # # Apply transformation to non-linear parameters
-    # nonlinear_params['param_value'] = 10 ** nonlinear_params['param_value']
-    #
-    # # Pivot the data
-    # df_pivot_linear = linear_params.pivot(index=["exp_name", "param_name"], columns="hill_order", values="param_value").reset_index()
-    # df_pivot_linear.columns = ["exp_name", "param_name", "hill_1", "hill_2", "hill_3"]
-    #
-    # df_pivot_nonlinear = nonlinear_params.pivot(index=["exp_name", "param_name"], columns="hill_order", values="param_value").reset_index()
-    # df_pivot_nonlinear.columns = ["exp_name", "param_name", "hill_1", "hill_2", "hill_3"]
-    #
-    # # Marker mapping for non-linear parameters
-    # marker_map = {
-    #     'beta_': 'o',  # Circle
-    #     'k_': '^',     # Triangle
-    #     'a_': 's'      # Square
-    # }
-    #
-    # # Function to get marker based on parameter name
-    # def get_marker(param_name):
-    #     for prefix, marker in marker_map.items():
-    #         if param_name.startswith(prefix):
-    #             return marker
-    #     return 'x'  # Fallback (shouldn't be used)
-    #
-    # # === PLOT 1: Linear Parameters (Linear-Linear Scale) ===
-    # fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    # axes = axes.flatten()
-    #
-    # for i, exp in enumerate(df_pivot_linear['exp_name'].unique()):
-    #     exp_data = df_pivot_linear[df_pivot_linear['exp_name'] == exp]
-    #
-    #     corr_1_2 = exp_data[["hill_1", "hill_2"]].corr(method='pearson').iloc[0, 1]
-    #     corr_3_2 = exp_data[["hill_3", "hill_2"]].corr(method='pearson').iloc[0, 1]
-    #
-    #     sns.scatterplot(data=exp_data, x="hill_2", y="hill_1", ax=axes[i], alpha=0.7)
-    #     axes[i].set_title(f"Linear Params - Hill 1 vs Hill 2 - {exp}")
-    #     axes[i].text(0.05, 0.95, f"r = {corr_1_2:.2f}", transform=axes[i].transAxes,
-    #                  fontsize=12, verticalalignment='top', bbox=dict(boxstyle="round", alpha=0.1))
-    #
-    #     sns.scatterplot(data=exp_data, x="hill_2", y="hill_3", ax=axes[i + 2], alpha=0.7)
-    #     axes[i + 2].set_title(f"Linear Params - Hill 3 vs Hill 2 - {exp}")
-    #     axes[i + 2].text(0.05, 0.95, f"r = {corr_3_2:.2f}", transform=axes[i + 2].transAxes,
-    #                      fontsize=12, verticalalignment='top', bbox=dict(boxstyle="round", alpha=0.1))
-    #
-    # plt.tight_layout()
-    # plt.show()
-    #
-    #
-    # # === PLOT 2: Non-linear Parameters (Log-Log Scale, No Legend) ===
-    # fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    # axes = axes.flatten()
-    #
-    # for i, exp in enumerate(df_pivot_nonlinear['exp_name'].unique()):
-    #     exp_data = df_pivot_nonlinear[df_pivot_nonlinear['exp_name'] == exp]
-    #
-    #     corr_1_2 = exp_data[["hill_1", "hill_2"]].map(lambda x: np.log10(x)).corr(method='pearson').iloc[0, 1]
-    #     corr_3_2 = exp_data[["hill_3", "hill_2"]].map(lambda x: np.log10(x)).corr(method='pearson').iloc[0, 1]
-    #
-    #     for param in exp_data['param_name'].unique():
-    #         param_data = exp_data[exp_data['param_name'] == param]
-    #         marker = get_marker(param)
-    #
-    #         # Plot 1 vs 2
-    #         sns.scatterplot(data=param_data, x="hill_2", y="hill_1", ax=axes[i],  alpha=0.7, legend=False) # marker=marker,
-    #         # Plot 3 vs 2
-    #         sns.scatterplot(data=param_data, x="hill_2", y="hill_3", ax=axes[i + 2], alpha=0.7, legend=False) # marker=marker,
-    #
-    #     axes[i].set_xscale('log')
-    #     axes[i].set_yscale('log')
-    #     axes[i].set_title(f"Non-linear Params - Hill 1 vs Hill 2 - {exp}")
-    #     axes[i].text(0.05, 0.95, f"r = {corr_1_2:.2f}", transform=axes[i].transAxes,
-    #                  fontsize=12, verticalalignment='top', bbox=dict(boxstyle="round", alpha=0.1))
-    #
-    #     # axes[i + 2].set_xscale('log')
-    #     # axes[i + 2].set_yscale('log')
-    #     axes[i + 2].set_title(f"Non-linear Params - Hill 3 vs Hill 2 - {exp}")
-    #     axes[i + 2].text(0.05, 0.95, f"r = {corr_3_2:.2f}", transform=axes[i + 2].transAxes,
-    #                      fontsize=12, verticalalignment='top', bbox=dict(boxstyle="round", alpha=0.1))
-    #
-    #
-    # plt.tight_layout()
-    # plt.show()
 
 def extract_only_selected_ds_row_from_df(all_result_df, in_path):
     """Do not compare between all different deepsplit (DS) values
